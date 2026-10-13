@@ -1,0 +1,28 @@
+# Fingerprint profile for JSON web access logs — nothing eBPF about it.
+# Try it:  make fingerprint ARGS="-p examples/profiles/access_log.yaml -s /tmp/access.fingerprints.yaml examples/data/access_log.jsonl"
+version: 1
+
+fields:
+  - key: method
+    path: "$.request.method"
+  - key: route
+    path: "$.request.route"
+  - key: status_class
+    path: "$.response.status"
+    modifier: "IN_RANGE(200, 399)"          # TRUE = success/redirect, FALSE = error
+  - key: authenticated
+    path: "$.user.id"
+    modifier: IS_PRESENT
+  - key: slow_upstreams
+    path: "$.upstreams[?(@.ms > 500)].name"   # filter: only upstream calls slower than 500 ms
+
+aggregates:
+  - key: latency_ms
+    path: "$.response.ms"
+    fn: [MIN, MAX, AVG]
+  - key: bytes_out
+    path: "$.response.bytes"
+    fn: SUM
+  - key: recent_paths
+    path: "$.request.path"
+    fn: "LAST(3)"

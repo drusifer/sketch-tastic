@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fingerprint-sampler"
+version = "0.1.0"
+description = "Fingerprint and sample JSONL event streams: one entry per distinct shape of event, with counts, statistics and samples, in a set that grows across runs."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "drusifer" }]
+requires-python = ">=3.10"
+keywords = ["jsonl", "fingerprint", "sampling", "logs", "events", "jsonpath"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Logging",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "PyYAML>=6.0",
+    "python-jsonpath>=2.0",
+]
+
+[project.urls]
+Repository = "https://github.com/drusifer/fingerling"
+
+[project.scripts]
+fingerprint = "fingerprint_sampler.__main__:main"
+fingerprint-sampler = "fingerprint_sampler.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fingerprint_sampler"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples", "README.md", "LICENSE"]
