@@ -7,7 +7,8 @@ import unittest
 
 import yaml
 
-from fingerprint_sampler.aggregators import AggregateEntry
+from fingerprint_sampler.aggregators import Aggregate
+from fingerprint_sampler.model import Field, tokens
 from fingerprint_sampler.profile import (
     Profile,
     ProfileError,
@@ -15,7 +16,6 @@ from fingerprint_sampler.profile import (
     parse_profile,
     profile_id,
 )
-from fingerprint_sampler.tokenizer import MaskEntry, tokenize
 
 EXAMPLE_PROFILES = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples"
@@ -32,8 +32,8 @@ VALID = {
         },
     ],
     "aggregates": [
-        {"key": "duration", "path": "$.ms", "fn": ["MIN", "max", "AVG"]},
-        {"key": "samples", "path": "$", "fn": "LAST(3)"},
+        {"key": "duration", "path": "$.ms", "fn": ["MIN", "MAX", "AVG"]},
+        {"key": "samples", "path": "$", "fn": {"name": "LAST", "n": 3}},
     ],
 }
 
@@ -50,26 +50,26 @@ class ParseProfileTests(unittest.TestCase):
         self.assertEqual(
             profile.fields,
             (
-                MaskEntry("syscall", "$.fn", "DEFAULT"),
-                MaskEntry("port_ok", "$.args[*].dport", {"name": "ANY", "values": [80, 443]}),
+                Field("syscall", "$.fn", "DEFAULT"),
+                Field("port_ok", "$.args[*].dport", {"name": "ANY", "values": [80, 443]}),
             ),
         )
         self.assertEqual(
             profile.aggregates,
             (
-                AggregateEntry("duration", "$.ms", ("MIN", "MAX", "AVG")),
-                AggregateEntry("samples", "$", ("LAST(3)",)),
+                Aggregate("duration", "$.ms", ["MIN", "MAX", "AVG"]),
+                Aggregate("samples", "$", {"name": "LAST", "n": 3}),
             ),
         )
 
     def test_fields_work_directly_with_the_existing_tokenize_api(self):
         profile = parse_profile(VALID)
-        tokens = tokenize({"fn": "sys_connect", "args": [{"dport": 443}]}, list(profile.fields))
-        self.assertEqual(tokens, {"syscall": "sys_connect", "port_ok": "TRUE"})
+        result = tokens({"fn": "sys_connect", "args": [{"dport": 443}]}, list(profile.fields))
+        self.assertEqual(result, {"syscall": "sys_connect", "port_ok": "TRUE"})
 
     def test_modifier_defaults_to_default_and_aggregates_are_optional(self):
         profile = parse_profile({"fields": [{"key": "k", "path": "$.k"}]})
-        self.assertEqual(profile.fields, (MaskEntry("k", "$.k", "DEFAULT"),))
+        self.assertEqual(profile.fields, (Field("k", "$.k", "DEFAULT"),))
         self.assertEqual(profile.aggregates, ())
 
 
@@ -173,7 +173,7 @@ class ValidationTests(unittest.TestCase):
             {"key": "a", "path": "$.a[", "modifier": "DEFAULT"},
             {"key": "b", "path": "$.b", "modifier": {"name": "IN_RANGE", "low": 5, "high": 1}},
         ]
-        aggregates = [{"key": "c", "path": "$.c", "fn": "MEDIAN"}]
+        aggregates = [{"key": "c", "path": "$.c", "fn": ["MIN", "MIN"]}]
         with self.assertRaises(ProfileError) as ctx:
             parse_profile(variant(fields=fields, aggregates=aggregates), source="p.yaml")
         self.assertEqual(len(ctx.exception.problems), 3)
@@ -213,10 +213,8 @@ fields:
 """
         )
         profile = parse_profile(data)
-        tokens = tokenize(
-            {"path": "/items/17", "text": "Hello there goodbye."}, list(profile.fields)
-        )
-        self.assertEqual(tokens, {"route": "/items/N", "greeting": "TRUE"})
+        result = tokens({"path": "/items/17", "text": "Hello there goodbye."}, list(profile.fields))
+        self.assertEqual(result, {"route": "/items/N", "greeting": "TRUE"})
 
 
 class ProfileIdTests(unittest.TestCase):
@@ -260,7 +258,7 @@ class ProfileIdTests(unittest.TestCase):
             self.assertNotEqual(parse_profile(data).profile_id, base)
 
     def test_matches_module_function_for_python_built_profiles(self):
-        fields = (MaskEntry("syscall", "$.fn", "DEFAULT"),)
+        fields = (Field("syscall", "$.fn", "DEFAULT"),)
         self.assertEqual(Profile(fields=fields).profile_id, profile_id(fields))
 
 
@@ -284,7 +282,7 @@ class LoadProfileTests(unittest.TestCase):
         )
         profile = load_profile(path)
         self.assertEqual(profile.fields[0].key, "syscall")
-        self.assertEqual(profile.aggregates[0].fns, ("MIN", "MAX"))
+        self.assertEqual([f.name for f in profile.aggregates[0].fn], ["MIN", "MAX"])
 
     def test_missing_file_and_invalid_yaml_raise_profile_error_naming_the_file(self):
         with self.assertRaises(ProfileError) as ctx:
@@ -325,7 +323,7 @@ class PublicApiTests(unittest.TestCase):
     def test_checking_api_is_exported_from_the_package(self):
         import fingerprint_sampler
 
-        for name in ("check_profile", "Modifier", "ProfileError", "MaskEntry"):
+        for name in ("check_profile", "Modifier", "ProfileError", "Field", "Aggregate", "Rule"):
             with self.subTest(name=name):
                 self.assertIn(name, fingerprint_sampler.__all__)
                 self.assertTrue(hasattr(fingerprint_sampler, name))

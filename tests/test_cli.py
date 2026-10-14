@@ -26,7 +26,7 @@ fields:
   - {key: kind, path: "$.kind"}
 aggregates:
   - {key: size, path: "$.size", fn: [SUM, AVG, MIN, MAX]}
-  - {key: recent, path: "$.id", fn: "LAST(2)"}
+  - {key: recent, path: "$.id", fn: {name: LAST, n: 2}}
 """
 OTHER_PROFILE = """
 version: 1
@@ -413,7 +413,7 @@ class ProfileMismatchTests(CliTestCase):
         self.assertEqual(len(data["fingerprints"]), 4)  # 3 kept + 1 under the new profile
 
     def test_changing_only_aggregates_is_not_a_mismatch(self):
-        tweaked = self.write("tweaked.yaml", PROFILE.replace('fn: "LAST(2)"', 'fn: "LAST(5)"'))
+        tweaked = self.write("tweaked.yaml", PROFILE.replace("n: 2}", "n: 5}"))
         code, _, _ = self.run_cli("merge", "-p", tweaked, "-s", self.set_path, self.events)
         self.assertEqual(code, 0)
 

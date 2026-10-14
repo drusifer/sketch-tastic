@@ -17,8 +17,7 @@ from typing import Any, Iterator, Sequence
 
 import yaml
 
-from fingerprint_sampler import aggregators
-from fingerprint_sampler.aggregators import AggregateEntry
+from fingerprint_sampler.aggregators import Aggregate
 
 SET_VERSION = 1
 
@@ -59,14 +58,14 @@ class Warehouse:
 
     def __init__(
         self,
-        aggregates: Sequence[AggregateEntry] = (),
+        aggregates: Sequence[Aggregate] = (),
         profile_id: str | None = None,
     ) -> None:
         self._records: dict[str, FingerprintRecord] = {}
         self._aggregates = tuple(aggregates)
         self.profile_id = profile_id
         self.skipped_values = 0
-        """Running count of values the aggregators could not use (see `aggregators.update`)."""
+        """Running count of values the aggregates could not use (see `Aggregate.update`)."""
 
     def upsert(self, tokens: dict[str, str], record: Any, timestamp: str | None = None) -> str:
         """Fold one event into the set. Returns its fingerprint_id.
@@ -89,7 +88,7 @@ class Warehouse:
 
         for entry in self._aggregates:
             state = existing.aggregates.setdefault(entry.key, {})
-            self.skipped_values += aggregators.update(state, entry, record)
+            self.skipped_values += entry.update(state, record)
             if not state:
                 del existing.aggregates[entry.key]
 

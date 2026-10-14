@@ -24,7 +24,8 @@ Python 3.14 or newer. Installs the `fingerprint` command (also available as
 
 **New in 0.2.0:** modifier arguments are written as YAML mappings
 (`{name: IN_RANGE, low: 200, high: 399}`); the 0.1 string form (`"IN_RANGE(200, 399)"`) is no
-longer accepted. Added `GLOB`, `REGEX` and `REGSUB` modifiers and the `fingerprint check` command.
+longer accepted. Added `GLOB`, `REGEX` and `REGSUB` modifiers and the `fingerprint check` command. Since then
+(mainline): `LAST` is written `{name: LAST, n: 3}`, not `"LAST(3)"`.
 While the version is 0.x, releases may break profiles and set files without a migration path.
 
 ## Quickstart
@@ -40,7 +41,7 @@ fields:
   - {key: failed,    path: "$.error", modifier: IS_PRESENT}
 aggregates:
   - {key: took_ms, path: "$.took_ms", fn: [MIN, MAX, AVG]}
-  - {key: example, path: "$.msg",     fn: "LAST(2)"}
+  - {key: example, path: "$.msg",     fn: {name: LAST, n: 2}}
 YAML
 
 cat > events.jsonl <<'JSONL'
@@ -166,7 +167,7 @@ aggregates:
     fn: [MIN, MAX, AVG]
   - key: recent_paths
     path: "$.request.path"
-    fn: "LAST(3)"
+    fn: {name: LAST, n: 3}
 ```
 
 **Paths** are full JSONPath: dot and bracket access, `[*]`, slices, negative indexes, unions,
@@ -223,8 +224,9 @@ profile's identity, like any other change to `fields`.
 |---|---|
 | `SUM`, `MIN`, `MAX` | running sum / smallest / largest |
 | `AVG` | the average, with the sum and count that make it mergeable |
-| `LAST(n)` | the `n` most recent values — use path `$` to keep whole events as samples |
+| `{name: LAST, n: N}` | the `N` most recent values — use path `$` to keep whole events as samples |
 
+`fn` is one function or a list, written like modifiers: a bare name, or a mapping for `LAST`.
 Numeric functions accept numbers and numeric strings. A missing or non-numeric value is skipped
 for that aggregate and counted in the summary.
 

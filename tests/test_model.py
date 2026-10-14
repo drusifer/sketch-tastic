@@ -1,18 +1,22 @@
-"""Tests: eBPF telemetry parser & modifier engine."""
+"""Tests: paths, modifiers and fields (the domain model)."""
 
-import json
 import unittest
 
-from fingerprint_sampler.tokenizer import (
-    MaskEntry,
-    Modifier,
-    apply_modifier,
-    compile_path,
-    find_values,
-    parse_jsonl,
-    tokenize,
-    validate_modifier,
-)
+from fingerprint_sampler.model import MISSING, AnyOf, Default, Field, Glob, Modifier, Path, tokens
+
+MaskEntry = Field
+tokenize = tokens
+validate_modifier = Modifier.build
+compile_path = Path
+
+
+def find_values(record, path):
+    return Path(path).values(record)
+
+
+def apply_modifier(value, spec):
+    return Modifier.build(spec).token(value)
+
 
 SAMPLE_RECORD = {
     "time": "2026-07-12T09:44:10.005Z",
@@ -150,23 +154,20 @@ class ApplyModifierTests(unittest.TestCase):
         self.assertEqual(apply_modifier("sys_connect", "DEFAULT"), "sys_connect")
 
     def test_default_missing_yields_null(self):
-        from fingerprint_sampler.tokenizer import _MISSING
 
-        self.assertEqual(apply_modifier(_MISSING, "DEFAULT"), "NULL")
+        self.assertEqual(apply_modifier(MISSING, "DEFAULT"), "NULL")
 
     def test_is_present_true_for_pid(self):
         # Verification Task: pid: 14205 + IS_PRESENT -> "TRUE"
         self.assertEqual(apply_modifier(14205, "IS_PRESENT"), "TRUE")
 
     def test_is_present_false_for_missing(self):
-        from fingerprint_sampler.tokenizer import _MISSING
 
-        self.assertEqual(apply_modifier(_MISSING, "IS_PRESENT"), "FALSE")
+        self.assertEqual(apply_modifier(MISSING, "IS_PRESENT"), "FALSE")
 
     def test_is_null_true_for_missing(self):
-        from fingerprint_sampler.tokenizer import _MISSING
 
-        self.assertEqual(apply_modifier(_MISSING, "IS_NULL"), "TRUE")
+        self.assertEqual(apply_modifier(MISSING, "IS_NULL"), "TRUE")
 
     def test_is_null_false_for_present_value(self):
         self.assertEqual(apply_modifier(14205, "IS_NULL"), "FALSE")
@@ -179,10 +180,9 @@ class ApplyModifierTests(unittest.TestCase):
         self.assertEqual(apply_modifier(5, {"name": "IN_RANGE", "low": -999, "high": 0}), "FALSE")
 
     def test_in_range_false_for_missing(self):
-        from fingerprint_sampler.tokenizer import _MISSING
 
         self.assertEqual(
-            apply_modifier(_MISSING, {"name": "IN_RANGE", "low": -999, "high": 0}), "FALSE"
+            apply_modifier(MISSING, {"name": "IN_RANGE", "low": -999, "high": 0}), "FALSE"
         )
 
     def test_any_true_for_whitelisted_port(self):
@@ -251,32 +251,6 @@ class TokenizeTests(unittest.TestCase):
                 "missing_field": "NULL",
             },
         )
-
-
-class ParseJsonlTests(unittest.TestCase):
-    def test_parses_multi_line_jsonl_stream(self):
-        # AC1: "Must accept a valid JSONL input string mimicking standard eBPF engine outputs."
-        jsonl_text = "\n".join(
-            json.dumps(r) for r in [SAMPLE_RECORD, {**SAMPLE_RECORD, "duration_ms": 2.5}]
-        )
-
-        records = parse_jsonl(jsonl_text)
-
-        self.assertEqual(len(records), 2)
-        self.assertEqual(records[0]["process_kprobe"]["function_name"], "sys_connect")
-        self.assertEqual(records[1]["duration_ms"], 2.5)
-
-    def test_skips_blank_lines_in_stream(self):
-        jsonl_text = f"{json.dumps(SAMPLE_RECORD)}\n\n"
-        self.assertEqual(len(parse_jsonl(jsonl_text)), 1)
-
-    def test_end_to_end_jsonl_to_tokens(self):
-        mask_profile = [MaskEntry("hook_syscall", "$.process_kprobe.function_name", "DEFAULT")]
-        records = parse_jsonl(json.dumps(SAMPLE_RECORD))
-
-        tokens = tokenize(records[0], mask_profile)
-
-        self.assertEqual(tokens, {"hook_syscall": "sys_connect"})
 
 
 class WildcardAndRecursiveDescentTests(unittest.TestCase):
@@ -380,9 +354,8 @@ class PatternModifierTests(unittest.TestCase):
         self.assertEqual(apply_modifier("GET", regsub), "GET")
 
     def test_missing_and_null_degrade_like_the_other_modifiers(self):
-        from fingerprint_sampler.tokenizer import _MISSING
 
-        for value in (_MISSING, None):
+        for value in (MISSING, None):
             self.assertEqual(apply_modifier(value, {"name": "GLOB", "pattern": "*"}), "FALSE")
             self.assertEqual(apply_modifier(value, {"name": "REGEX", "pattern": ".*"}), "FALSE")
             regsub = {"name": "REGSUB", "pattern": ".*", "replace": "x"}
@@ -399,17 +372,18 @@ class PatternModifierTests(unittest.TestCase):
 class ModifierObjectTests(unittest.TestCase):
     def test_mask_entry_normalises_its_modifier(self):
         entry = MaskEntry("k", "$.k", {"pattern": "a", "name": "GLOB"})
-        self.assertEqual(entry.modifier, Modifier("GLOB", (("pattern", "a"),)))
-        self.assertEqual(MaskEntry("k", "$.k", "DEFAULT").modifier, Modifier("DEFAULT"))
+        self.assertEqual(entry.modifier, Glob(pattern="a"))
+        self.assertEqual(MaskEntry("k", "$.k", "DEFAULT").modifier, Default())
+        self.assertIsInstance(Modifier.build({"name": "ANY", "values": [1]}), AnyOf)
 
     def test_spec_is_bare_name_or_sorted_json(self):
-        self.assertEqual(Modifier.of("IS_PRESENT").spec, "IS_PRESENT")
-        self.assertEqual(Modifier.of({"name": "IS_PRESENT"}).spec, "IS_PRESENT")
-        spec = Modifier.of({"values": [80, 443], "name": "ANY"}).spec
+        self.assertEqual(Modifier.build("IS_PRESENT").spec, "IS_PRESENT")
+        self.assertEqual(Modifier.build({"name": "IS_PRESENT"}).spec, "IS_PRESENT")
+        spec = Modifier.build({"values": [80, 443], "name": "ANY"}).spec
         self.assertEqual(spec, '{"name":"ANY","values":[80,443]}')
 
     def test_modifiers_are_hashable(self):
-        self.assertEqual(len({Modifier.of({"name": "ANY", "values": [1]}) for _ in range(2)}), 1)
+        self.assertEqual(len({Modifier.build({"name": "ANY", "values": [1]}) for _ in range(2)}), 1)
 
 
 class ValidateModifierFormTests(unittest.TestCase):

@@ -27,4 +27,4 @@ aggregates:
     fn: SUM
   - key: recent_paths
     path: "$.request.path"
-    fn: "LAST(3)"
+    fn: {name: LAST, n: 3}

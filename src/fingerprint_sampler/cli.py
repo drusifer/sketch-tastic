@@ -17,7 +17,6 @@ from typing import IO, Iterable
 
 from fingerprint_sampler import __version__
 from fingerprint_sampler.profile import Profile, ProfileError, load_profile
-from fingerprint_sampler.tokenizer import tokenize
 from fingerprint_sampler.warehouse import FingerprintSetError, ProfileMismatchError, Warehouse
 
 EXIT_OK = 0
@@ -163,7 +162,6 @@ def _fold_stream(lines: Iterable[str], profile: Profile, warehouse: Warehouse) -
     known_before = set(warehouse)
     seen: set[str] = set()
     events = skipped_lines = 0
-    fields = list(profile.fields)
 
     def warn(lineno: int, reason: str) -> None:
         if skipped_lines <= _MAX_LINE_WARNINGS:
@@ -184,7 +182,7 @@ def _fold_stream(lines: Iterable[str], profile: Profile, warehouse: Warehouse) -
             skipped_lines += 1
             warn(lineno, f"expected a JSON object, got {type(event).__name__}")
             continue
-        seen.add(warehouse.upsert(tokenize(event, fields), event))
+        seen.add(warehouse.upsert(profile.tokens(event), event))
         events += 1
 
     return {

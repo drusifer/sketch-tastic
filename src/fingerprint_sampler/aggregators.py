@@ -1,10 +1,11 @@
-"""Per-fingerprint aggregators (STORY-FING-25).
+"""Per-fingerprint aggregate functions (STORY-FING-25, -39).
 
-An aggregator folds the values one JSONPath selects, across every event that
+An aggregate folds the values one JSONPath selects, across every event that
 hashes to the same fingerprint, into a small piece of state. That state is
 plain data (numbers, lists, dicts) so it round-trips through the fingerprint
 set file, and folding continues from stored state — which is what makes a set
-built over many runs equal to one built in a single pass.
+built over many runs equal to one built in a single pass. State is keyed by
+function name, so changing LAST's `n` keeps the samples already collected.
 """
 
 from __future__ import annotations
@@ -12,126 +13,121 @@ from __future__ import annotations
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, ClassVar
 
-from fingerprint_sampler.tokenizer import compile_path, find_values
-
-NUMERIC_FNS = ("SUM", "AVG", "MIN", "MAX")
-SUPPORTED = "SUM, AVG, MIN, MAX, LAST(n)"
+from fingerprint_sampler.model import Path, Rule
 
 
-@dataclass(frozen=True)
-class AggregateEntry:
-    """Track `fns` over the values `path` selects, stored under `key`.
+class Aggregator(Rule):
+    """Folds one value into the state of an aggregate. Numeric ones only see numbers."""
 
-    `fns` holds normalised labels such as "MIN" or "LAST(3)"; build entries
-    with `make_entry` so they are validated.
-    """
+    family = "aggregator"
+    numeric: ClassVar[bool] = True
 
-    key: str
-    path: str
-    fns: tuple[str, ...]
+    def update(self, state: dict, value: Any) -> None:
+        raise NotImplementedError
 
 
-def parse_fn(spec: str) -> tuple[str, int | None, str]:
-    """Parse one aggregator spec into (name, n, label). Raises ValueError if unsupported."""
-    if not isinstance(spec, str):
-        raise ValueError(f"Aggregator must be a string, got {spec!r}")
-    name, paren, rest = spec.strip().partition("(")
-    name = name.strip().upper()
-    arg = rest.strip()
-    if paren:
-        if not arg.endswith(")"):
-            raise ValueError(f"Malformed aggregator {spec!r}: missing ')'")
-        arg = arg[:-1].strip()
+@dataclass(frozen=True, kw_only=True)
+class Sum(Aggregator):
+    name = "SUM"
 
-    if name in NUMERIC_FNS:
-        if arg:
-            raise ValueError(f"Aggregator {name} takes no arguments, got {spec!r}")
-        return name, None, name
-    if name == "LAST":
-        if not arg.isdigit() or int(arg) < 1:
-            raise ValueError(f"LAST needs a positive sample count, e.g. LAST(3); got {spec!r}")
-        n = int(arg)
-        return name, n, f"LAST({n})"
-    raise ValueError(f"Unknown aggregator {spec!r}; supported: {SUPPORTED}")
+    def update(self, state: dict, value: Any) -> None:
+        state["SUM"] = state.get("SUM", 0) + value
 
 
-def make_entry(key: str, path: str, fns: str | Iterable[str]) -> AggregateEntry:
-    """Build a validated `AggregateEntry` from one spec or a list of specs."""
-    compile_path(path)
-    specs = [fns] if isinstance(fns, str) else list(fns)
-    if not specs:
-        raise ValueError("At least one aggregator function is required")
-    parsed = [parse_fn(spec) for spec in specs]
-    names = [name for name, _, _ in parsed]
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise ValueError(f"Aggregator listed more than once: {', '.join(duplicates)}")
-    return AggregateEntry(key=key, path=path, fns=tuple(label for _, _, label in parsed))
+@dataclass(frozen=True, kw_only=True)
+class Min(Aggregator):
+    name = "MIN"
+
+    def update(self, state: dict, value: Any) -> None:
+        state["MIN"] = min(state.get("MIN", value), value)
 
 
-def _as_number(value: Any) -> int | float | None:
-    """Coerce to a finite number, or None if `value` isn't one (bools are not numbers)."""
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, (int, float)):
-        number: int | float = value
-    elif isinstance(value, str):
-        try:
-            number = int(value)
-        except ValueError:
-            try:
-                number = float(value)
-            except ValueError:
-                return None
-    else:
-        return None
-    return number if math.isfinite(number) else None
+@dataclass(frozen=True, kw_only=True)
+class Max(Aggregator):
+    name = "MAX"
+
+    def update(self, state: dict, value: Any) -> None:
+        state["MAX"] = max(state.get("MAX", value), value)
 
 
-def _fold_number(state: dict, name: str, number: int | float) -> None:
-    if name == "SUM":
-        state["SUM"] = state.get("SUM", 0) + number
-    elif name == "MIN":
-        state["MIN"] = number if "MIN" not in state else min(state["MIN"], number)
-    elif name == "MAX":
-        state["MAX"] = number if "MAX" not in state else max(state["MAX"], number)
-    elif name == "AVG":
+@dataclass(frozen=True, kw_only=True)
+class Avg(Aggregator):
+    name = "AVG"
+
+    def update(self, state: dict, value: Any) -> None:
         avg = state.setdefault("AVG", {"avg": 0, "sum": 0, "count": 0})
-        avg["sum"] += number
+        avg["sum"] += value
         avg["count"] += 1
         avg["avg"] = avg["sum"] / avg["count"]
 
 
-def update(state: dict, entry: AggregateEntry, record: Any) -> int:
-    """Fold one event into `state` (the dict stored under `entry.key`).
+@dataclass(frozen=True, kw_only=True)
+class Last(Aggregator):
+    name = "LAST"
+    numeric = False
+    n: int
 
-    State is keyed by function name ("SUM", "AVG", "MIN", "MAX", "LAST"), so
-    changing `n` in LAST(n) keeps the samples already collected.
+    def update(self, state: dict, value: Any) -> None:
+        samples = state.setdefault("LAST", [])
+        samples.append(copy.deepcopy(value))
+        del samples[: -self.n]
 
-    Returns how many values were skipped: one if the path selected nothing,
-    otherwise one per selected value no numeric function could use.
+
+def _as_number(value: Any) -> int | float | None:
+    """Coerce to a finite number, or None if `value` isn't one (bools are not numbers)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    if isinstance(value, str):
+        try:
+            value = int(value)
+        except ValueError:
+            try:
+                value = float(value)
+            except ValueError:
+                return None
+    return value if math.isfinite(value) else None
+
+
+@dataclass(frozen=True)
+class Aggregate:
+    """Track `fn` over the values `path` selects, stored under `key`.
+
+    `path` and `fn` may be given as text and a name, mapping or list of them; they are built
+    and checked on creation (ValueError if wrong).
     """
-    values = find_values(record, entry.path)
-    if not values:
-        return 1
 
-    parsed = [parse_fn(label) for label in entry.fns]
-    numeric_names = [name for name, _, _ in parsed if name in NUMERIC_FNS]
-    skipped = 0
+    key: str
+    path: Path
+    fn: tuple[Aggregator, ...]
 
-    for value in values:
-        if numeric_names:
+    def __post_init__(self) -> None:
+        specs = self.fn if isinstance(self.fn, (list, tuple)) else [self.fn]
+        functions = tuple(Aggregator.build(spec) for spec in specs)
+        names = [f.name for f in functions]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(f"Aggregate function listed more than once: {', '.join(duplicates)}")
+        object.__setattr__(self, "path", Path.of(self.path))
+        object.__setattr__(self, "fn", functions)
+
+    def update(self, state: dict, event: Any) -> int:
+        """Fold one event into `state`. Returns how many values were skipped.
+
+        One is skipped if the path selected nothing; otherwise one per selected value that a
+        numeric function could not use.
+        """
+        values = self.path.values(event)
+        if not values:
+            return 1
+        skipped = 0
+        for value in values:
             number = _as_number(value)
-            if number is None:
-                skipped += 1
-            else:
-                for name in numeric_names:
-                    _fold_number(state, name, number)
-        for name, n, _ in parsed:
-            if name == "LAST":
-                samples = state.setdefault("LAST", [])
-                samples.append(copy.deepcopy(value))
-                del samples[:-n]
-    return skipped
+            for function in self.fn:
+                if not function.numeric:
+                    function.update(state, value)
+                elif number is not None:
+                    function.update(state, number)
+            skipped += number is None and any(f.numeric for f in self.fn)
+        return skipped

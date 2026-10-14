@@ -6,7 +6,7 @@ import unittest
 
 import yaml
 
-from fingerprint_sampler.aggregators import make_entry
+from fingerprint_sampler.aggregators import Aggregate
 from fingerprint_sampler.warehouse import (
     FingerprintSetError,
     ProfileMismatchError,
@@ -16,8 +16,8 @@ from fingerprint_sampler.warehouse import (
 
 # Duration bounds plus the last three raw events: a typical telemetry-style aggregate set.
 SAMPLE_AGGREGATES = (
-    make_entry("duration_ms", "$.duration_ms", ["MIN", "MAX"]),
-    make_entry("samples", "$", "LAST(3)"),
+    Aggregate("duration_ms", "$.duration_ms", ["MIN", "MAX"]),
+    Aggregate("samples", "$", {"name": "LAST", "n": 3}),
 )
 
 
@@ -89,7 +89,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         self.assertEqual([s["seq"] for s in samples], [2, 3, 4])
 
     def test_aggregates_are_kept_per_fingerprint(self):
-        wh = Warehouse(aggregates=[make_entry("size", "$.size", ["SUM", "AVG"])])
+        wh = Warehouse(aggregates=[Aggregate("size", "$.size", ["SUM", "AVG"])])
         wh.upsert({"kind": "a"}, {"size": 10}, timestamp="t")
         wh.upsert({"kind": "a"}, {"size": 30}, timestamp="t")
         wh.upsert({"kind": "b"}, {"size": 7}, timestamp="t")
@@ -100,7 +100,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         self.assertEqual(b["SUM"], 7)
 
     def test_unusable_values_are_counted_not_fatal(self):
-        wh = Warehouse(aggregates=[make_entry("size", "$.size", "SUM")])
+        wh = Warehouse(aggregates=[Aggregate("size", "$.size", "SUM")])
         wh.upsert({"k": "1"}, {"size": "big"}, timestamp="t")
         wh.upsert({"k": "1"}, {}, timestamp="t")
         wh.upsert({"k": "1"}, {"size": 2}, timestamp="t")
@@ -162,8 +162,8 @@ class PersistenceTests(unittest.TestCase):
 
     def test_folding_across_a_save_load_boundary_equals_one_pass(self):
         aggs = [
-            make_entry("d", "$.d", ["SUM", "AVG", "MIN", "MAX"]),
-            make_entry("s", "$", "LAST(2)"),
+            Aggregate("d", "$.d", ["SUM", "AVG", "MIN", "MAX"]),
+            Aggregate("s", "$", {"name": "LAST", "n": 2}),
         ]
         events = [({"k": str(i % 2)}, {"d": i * 0.1, "i": i}) for i in range(9)]
 

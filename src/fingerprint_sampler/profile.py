@@ -19,11 +19,11 @@ from typing import Any
 
 import yaml
 
-from fingerprint_sampler.aggregators import AggregateEntry, make_entry
+from fingerprint_sampler.aggregators import Aggregate
+from fingerprint_sampler.model import Field, tokens
 from fingerprint_sampler.schema import schema_errors
-from fingerprint_sampler.tokenizer import MaskEntry, compile_path
 
-PROFILE_VERSION = 1
+_SECTIONS = {"fields": Field, "aggregates": Aggregate}
 
 
 class ProfileError(ValueError):
@@ -34,21 +34,25 @@ class ProfileError(ValueError):
         super().__init__("\n".join(problems))
 
 
-def profile_id(fields: tuple[MaskEntry, ...] | list[MaskEntry]) -> str:
+def profile_id(fields: tuple[Field, ...] | list[Field]) -> str:
     """Stable ID of the identity-defining part of a profile (order-independent)."""
-    lines = sorted(f"{entry.key}|{entry.path}|{entry.modifier.spec}" for entry in fields)
+    lines = sorted(f"{f.key}|{f.path.text}|{f.modifier.spec}" for f in fields)
     return hashlib.md5("\n".join(lines).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
 class Profile:
-    fields: tuple[MaskEntry, ...]
-    aggregates: tuple[AggregateEntry, ...] = ()
+    fields: tuple[Field, ...]
+    aggregates: tuple[Aggregate, ...] = ()
 
     @property
     def profile_id(self) -> str:
         """Depends on `fields` only: editing aggregates never invalidates an existing set."""
         return profile_id(self.fields)
+
+    def tokens(self, event: Any) -> dict[str, str]:
+        """The tokens this profile's fields make of `event`, by key."""
+        return tokens(event, self.fields)
 
 
 def _location(data: Any, path: tuple) -> str:
@@ -79,33 +83,23 @@ def check_profile(data: Any, source: str = "<profile>") -> tuple[Profile | None,
     if problems:
         return None, problems
 
-    def entry_problem(section: str, index: int, key: str, exc: Exception) -> str:
-        return f"{source}: {section}[{index}] (key {key!r}): {exc}"
-
-    fields = []
-    for i, raw in enumerate(data["fields"]):
-        try:
-            compile_path(raw["path"])
-            fields.append(MaskEntry(raw["key"], raw["path"], raw.get("modifier", "DEFAULT")))
-        except ValueError as exc:
-            problems.append(entry_problem("fields", i, raw["key"], exc))
-
-    aggregates = []
-    for i, raw in enumerate(data.get("aggregates") or []):
-        try:
-            aggregates.append(make_entry(raw["key"], raw["path"], raw["fn"]))
-        except ValueError as exc:
-            problems.append(entry_problem("aggregates", i, raw["key"], exc))
-
-    for section in ("fields", "aggregates"):
-        keys = [raw["key"] for raw in data.get(section) or []]
+    built: dict[str, list] = {}
+    for section, kind in _SECTIONS.items():
+        entries = data.get(section) or []
+        built[section] = []
+        for i, raw in enumerate(entries):
+            try:
+                built[section].append(kind(**raw))
+            except ValueError as exc:
+                problems.append(f"{source}: {section}[{i}] (key {raw['key']!r}): {exc}")
+        keys = [raw["key"] for raw in entries]
         duplicates = sorted({key for key in keys if keys.count(key) > 1})
         if duplicates:
             problems.append(f"{source}: {section}: duplicate key(s): {', '.join(duplicates)}")
 
     if problems:
         return None, problems
-    return Profile(fields=tuple(fields), aggregates=tuple(aggregates)), []
+    return Profile(tuple(built["fields"]), tuple(built["aggregates"])), []
 
 
 def parse_profile(data: Any, source: str = "<profile>") -> Profile:

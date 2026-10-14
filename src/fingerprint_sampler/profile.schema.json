@@ -308,20 +308,151 @@
           "$ref": "#/$defs/text"
         },
         "fn": {
-          "description": "SUM, MIN, MAX, AVG or LAST(n), or a list of them.",
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "string"
-              }
+          "description": "One aggregate function or a non-empty list of them.",
+          "if": {
+            "type": "array"
+          },
+          "then": {
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/aggregator"
             }
-          ]
+          },
+          "else": {
+            "$ref": "#/$defs/aggregator"
+          }
         }
+      }
+    },
+    "aggregator": {
+      "description": "SUM, MIN, MAX or AVG as a bare name, or a mapping with name (and n for LAST).",
+      "if": {
+        "type": "string"
+      },
+      "then": {
+        "enum": [
+          "SUM",
+          "MIN",
+          "MAX",
+          "AVG"
+        ]
+      },
+      "else": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "SUM",
+              "MIN",
+              "MAX",
+              "AVG",
+              "LAST"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "SUM"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "MIN"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "MAX"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "AVG"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "LAST"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "how many recent values to keep"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "n"
+              ]
+            }
+          }
+        ]
       }
     }
   }
