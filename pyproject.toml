@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fingerprint-sampler"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fingerprint and sample JSONL event streams: one entry per distinct shape of event, with counts, statistics and samples, in a set that grows across runs."
 readme = "README.md"
 license = "MIT"
