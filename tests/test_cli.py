@@ -21,7 +21,7 @@ ACCESS_PROFILE = os.path.join(PACKAGE_ROOT, "examples", "access_log.yaml")
 ACCESS_EVENTS = os.path.join(PACKAGE_ROOT, "examples", "access_log.jsonl")
 
 PROFILE = """
-version: 1
+version: 0
 fields:
   - {key: kind, path: "$.kind"}
 aggregates:
@@ -29,7 +29,7 @@ aggregates:
   - {key: recent, path: "$.id", fn: {name: LAST, n: 2}}
 """
 OTHER_PROFILE = """
-version: 1
+version: 0
 fields:
   - {key: kind, path: "$.kind", modifier: IS_PRESENT}
 """
@@ -113,7 +113,7 @@ class CreateAndMergeTests(CliTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out, "")  # AC7: stdout stays clean
         data = self.load_set()
-        self.assertEqual(data["version"], 3)
+        self.assertEqual(data["version"], 0)
         self.assertEqual(len(data["fingerprints"]), 3)
         by_kind = {rec["tokens"]["kind"]: rec for rec in data["fingerprints"].values()}
         self.assertEqual(by_kind["a"]["meta"]["count"], 3)
@@ -394,7 +394,7 @@ class GoldenFingerprintTests(CliTestCase):
     """STORY-FING-39 AC5: the README quickstart gives the ids it has always documented."""
 
     QUICKSTART_PROFILE = """
-version: 1
+version: 0
 fields:
   - {key: level,     path: "$.level"}
   - {key: component, path: "$.logger"}

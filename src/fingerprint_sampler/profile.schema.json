@@ -10,8 +10,8 @@
   "additionalProperties": false,
   "properties": {
     "version": {
-      "const": 1,
-      "description": "Profile format version."
+      "const": 0,
+      "description": "Profile format version: 0 until 1.0 (formats may change without notice before then)."
     },
     "fields": {
       "type": "array",

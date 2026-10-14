@@ -22,7 +22,7 @@ EXAMPLE_PROFILES = os.path.join(
 )
 
 VALID = {
-    "version": 1,
+    "version": 0,
     "fields": [
         {"key": "syscall", "path": "$.fn", "modifier": "DEFAULT"},
         {
@@ -82,7 +82,7 @@ class ValidationTests(unittest.TestCase):
             self.assertIn(fragment, message)
 
     def test_missing_or_empty_fields(self):
-        self.assert_invalid({"version": 1}, "(top level): 'fields' is a required property")
+        self.assert_invalid({"version": 0}, "(top level): 'fields' is a required property")
         self.assert_invalid(variant(fields=[]), "fields: [] should be non-empty")
 
     def test_not_a_mapping(self):
@@ -146,7 +146,7 @@ class ValidationTests(unittest.TestCase):
         )
 
     def test_unsupported_version(self):
-        self.assert_invalid(variant(version=2), "version: 1 was expected")
+        self.assert_invalid(variant(version=2), "version: 0 was expected")
 
     def test_every_problem_is_reported_not_just_the_first(self):
         data = {
@@ -273,7 +273,7 @@ class LoadProfileTests(unittest.TestCase):
     def test_loads_yaml_file(self):
         path = self.write(
             """
-            version: 1
+            version: 0
             fields:
               - {key: syscall, path: "$.fn"}
             aggregates:

@@ -2,7 +2,7 @@
 # Fingerprint profile for JSON web access logs — nothing eBPF about it.
 # Try it (from packages/fingerprint-sampler):
 #   fingerprint merge -p examples/access_log.yaml -s /tmp/access.fingerprints.yaml examples/access_log.jsonl
-version: 1
+version: 0
 
 fields:
   - key: method

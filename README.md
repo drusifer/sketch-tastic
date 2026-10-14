@@ -34,7 +34,7 @@ Paste this into a shell. It writes a profile and a few events, then fingerprints
 
 ```sh
 cat > profile.yaml <<'YAML'
-version: 1
+version: 0
 fields:
   - {key: level,     path: "$.level"}
   - {key: component, path: "$.logger"}
@@ -67,7 +67,7 @@ again and the counts add up instead of new entries appearing — that is the mer
 `app.fingerprints.yaml` now starts like this (the other two fingerprints follow):
 
 ```yaml
-version: 1
+version: 0
 profile_id: f50d7a5f85ddf9f7f4c72370f454ae2e
 fingerprints:
   b738d17a6a5f7265cb4cef73937afd4f:
@@ -158,7 +158,7 @@ completes modifier names:
 ## Profiles
 
 ```yaml
-version: 1
+version: 0
 
 # fields define identity: events with the same tokens share one fingerprint
 fields:

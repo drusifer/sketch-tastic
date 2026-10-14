@@ -2,7 +2,7 @@
 # Fingerprint profile for GitHub public events from GH Archive (https://www.gharchive.org).
 # Each hourly file is JSONL: one event per line, ~100-250k events.
 # Try it (repository root):  make gharchive            (GH_HOUR=2024-01-01-15 by default)
-version: 1
+version: 0
 
 # fields: the shape of an event — what kind, what happened, who did it.
 fields:

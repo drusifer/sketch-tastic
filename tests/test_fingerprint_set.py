@@ -178,7 +178,7 @@ class PersistenceTests(unittest.TestCase):
 
         with open(self.path) as f:
             data = yaml.safe_load(f)
-        self.assertEqual(data["version"], 3)
+        self.assertEqual(data["version"], 0)
         self.assertEqual(data["profile_id"], "p1")
         self.assertEqual(list(data["fingerprints"]), [fingerprint_id({"a": "1"})])
 

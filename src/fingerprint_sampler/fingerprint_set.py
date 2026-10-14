@@ -21,7 +21,8 @@ import yaml
 
 from fingerprint_sampler.aggregators import Aggregate
 
-SET_VERSION = 3
+SET_VERSION = 0
+"""Format version of set files: 0 until 1.0, when the format becomes stable."""
 
 
 class FingerprintSetError(ValueError):
