@@ -165,9 +165,9 @@ class ApplyModifierTests(unittest.TestCase):
 
         self.assertEqual(apply_modifier(MISSING, "IS_PRESENT"), "FALSE")
 
-    def test_is_null_true_for_missing(self):
+    def test_is_null_false_for_missing(self):
 
-        self.assertEqual(apply_modifier(MISSING, "IS_NULL"), "TRUE")
+        self.assertEqual(apply_modifier(MISSING, "IS_NULL"), "FALSE")
 
     def test_is_null_false_for_present_value(self):
         self.assertEqual(apply_modifier(14205, "IS_NULL"), "FALSE")
@@ -204,8 +204,27 @@ class ApplyModifierTests(unittest.TestCase):
     def test_default_explicit_null_yields_null(self):
         self.assertEqual(apply_modifier(None, "DEFAULT"), "NULL")
 
-    def test_is_present_false_for_explicit_null(self):
-        self.assertEqual(apply_modifier(None, "IS_PRESENT"), "FALSE")
+    def test_is_present_true_for_explicit_null(self):
+        self.assertEqual(apply_modifier(None, "IS_PRESENT"), "TRUE")
+
+    def test_is_present_and_is_null_tell_missing_null_and_value_apart(self):
+        record = {"a": None, "b": 1}
+        fields = [
+            MaskEntry(f"{key}_{name}", f"$.{key}", name)
+            for key in ("a", "b", "c")
+            for name in ("IS_PRESENT", "IS_NULL")
+        ]
+        self.assertEqual(
+            tokenize(record, fields),
+            {
+                "a_IS_PRESENT": "TRUE",
+                "a_IS_NULL": "TRUE",  # explicit null
+                "b_IS_PRESENT": "TRUE",
+                "b_IS_NULL": "FALSE",  # a value
+                "c_IS_PRESENT": "FALSE",
+                "c_IS_NULL": "FALSE",  # missing
+            },
+        )
 
     def test_is_null_true_for_explicit_null(self):
         self.assertEqual(apply_modifier(None, "IS_NULL"), "TRUE")

@@ -150,19 +150,22 @@ class Default(Modifier):
 
 @dataclass(frozen=True, kw_only=True)
 class IsPresent(Modifier):
+    """TRUE when the path finds the key, even if its value is null; FALSE when it is missing."""
+
     name = "IS_PRESENT"
 
-    def present(self, _value: Any) -> str:
-        return "TRUE"
+    def token(self, value: Any) -> str:
+        return _flag(value is not MISSING)
 
 
 @dataclass(frozen=True, kw_only=True)
 class IsNull(Modifier):
-    name = "IS_NULL"
-    absent = "TRUE"
+    """TRUE only for a key explicitly set to null; FALSE for a missing key or any other value."""
 
-    def present(self, _value: Any) -> str:
-        return "FALSE"
+    name = "IS_NULL"
+
+    def token(self, value: Any) -> str:
+        return _flag(value is None)
 
 
 @dataclass(frozen=True, kw_only=True)
