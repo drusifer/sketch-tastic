@@ -8,6 +8,13 @@ grows across runs.
 from importlib.metadata import PackageNotFoundError, version
 
 from fingerprint_sampler.aggregators import Aggregate, Aggregator
+from fingerprint_sampler.fingerprint_set import (
+    Fingerprint,
+    FingerprintSet,
+    FingerprintSetError,
+    ProfileMismatchError,
+    fingerprint_id,
+)
 from fingerprint_sampler.model import Field, Modifier, Path, Rule
 from fingerprint_sampler.profile import (
     Profile,
@@ -15,13 +22,6 @@ from fingerprint_sampler.profile import (
     check_profile,
     load_profile,
     parse_profile,
-)
-from fingerprint_sampler.warehouse import (
-    FingerprintRecord,
-    FingerprintSetError,
-    ProfileMismatchError,
-    Warehouse,
-    fingerprint_id,
 )
 
 try:
@@ -33,7 +33,7 @@ __all__ = [
     "Aggregate",
     "Aggregator",
     "Field",
-    "FingerprintRecord",
+    "Fingerprint",
     "FingerprintSetError",
     "Modifier",
     "Profile",
@@ -41,7 +41,7 @@ __all__ = [
     "ProfileMismatchError",
     "Path",
     "Rule",
-    "Warehouse",
+    "FingerprintSet",
     "__version__",
     "check_profile",
     "fingerprint_id",

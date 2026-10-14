@@ -17,6 +17,8 @@ from typing import Any, ClassVar
 
 from fingerprint_sampler.model import Path, Rule
 
+__all__ = ["Aggregate", "Aggregator", "Avg", "Last", "Max", "Min", "Sum"]
+
 
 class Aggregator(Rule):
     """Folds one value into the state of an aggregate. Numeric ones only see numbers."""

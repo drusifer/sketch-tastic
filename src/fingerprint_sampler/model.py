@@ -19,6 +19,23 @@ import jsonpath
 
 from fingerprint_sampler.schema import schema_errors
 
+__all__ = [
+    "MISSING",
+    "AnyOf",
+    "Default",
+    "Field",
+    "Glob",
+    "InRange",
+    "IsNull",
+    "IsPresent",
+    "Modifier",
+    "Path",
+    "RegSub",
+    "Regex",
+    "Rule",
+    "tokens",
+]
+
 MISSING = object()
 """Handed to a modifier when a path selects nothing."""
 
@@ -135,7 +152,7 @@ class Default(Modifier):
 class IsPresent(Modifier):
     name = "IS_PRESENT"
 
-    def present(self, value: Any) -> str:
+    def present(self, _value: Any) -> str:
         return "TRUE"
 
 
@@ -144,7 +161,7 @@ class IsNull(Modifier):
     name = "IS_NULL"
     absent = "TRUE"
 
-    def present(self, value: Any) -> str:
+    def present(self, _value: Any) -> str:
         return "FALSE"
 
 

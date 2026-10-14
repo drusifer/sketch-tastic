@@ -75,6 +75,22 @@ def _location(data: Any, path: tuple) -> str:
     return text
 
 
+def _build(data: dict, section: str, source: str, problems: list[str]) -> list:
+    """Build one section's entries, adding each failure (and duplicate keys) to `problems`."""
+    entries = data.get(section) or []
+    built = []
+    for i, raw in enumerate(entries):
+        try:
+            built.append(_SECTIONS[section](**raw))
+        except ValueError as exc:
+            problems.append(f"{source}: {section}[{i}] (key {raw['key']!r}): {exc}")
+    keys = [raw["key"] for raw in entries]
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicates:
+        problems.append(f"{source}: {section}: duplicate key(s): {', '.join(duplicates)}")
+    return built
+
+
 def check_profile(data: Any, source: str = "<profile>") -> tuple[Profile | None, list[str]]:
     """Check already-parsed profile data. Returns (profile or None, every problem found)."""
     problems = [
@@ -83,20 +99,7 @@ def check_profile(data: Any, source: str = "<profile>") -> tuple[Profile | None,
     if problems:
         return None, problems
 
-    built: dict[str, list] = {}
-    for section, kind in _SECTIONS.items():
-        entries = data.get(section) or []
-        built[section] = []
-        for i, raw in enumerate(entries):
-            try:
-                built[section].append(kind(**raw))
-            except ValueError as exc:
-                problems.append(f"{source}: {section}[{i}] (key {raw['key']!r}): {exc}")
-        keys = [raw["key"] for raw in entries]
-        duplicates = sorted({key for key in keys if keys.count(key) > 1})
-        if duplicates:
-            problems.append(f"{source}: {section}: duplicate key(s): {', '.join(duplicates)}")
-
+    built = {section: _build(data, section, source, problems) for section in _SECTIONS}
     if problems:
         return None, problems
     return Profile(tuple(built["fields"]), tuple(built["aggregates"])), []

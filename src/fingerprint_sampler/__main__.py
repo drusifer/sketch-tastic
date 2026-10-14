@@ -1,13 +1,11 @@
 """`python -m fingerprint_sampler` and the `fingerprint` console command."""
 
-from __future__ import annotations
-
 import sys
+
+from fingerprint_sampler.cli import main as cli_main
 
 
 def main() -> None:
-    from fingerprint_sampler.cli import main as cli_main
-
     sys.exit(cli_main())
 
 

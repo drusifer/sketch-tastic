@@ -34,7 +34,6 @@ Repository = "https://github.com/drusifer/fingerling"
 
 [project.scripts]
 fingerprint = "fingerprint_sampler.__main__:main"
-fingerprint-sampler = "fingerprint_sampler.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fingerprint_sampler"]

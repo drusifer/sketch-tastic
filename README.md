@@ -19,8 +19,8 @@ A million near-identical log lines become a handful of entries you can actually 
 pip install fingerprint-sampler
 ```
 
-Python 3.14 or newer. Installs the `fingerprint` command (also available as
-`fingerprint-sampler` and `python -m fingerprint_sampler`).
+Python 3.14 or newer. Installs the `fingerprint` command (also runnable as
+`python -m fingerprint_sampler`).
 
 **New in 0.2.0:** modifier arguments are written as YAML mappings
 (`{name: IN_RANGE, low: 200, high: 399}`); the 0.1 string form (`"IN_RANGE(200, 399)"`) is no
@@ -246,13 +246,13 @@ every problem at once.
 ## As a library
 
 ```python
-from fingerprint_sampler import Warehouse, load_profile, tokenize
+from fingerprint_sampler import FingerprintSet, load_profile
 
 profile = load_profile("profile.yaml")
-fingerprints = Warehouse(aggregates=profile.aggregates, profile_id=profile.profile_id)
+fingerprints = FingerprintSet(aggregates=profile.aggregates, profile_id=profile.profile_id)
 
 event = {"level": "INFO", "logger": "db", "msg": "query ok", "took_ms": 3}
-fingerprint_id = fingerprints.upsert(tokenize(event, list(profile.fields)), event)
+fingerprint_id = fingerprints.upsert(profile.tokens(event), event)
 
 fingerprints.get(fingerprint_id).total_occurrences   # 1
 fingerprints.save("app.fingerprints.yaml")
@@ -262,19 +262,23 @@ fingerprints.save("app.fingerprints.yaml")
 problem, located, in the same form `fingerprint check` prints. `check_profile(data, source)`
 returns `(profile_or_None, problems)` without raising.
 
-Without a profile file, build the rules directly. A `MaskEntry`'s modifier is a bare name or a
-mapping, exactly as in YAML, and is validated when the entry is created (`ValueError` if wrong):
+Without a profile file, build the pieces directly. `Field` and `Aggregate` take the same keys
+as the YAML (`key`, `path`, `modifier` / `fn`) and are checked when created (`ValueError` if
+wrong):
 
 ```python
-from fingerprint_sampler import MaskEntry, tokenize
+from fingerprint_sampler import Field, Profile
 
-rules = [
-    MaskEntry("method", "$.request.method", "DEFAULT"),
-    MaskEntry("route", "$.request.path", {"name": "REGSUB", "pattern": r"\d+", "replace": "N"}),
-]
-tokenize({"request": {"method": "GET", "path": "/items/17"}}, rules)
+profile = Profile(fields=(
+    Field("method", "$.request.method"),
+    Field("route", "$.request.path", {"name": "REGSUB", "pattern": r"\d+", "replace": "N"}),
+))
+profile.tokens({"request": {"method": "GET", "path": "/items/17"}})
 # {'method': 'GET', 'route': '/items/N'}
 ```
+
+Every modifier and aggregate function is a `Rule` subclass, registered by its `name`; the
+schema checks its arguments and the class checks the rest.
 
 ## License
 

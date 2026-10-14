@@ -45,7 +45,7 @@ def fingerprint_id(tokens: dict[str, str]) -> str:
 
 
 @dataclass
-class FingerprintRecord:
+class Fingerprint:
     tokens: dict[str, str]
     total_occurrences: int
     first_seen: str
@@ -53,15 +53,15 @@ class FingerprintRecord:
     aggregates: dict[str, dict] = field(default_factory=dict)
 
 
-class Warehouse:
-    """In-memory fingerprint set with versioned YAML load/save."""
+class FingerprintSet:
+    """The fingerprints seen so far, with versioned YAML load/save."""
 
     def __init__(
         self,
         aggregates: Sequence[Aggregate] = (),
         profile_id: str | None = None,
     ) -> None:
-        self._records: dict[str, FingerprintRecord] = {}
+        self._records: dict[str, Fingerprint] = {}
         self._aggregates = tuple(aggregates)
         self.profile_id = profile_id
         self.skipped_values = 0
@@ -79,7 +79,7 @@ class Warehouse:
         existing = self._records.get(fid)
 
         if existing is None:
-            existing = self._records[fid] = FingerprintRecord(
+            existing = self._records[fid] = Fingerprint(
                 tokens=dict(tokens), total_occurrences=1, first_seen=ts, last_seen=ts
             )
         else:
@@ -94,7 +94,7 @@ class Warehouse:
 
         return fid
 
-    def get(self, fingerprint_id_: str) -> FingerprintRecord | None:
+    def get(self, fingerprint_id_: str) -> Fingerprint | None:
         return self._records.get(fingerprint_id_)
 
     def __len__(self) -> int:
@@ -126,44 +126,40 @@ class Warehouse:
                 os.unlink(tmp_path)
             raise
 
-    def load(self, path: str, force: bool = False) -> None:
+    def load(self, path: str, *, force: bool = False) -> None:
         """Replace the in-memory set with the one stored at `path`.
 
         Raises ProfileMismatchError if the file records a different profile
-        than this warehouse was created with, unless `force` is set (the file's
+        than this set was created with, unless `force` is set (the file's
         fingerprints are then adopted under the current profile).
         """
-        try:
-            with open(path) as f:
-                data = yaml.safe_load(f)
-        except yaml.YAMLError as exc:
-            raise FingerprintSetError(f"{path} is not valid YAML: {exc}") from exc
-
-        if data is None:
-            data = {"version": SET_VERSION, "profile_id": None, "fingerprints": {}}
-        if not isinstance(data, dict) or "fingerprints" not in data or "version" not in data:
-            raise FingerprintSetError(
-                f"{path} is not a fingerprint set (expected top-level 'version' and "
-                f"'fingerprints'); sets written before the aggregator format are not supported"
-            )
-        if data["version"] != SET_VERSION:
-            raise FingerprintSetError(
-                f"{path} is fingerprint set version {data['version']}; "
-                f"this tool reads version {SET_VERSION}"
-            )
-
-        stored_profile = data.get("profile_id")
-        if (
-            not force
-            and stored_profile is not None
-            and self.profile_id is not None
-            and stored_profile != self.profile_id
-        ):
-            raise ProfileMismatchError(path, stored_profile, self.profile_id)
-
+        data = _read_set_file(path)
+        stored = data.get("profile_id")
+        if not force and None not in (stored, self.profile_id) and stored != self.profile_id:
+            raise ProfileMismatchError(path, stored, self.profile_id)
         try:
             self._records = {
-                fid: FingerprintRecord(**rec) for fid, rec in (data["fingerprints"] or {}).items()
+                fid: Fingerprint(**rec) for fid, rec in (data["fingerprints"] or {}).items()
             }
         except TypeError as exc:
             raise FingerprintSetError(f"{path} has a malformed fingerprint entry: {exc}") from exc
+
+
+def _read_set_file(path: str) -> dict:
+    """Read a set file and check its header. An empty file is an empty set."""
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise FingerprintSetError(f"{path} is not valid YAML: {exc}") from exc
+    if data is None:
+        return {"version": SET_VERSION, "profile_id": None, "fingerprints": {}}
+    if not isinstance(data, dict) or "fingerprints" not in data or "version" not in data:
+        raise FingerprintSetError(
+            f"{path} is not a fingerprint set (expected top-level 'version' and 'fingerprints')"
+        )
+    if data["version"] != SET_VERSION:
+        raise FingerprintSetError(
+            f"{path} is fingerprint set version {data['version']}; this tool reads version {SET_VERSION}"
+        )
+    return data
