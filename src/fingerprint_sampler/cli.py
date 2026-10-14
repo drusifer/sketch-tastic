@@ -2,6 +2,7 @@
 
     fingerprint merge --profile P --set S [EVENTS|-]
     fingerprint check PROFILE [PROFILE ...]
+    fingerprint show SET
 
 Folds a stream of JSONL events into a fingerprint set that grows across runs.
 Knows nothing about where the events came from.
@@ -14,7 +15,8 @@ import json
 import os
 import sys
 from contextlib import AbstractContextManager, nullcontext
-from typing import IO, Iterable
+from datetime import UTC, datetime
+from typing import IO, Any, Iterable
 
 from fingerprint_sampler import __version__
 from fingerprint_sampler.fingerprint_set import (
@@ -64,6 +66,19 @@ keys and aggregate functions are checked as well. Every problem is listed.
 exit status:
   0  every profile is valid
   1  at least one profile has problems (listed on stdout)
+"""
+
+
+_SHOW_EPILOG = """\
+example:
+  fingerprint show web.fingerprints.yaml
+  fingerprint show web.fingerprints.yaml | less -S    # long values: scroll sideways
+
+ID is the start of the fingerprint ID; times are UTC; '-' means no value.
+
+exit status:
+  0  table printed
+  2  SET could not be read
 """
 
 
@@ -130,6 +145,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     check.add_argument("profiles", nargs="+", metavar="PROFILE", help="YAML profile to check")
     check.set_defaults(func=_cmd_check)
+
+    show = commands.add_parser(
+        "show",
+        help="print a fingerprint set as a table",
+        description="Print one row per fingerprint in SET, most frequent first: "
+        "its count, when it was first and last seen, and its tokens.",
+        epilog=_SHOW_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    show.add_argument("set_path", metavar="SET", help="fingerprint set file to show")
+    show.set_defaults(func=_cmd_show)
     return parser
 
 
@@ -145,6 +171,57 @@ def _cmd_check(args: argparse.Namespace) -> int:
         else:
             print(f"{path}: OK")
     return status
+
+
+def _time(value: Any) -> str:
+    """A stored time as UTC `YYYY-MM-DD HH:MM:SS` ('-' if absent; as stored if not a time)."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    if not isinstance(value, datetime):
+        return "-"
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _table(rows: list[list[str]]) -> str:
+    """Rows of cells as text, each column padded to its widest cell."""
+    widths = [max(len(cell) for cell in column) for column in zip(*rows)]
+    return "\n".join(
+        "  ".join(cell.ljust(width) for cell, width in zip(row, widths)).rstrip() for row in rows
+    )
+
+
+def _cmd_show(args: argparse.Namespace) -> int:
+    fingerprints = FingerprintSet()
+    try:
+        fingerprints.load(args.set_path)
+    except (FingerprintSetError, OSError) as exc:
+        _say(f"fingerprint: cannot use set file: {exc}")
+        return EXIT_NOT_WRITTEN
+    records = [(fid, fingerprints.get(fid)) for fid in fingerprints]
+    if not records:
+        print(f"{args.set_path}: no fingerprints")
+        return EXIT_OK
+    records.sort(key=lambda item: -item[1].meta.get("count", 0))  # stable: ties keep file order
+    keys = sorted({key for _, record in records for key in record.tokens})
+    rows = [["ID", "COUNT", "FIRST SEEN", "LAST SEEN", *keys]]
+    for fid, record in records:
+        meta = record.meta
+        rows.append(
+            [
+                fid[:8],
+                str(meta.get("count", "-")),
+                _time(meta.get("first_seen")),
+                _time(meta.get("last_seen")),
+                *(str(record.tokens.get(key, "-")) for key in keys),
+            ]
+        )
+    print(_table(rows))
+    return EXIT_OK
 
 
 def _fold_stream(lines: Iterable[str], profile: Profile, fingerprints: FingerprintSet) -> dict:

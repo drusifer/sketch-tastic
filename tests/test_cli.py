@@ -1,4 +1,4 @@
-"""Tests for the `fingerprint merge` and `fingerprint check` CLI."""
+"""Tests for the `fingerprint merge`, `check` and `show` CLI."""
 
 import contextlib
 import io
@@ -14,6 +14,7 @@ from unittest import mock
 import yaml
 
 from fingerprint_sampler.cli import main
+from fingerprint_sampler.fingerprint_set import FingerprintSet, fingerprint_id
 from fingerprint_sampler.profile import load_profile
 
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -530,3 +531,60 @@ class EntryPointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShowTests(CliTestCase):
+    """`fingerprint show SET` (STORY-FING-42)."""
+
+    def save_set(self, observations):
+        """Build a set from (tokens, timestamp) pairs, in order, and save it."""
+        fingerprints = FingerprintSet()
+        for tokens, timestamp in observations:
+            fingerprints.upsert(tokens, {}, timestamp=timestamp)
+        fingerprints.save(self.set_path)
+
+    def test_prints_one_row_per_fingerprint_most_frequent_first(self):
+        a, b, c = {"kind": "a"}, {"kind": "b", "route": "/x"}, {"kind": "c"}
+        self.save_set(
+            [
+                (a, "2024-01-01T10:00:00+02:00"),
+                (b, "2024-01-01T09:00:00Z"),
+                (b, "2024-01-02T09:30:05Z"),
+                (c, "2024-01-03T00:00:00Z"),
+            ]
+        )
+        code, out, err = self.run_cli("show", self.set_path)
+        self.assertEqual((code, err), (0, ""))
+        ida, idb, idc = (fingerprint_id(t)[:8] for t in (a, b, c))
+        self.assertEqual(
+            out.splitlines(),
+            [
+                "ID        COUNT  FIRST SEEN           LAST SEEN            kind  route",
+                f"{idb}  2      2024-01-01 09:00:00  2024-01-02 09:30:05  b     /x",
+                f"{ida}  1      2024-01-01 08:00:00  2024-01-01 08:00:00  a     -",
+                f"{idc}  1      2024-01-03 00:00:00  2024-01-03 00:00:00  c     -",
+            ],
+        )
+
+    def test_empty_set_says_so(self):
+        FingerprintSet().save(self.set_path)
+        code, out, err = self.run_cli("show", self.set_path)
+        self.assertEqual((code, out, err), (0, f"{self.set_path}: no fingerprints\n", ""))
+
+    def test_unusable_file_is_an_error_and_left_alone(self):
+        not_a_set = self.write("not_a_set.yaml", "just: text\n")
+        for path in (os.path.join(self.dir, "missing.yaml"), not_a_set):
+            with self.subTest(path=path):
+                code, out, err = self.run_cli("show", path)
+                self.assertEqual((code, out), (2, ""))
+                self.assertTrue(err.startswith("fingerprint: cannot use set file: "), err)
+                self.assertIn(os.path.basename(path), err)
+        with open(not_a_set) as f:
+            self.assertEqual(f.read(), "just: text\n")
+
+    def test_help_describes_show_with_an_example(self):
+        code, out, _ = self.run_cli("show", "--help")
+        self.assertEqual(code, 0)
+        self.assertIn("fingerprint show web.fingerprints.yaml", out)
+        _, out, _ = self.run_cli("--help")
+        self.assertIn("show", out)

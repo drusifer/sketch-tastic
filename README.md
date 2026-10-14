@@ -102,6 +102,15 @@ fingerprints:
         record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
 ```
 
+To read a set without the YAML, print it as a table with `fingerprint show app.fingerprints.yaml`:
+
+```
+ID        COUNT  FIRST SEEN           LAST SEEN            component  failed  level
+b738d17a  2      2026-10-14 03:59:19  2026-10-14 03:59:19  db         FALSE   INFO
+5c56a234  1      2026-10-14 03:59:19  2026-10-14 03:59:19  db         TRUE    ERROR
+0a13defd  1      2026-10-14 03:59:19  2026-10-14 03:59:19  http       FALSE   INFO
+```
+
 ## Usage
 
 ```
@@ -154,6 +163,17 @@ completes modifier names:
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/drusifer/fingerling/main/packages/fingerprint-sampler/src/fingerprint_sampler/profile.schema.json
 ```
+
+### Show a set
+
+```
+fingerprint show SET
+```
+
+Prints one row per fingerprint, most frequent first: the first 8 characters of its ID, its count,
+when it was first and last seen (UTC), and one column per token. A set with no fingerprints prints
+`SET: no fingerprints`. Long values are not cut; pipe to `less -S` to scroll sideways. Exit
+status: `0` printed · `2` the set file could not be read (the message says why).
 
 ## Profiles
 
