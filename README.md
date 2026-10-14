@@ -108,10 +108,10 @@ fingerprints:
 To read a set without the YAML, print it as a table with `fingerprint show app.fingerprints.yaml`:
 
 ```
-ID        COUNT  FIRST SEEN           LAST SEEN            component  failed  level
-b738d17a  2      2026-10-14 03:59:19  2026-10-14 03:59:19  db         FALSE   INFO
-5c56a234  1      2026-10-14 03:59:19  2026-10-14 03:59:19  db         TRUE    ERROR
-0a13defd  1      2026-10-14 03:59:19  2026-10-14 03:59:19  http       FALSE   INFO
+ID        COUNT  COUNT %  FIRST SEEN           LAST SEEN            component  failed  level
+b738d17a  2      50.0     2026-10-14 03:59:19  2026-10-14 03:59:19  db         FALSE   INFO
+5c56a234  1      25.0     2026-10-14 03:59:19  2026-10-14 03:59:19  db         TRUE    ERROR
+0a13defd  1      25.0     2026-10-14 03:59:19  2026-10-14 03:59:19  http       FALSE   INFO
 ```
 
 ## Usage
@@ -173,8 +173,11 @@ completes modifier names:
 fingerprint show SET
 ```
 
-Prints one row per fingerprint, most frequent first: the first 8 characters of its ID, its count,
-when it was first and last seen (UTC), and one column per token. A set with no fingerprints prints
+Prints one row per fingerprint, most frequent first: the first 8 characters of its ID, its count
+and `COUNT %` (its share of all events), when it was first and last seen (UTC), then a value and
+a `%` column for each `SUM` or `COUNT` aggregate (`payload_bytes.SUM`, `payload_bytes.SUM %`), and
+one column per token. Shares come from the set file's `share` section; a set written before
+shares existed shows `-` until its next merge. A set with no fingerprints prints
 `SET: no fingerprints`. Long values are not cut; pipe to `less -S` to scroll sideways. Exit
 status: `0` printed · `2` the set file could not be read (the message says why).
 

@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from unittest import mock
 
 import yaml
 
+from fingerprint_sampler.aggregators import Aggregate
 from fingerprint_sampler.cli import main
 from fingerprint_sampler.fingerprint_set import FingerprintSet, fingerprint_id
 from fingerprint_sampler.profile import load_profile
@@ -559,12 +561,62 @@ class ShowTests(CliTestCase):
         self.assertEqual(
             out.splitlines(),
             [
-                "ID        COUNT  FIRST SEEN           LAST SEEN            kind  route",
-                f"{idb}  2      2024-01-01 09:00:00  2024-01-02 09:30:05  b     /x",
-                f"{ida}  1      2024-01-01 08:00:00  2024-01-01 08:00:00  a     -",
-                f"{idc}  1      2024-01-03 00:00:00  2024-01-03 00:00:00  c     -",
+                "ID        COUNT  COUNT %  FIRST SEEN           LAST SEEN            kind  route",
+                f"{idb}  2      50.0     2024-01-01 09:00:00  2024-01-02 09:30:05  b     /x",
+                f"{ida}  1      25.0     2024-01-01 08:00:00  2024-01-01 08:00:00  a     -",
+                f"{idc}  1      25.0     2024-01-03 00:00:00  2024-01-03 00:00:00  c     -",
             ],
         )
+
+    def test_shared_aggregates_get_a_value_and_a_percent_column(self):
+        fingerprints = FingerprintSet(
+            [Aggregate("size", "$.size", ["SUM", "MAX"]), Aggregate("n", "$.size", "COUNT")]
+        )
+        for kind, size in (("a", 10), ("a", 30), ("b", 60)):
+            fingerprints.upsert({"k": kind}, {"size": size}, timestamp="2024-01-01T00:00:00Z")
+        fingerprints.save(self.set_path)
+        code, out, _ = self.run_cli("show", self.set_path)
+        self.assertEqual(code, 0)
+        rows = [re.split(r"\s{2,}", line) for line in out.splitlines()]
+        time = "2024-01-01 00:00:00"
+        self.assertEqual(
+            [row[1:] for row in rows],
+            [
+                [
+                    "COUNT",
+                    "COUNT %",
+                    "FIRST SEEN",
+                    "LAST SEEN",
+                    "size.SUM",
+                    "size.SUM %",
+                    "n",
+                    "n %",
+                    "k",
+                ],
+                ["2", "66.7", time, time, "40", "40.0", "2", "66.7", "a"],
+                ["1", "33.3", time, time, "60", "60.0", "1", "33.3", "b"],
+            ],
+        )
+
+    def test_set_without_shares_shows_dashes(self):
+        fid = fingerprint_id({"k": "a"})
+        self.write(
+            "set.yaml",
+            f"""
+            version: 0
+            profile_id: null
+            fingerprints:
+              {fid}:
+                tokens: {{k: a}}
+                aggregates: {{size: 5}}
+                meta: {{count: 1}}
+            """,
+        )
+        code, out, _ = self.run_cli("show", self.set_path)
+        self.assertEqual(code, 0)
+        header, row = (re.split(r"\s{2,}", line) for line in out.splitlines())
+        self.assertEqual(header, ["ID", "COUNT", "COUNT %", "FIRST SEEN", "LAST SEEN", "k"])
+        self.assertEqual(row[1:3], ["1", "-"])
 
     def test_empty_set_says_so(self):
         FingerprintSet().save(self.set_path)

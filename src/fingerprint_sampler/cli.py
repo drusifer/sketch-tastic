@@ -20,6 +20,7 @@ from typing import IO, Any, Iterable
 
 from fingerprint_sampler import __version__
 from fingerprint_sampler.fingerprint_set import (
+    Fingerprint,
     FingerprintSet,
     FingerprintSetError,
     ProfileMismatchError,
@@ -75,6 +76,9 @@ example:
   fingerprint show web.fingerprints.yaml | less -S    # long values: scroll sideways
 
 ID is the start of the fingerprint ID; times are UTC; '-' means no value.
+Each % column is the fingerprint's share of the set total: COUNT % of all
+events, and one value and % column per SUM or COUNT aggregate (key.FN when
+the aggregate has several functions).
 
 exit status:
   0  table printed
@@ -150,7 +154,8 @@ def build_parser() -> argparse.ArgumentParser:
         "show",
         help="print a fingerprint set as a table",
         description="Print one row per fingerprint in SET, most frequent first: "
-        "its count, when it was first and last seen, and its tokens.",
+        "its count and share of all events, when it was first and last seen, "
+        "its summed and counted aggregates with their shares, and its tokens.",
         epilog=_SHOW_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -195,6 +200,63 @@ def _table(rows: list[list[str]]) -> str:
     )
 
 
+def _lookup(values: dict, key: str, function: str | None) -> Any:
+    """`values[key]`, or `values[key][function]` for a multi-function aggregate; None if absent."""
+    value = values.get(key)
+    if function is not None:
+        value = value.get(function) if isinstance(value, dict) else None
+    return value
+
+
+def _cell(value: Any) -> str:
+    return "-" if value is None else str(value)
+
+
+def _percent(value: Any) -> str:
+    return "-" if value is None else f"{value:.1f}"
+
+
+def _shared_columns(records: Iterable[Fingerprint]) -> list[tuple[str, str | None]]:
+    """(aggregate key, function or None) of every shared aggregate value, in first-seen order."""
+    columns: dict[tuple[str, str | None], None] = {}
+    for record in records:
+        for key, share in record.share.get("aggregates", {}).items():
+            for function in share if isinstance(share, dict) else [None]:
+                columns[key, function] = None
+    return list(columns)
+
+
+def _show_row(
+    fid: str, record: Fingerprint, shared: list[tuple[str, str | None]], keys: list[str]
+) -> list[str]:
+    """One `show` row: ID, count and share, times, each shared value and share, tokens."""
+    meta, shares = record.meta, record.share.get("aggregates", {})
+    values = []
+    for key, function in shared:
+        values.append(_cell(_lookup(record.aggregates, key, function)))
+        values.append(_percent(_lookup(shares, key, function)))
+    return [
+        fid[:8],
+        _cell(meta.get("count")),
+        _percent(record.share.get("meta", {}).get("count")),
+        _time(meta.get("first_seen")),
+        _time(meta.get("last_seen")),
+        *values,
+        *(str(record.tokens.get(key, "-")) for key in keys),
+    ]
+
+
+def _show_table(records: list[tuple[str, Fingerprint]]) -> str:
+    """The `show` table: a header, then one row per fingerprint, most frequent first."""
+    records = sorted(records, key=lambda item: -item[1].meta.get("count", 0))  # ties: file order
+    keys = sorted({key for _, record in records for key in record.tokens})
+    shared = _shared_columns(record for _, record in records)
+    names = [key if function is None else f"{key}.{function}" for key, function in shared]
+    header = ["ID", "COUNT", "COUNT %", "FIRST SEEN", "LAST SEEN"]
+    header += [column for name in names for column in (name, f"{name} %")] + keys
+    return _table([header] + [_show_row(fid, record, shared, keys) for fid, record in records])
+
+
 def _cmd_show(args: argparse.Namespace) -> int:
     fingerprints = FingerprintSet()
     try:
@@ -206,21 +268,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     if not records:
         print(f"{args.set_path}: no fingerprints")
         return EXIT_OK
-    records.sort(key=lambda item: -item[1].meta.get("count", 0))  # stable: ties keep file order
-    keys = sorted({key for _, record in records for key in record.tokens})
-    rows = [["ID", "COUNT", "FIRST SEEN", "LAST SEEN", *keys]]
-    for fid, record in records:
-        meta = record.meta
-        rows.append(
-            [
-                fid[:8],
-                str(meta.get("count", "-")),
-                _time(meta.get("first_seen")),
-                _time(meta.get("last_seen")),
-                *(str(record.tokens.get(key, "-")) for key in keys),
-            ]
-        )
-    print(_table(rows))
+    print(_show_table(records))
     return EXIT_OK
 
 
