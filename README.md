@@ -100,6 +100,9 @@ fingerprints:
         record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
       - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
         record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
+    share:
+      meta:
+        count: 50.0
 ```
 
 To read a set without the YAML, print it as a table with `fingerprint show app.fingerprints.yaml`:
@@ -304,6 +307,11 @@ every problem at once.
   uses the same aggregate functions you can. It reads each record wrapped in an envelope,
   `{meta: {seen: <time read>}, record: <the parsed record>}`, so the fields the tool adds can never
   clash with the record's own, and the stored first/last records carry the time they were seen.
+- `share` gives each fingerprint's percentage of the whole set for every value that adds up:
+  `share.meta.count` is its share of all events, and `share.aggregates` holds the share of each
+  `SUM` and `COUNT`, laid out like `aggregates` (`payload_bytes: {SUM: 31.25}`, or `requests: 25.0`
+  for a single-function aggregate). It is recomputed on every write; a value whose total is 0 has
+  no share.
 - Times are wall clock, when the tool read the record, so they work for any JSONL. To track a
   time field inside your records, add it to your profile's `aggregates`.
 - A set records the profile that built it (`profile_id`, derived from `fields`). Merging under a

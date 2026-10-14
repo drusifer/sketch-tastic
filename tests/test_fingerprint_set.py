@@ -220,6 +220,9 @@ class PersistenceTests(unittest.TestCase):
         for i, (tokens, event) in enumerate(events[4:], start=4):
             second.upsert(tokens, event, timestamp=f"t{i}")
 
+        # Shares describe the set as last written, so compare both as written.
+        second.save(self.path)
+        one_pass.save(self.path + ".one")
         self.assertEqual(len(second), len(one_pass))
         for fid in one_pass:
             self.assertEqual(second.get(fid), one_pass.get(fid))
@@ -279,3 +282,65 @@ class PersistenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShareTests(unittest.TestCase):
+    """Each fingerprint's share of every SUM and COUNT total, written on save (FING-46)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "fingerprints.yaml")
+
+    def saved_shares(self, fingerprints):
+        fingerprints.save(self.path)
+        with open(self.path) as f:
+            data = yaml.safe_load(f)
+        return {rec["tokens"]["k"]: rec["share"] for rec in data["fingerprints"].values()}
+
+    def build(self, aggregates, events):
+        fingerprints = FingerprintSet(aggregates=aggregates)
+        for kind, record in events:
+            fingerprints.upsert({"k": kind}, record, timestamp="2024-01-01T00:00:00Z")
+        return fingerprints
+
+    def test_shares_of_counts_and_sums_mirror_the_value_layout(self):
+        fingerprints = self.build(
+            [Aggregate("size", "$.size", ["SUM", "MAX"]), Aggregate("n", "$.size", "COUNT")],
+            [("a", {"size": 10}), ("a", {"size": 30}), ("b", {"size": 60})],
+        )
+        shares = self.saved_shares(fingerprints)
+        self.assertEqual(
+            shares["a"],
+            {"meta": {"count": 66.67}, "aggregates": {"size": {"SUM": 40.0}, "n": 66.67}},
+        )
+        self.assertEqual(
+            shares["b"],
+            {"meta": {"count": 33.33}, "aggregates": {"size": {"SUM": 60.0}, "n": 33.33}},
+        )
+
+    def test_zero_or_absent_total_has_no_share(self):
+        fingerprints = self.build(
+            [Aggregate("zero", "$.z", "SUM"), Aggregate("none", "$.missing", "SUM")],
+            [("a", {"z": 0}), ("b", {"z": 0})],
+        )
+        self.assertEqual(self.saved_shares(fingerprints)["a"], {"meta": {"count": 50.0}})
+
+    def test_shares_are_recomputed_after_a_merge_and_never_read_back(self):
+        aggregates = [Aggregate("size", "$.size", "SUM")]
+        self.build(aggregates, [("a", {"size": 10})]).save(self.path)
+
+        merged = FingerprintSet(aggregates=aggregates)
+        merged.load(self.path)
+        merged.upsert({"k": "b"}, {"size": 30}, timestamp="2024-01-01T00:00:00Z")
+        shares = self.saved_shares(merged)
+        self.assertEqual(shares["a"]["aggregates"], {"size": 25.0})
+        self.assertEqual(shares["b"]["aggregates"], {"size": 75.0})
+        self.assertEqual(merged.get(fingerprint_id({"k": "a"})).aggregates, {"size": 10})
+
+    def test_share_is_written_after_the_values(self):
+        fingerprints = self.build([], [("a", {})])
+        fingerprints.save(self.path)
+        with open(self.path) as f:
+            text = f.read()
+        self.assertLess(text.index("meta:"), text.index("share:"))

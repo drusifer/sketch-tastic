@@ -54,6 +54,13 @@ class Fingerprint:
     """What the profile asked for, keyed by its aggregate keys."""
     meta: dict[str, Any] = field(default_factory=dict)
     """The built-in metadata (`builtin.yaml`): count, first/last seen, first/last records."""
+    share: dict[str, Any] = field(default_factory=dict)
+    """Percent of the set total for each SUM and COUNT in `meta` and `aggregates`, laid out
+    like them. Derived: rewritten on every save, never folded."""
+
+
+SHARED_FUNCTIONS = ("SUM", "COUNT")
+"""Functions whose values add up across fingerprints, so a share of their total means something."""
 
 
 @cache
@@ -111,8 +118,38 @@ class FingerprintSet:
     def __iter__(self) -> Iterator[str]:
         return iter(self._records)
 
+    def _compute_shares(self) -> None:
+        """Set every record's `share` from the current values (STORY-FING-46)."""
+        for record in self._records.values():
+            record.share = {}
+        for section, aggregates in (
+            ("meta", builtin_aggregates()),
+            ("aggregates", self._aggregates),
+        ):
+            for aggregate in aggregates:
+                for function in aggregate.fn:
+                    if function.name in SHARED_FUNCTIONS:
+                        self._share(section, aggregate, function)
+
+    def _share(self, section: str, aggregate: Aggregate, function: Any) -> None:
+        values = []
+        for record in self._records.values():
+            value = aggregate.value(getattr(record, section), function)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                values.append((record, value))
+        total = sum(value for _, value in values)
+        if not total:
+            return
+        for record, value in values:
+            target = record.share.setdefault(section, {})
+            aggregate.store(target, function, round(100 * value / total, 2))
+
     def save(self, path: str) -> None:
-        """Write the set to `path` atomically: a failed write leaves any existing file intact."""
+        """Write the set to `path` atomically: a failed write leaves any existing file intact.
+
+        Each record's `share` is recomputed first, so it describes the set as written.
+        """
+        self._compute_shares()
         data = {
             "version": SET_VERSION,
             "profile_id": self.profile_id,

@@ -237,7 +237,7 @@ class Aggregate:
                 if accepted is SKIP:
                     unusable = True
                 else:
-                    self._store(states, function, function.fold(state, accepted))
+                    self.store(states, function, function.fold(state, accepted))
             skipped += unusable
         return skipped
 
@@ -246,7 +246,13 @@ class Aggregate:
             return states.get(self.key, EMPTY)
         return states.get(self.key, {}).get(function.name, EMPTY)
 
-    def _store(self, states: dict, function: Aggregator, state: Any) -> None:
+    def value(self, states: dict, function: Aggregator) -> Any:
+        """`function`'s current value in `states`, or None if it has none yet."""
+        state = self._state(states, function)
+        return None if state is EMPTY else state
+
+    def store(self, states: dict, function: Aggregator, state: Any) -> None:
+        """Put `function`'s value in `states`: directly for one function, by name for several."""
         if len(self.fn) == 1:
             states[self.key] = state
         else:
