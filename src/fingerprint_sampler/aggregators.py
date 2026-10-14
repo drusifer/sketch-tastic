@@ -11,6 +11,7 @@ function name, so changing LAST's `n` keeps the samples already collected.
 from __future__ import annotations
 
 import copy
+import json
 import math
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -18,7 +19,19 @@ from typing import Any
 
 from fingerprint_sampler.model import MISSING, Path, Rule, ValueType, typed_values
 
-__all__ = ["Aggregate", "Aggregator", "Avg", "Count", "First", "Last", "Max", "Min", "Sum"]
+__all__ = [
+    "Aggregate",
+    "Aggregator",
+    "Avg",
+    "Count",
+    "First",
+    "Last",
+    "Max",
+    "Min",
+    "Op",
+    "Size",
+    "Sum",
+]
 
 
 EMPTY = object()
@@ -136,6 +149,30 @@ class Last(Aggregator):
         return [*samples, copy.deepcopy(value)][-self.n :]
 
 
+class Op(Rule):
+    """What an aggregate folds in place of each selected value (STORY-FING-45)."""
+
+    family = "op"
+
+    def apply(self, value: Any) -> Any:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, kw_only=True)
+class Size(Op):
+    """Size in bytes: UTF-8 for text, the compact JSON encoding for anything else."""
+
+    name = "SIZE"
+
+    def apply(self, value: Any) -> int:
+        text = (
+            value
+            if isinstance(value, str)
+            else json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+        )
+        return len(text.encode("utf-8"))
+
+
 def _as_number(value: Any) -> int | float | None:
     """Coerce to a finite number, or None if `value` isn't one (bools are not numbers)."""
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
@@ -153,7 +190,7 @@ def _as_number(value: Any) -> int | float | None:
 
 @dataclass(frozen=True)
 class Aggregate:
-    """Track `fn` over the values `path` selects, stored under `key`.
+    """Track `fn` over the values `path` selects (or what `op` makes of them), stored under `key`.
 
     `path` and `fn` may be given as text and a name, mapping or list of them; they are built
     and checked on creation (ValueError if wrong).
@@ -163,10 +200,13 @@ class Aggregate:
     path: Path
     fn: tuple[Aggregator, ...]
     type: ValueType | None = None
+    op: Op | None = None
 
     def __post_init__(self) -> None:
         if self.type is not None:
             object.__setattr__(self, "type", ValueType.build(self.type))
+        if self.op is not None:
+            object.__setattr__(self, "op", Op.build(self.op))
         specs = self.fn if isinstance(self.fn, (list, tuple)) else [self.fn]
         functions = tuple(Aggregator.build(spec) for spec in specs)
         names = [f.name for f in functions]
@@ -185,7 +225,8 @@ class Aggregate:
         """
         values = self.path.values(event)
         skipped = 0
-        for value in typed_values(values, self.type):
+        values = [self.op.apply(v) for v in values] if self.op else typed_values(values, self.type)
+        for value in values:
             if value is MISSING:  # did not convert to the declared type
                 skipped += 1
                 continue

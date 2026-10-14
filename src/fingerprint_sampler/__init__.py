@@ -7,7 +7,7 @@ grows across runs.
 
 from importlib.metadata import PackageNotFoundError, version
 
-from fingerprint_sampler.aggregators import Aggregate, Aggregator
+from fingerprint_sampler.aggregators import Aggregate, Aggregator, Op
 from fingerprint_sampler.fingerprint_set import (
     Fingerprint,
     FingerprintSet,
@@ -32,6 +32,7 @@ except PackageNotFoundError:  # running from a source tree that was never instal
 __all__ = [
     "Aggregate",
     "Aggregator",
+    "Op",
     "Field",
     "Fingerprint",
     "FingerprintSetError",

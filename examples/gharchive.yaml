@@ -29,6 +29,10 @@ aggregates:
   - key: commits                   # PushEvent commit counts
     path: $.payload.size
     fn: [SUM, AVG, MAX]
+  - key: payload_bytes             # data volume per fingerprint: SUM(SIZE(payload)), ...
+    path: $.payload
+    op: SIZE
+    fn: [SUM, AVG, MAX]
   - key: first_event_time          # event time from the records (built-in times are wall clock)
     path: $.created_at
     type: DATETIME

@@ -165,3 +165,28 @@ class AggregateValueTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SizeOpTests(unittest.TestCase):
+    """`op: SIZE` measures each selected value in bytes before the functions see it (FING-45)."""
+
+    def test_sum_avg_max_of_payload_bytes(self):
+        entry = Aggregate("payload_bytes", "$.payload", ["SUM", "AVG", "MAX"], op="SIZE")
+        state, skipped = fold(entry, [{"payload": "héllo"}, {"payload": {"a": 1}}])
+        self.assertEqual((state["SUM"], state["MAX"], state["AVG"]["avg"]), (13, 7, 6.5))
+        self.assertEqual(skipped, 0)
+
+    def test_every_function_gets_the_size(self):
+        entry = Aggregate("b", "$.v", {"name": "LAST", "n": 2}, op="SIZE")
+        state, _ = fold(entry, [{"v": "a"}, {"v": [1, 2]}, {"v": True}])
+        self.assertEqual(state, [5, 4])  # [1,2] and true
+
+    def test_null_measures_4_and_absent_path_adds_nothing(self):
+        entry = Aggregate("b", "$.v", "SUM", op="SIZE")
+        state, skipped = fold(entry, [{"v": None}, {"other": "x"}])
+        self.assertEqual((state, skipped), (4, 0))
+
+    def test_unknown_op_is_rejected(self):
+        with self.assertRaises(ValueError) as ctx:
+            Aggregate("b", "$.v", "SUM", op="BOGUS")
+        self.assertIn("'BOGUS' is not one of ['SIZE']", str(ctx.exception))

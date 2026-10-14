@@ -38,7 +38,10 @@ def _required_arguments() -> dict[str, list[str]]:
 
 
 def _message(error: ValidationError) -> str:
-    """The validator's message, except for a rule named bare that needs arguments (STORY-FING-44)."""
+    """The validator's message, except for a rule named bare that needs arguments (STORY-FING-44)
+    and a `not` whose subschema has a description (it says what is wrong better than the dump)."""
+    if error.validator == "not" and "description" in error.validator_value:
+        return error.validator_value["description"]
     bare_name = list(error.schema_path)[-2:] == ["then", "enum"] and isinstance(error.instance, str)
     args = _required_arguments().get(error.instance) if bare_name else None
     if not args:

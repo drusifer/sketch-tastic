@@ -121,6 +121,25 @@ class ValidationTests(unittest.TestCase):
         fields = [{"key": "x", "path": "$.x", "modifier": "GLOBB"}]
         self.assert_invalid(variant(fields=fields), "'GLOBB' is not one of")
 
+    def test_unknown_op_names_the_entry(self):
+        aggregates = [{"key": "x", "path": "$.x", "op": "BOGUS", "fn": "SUM"}]
+        self.assert_invalid(
+            variant(aggregates=aggregates),
+            "aggregates[0] (key 'x') → op: 'BOGUS' is not one of ['SIZE']",
+        )
+
+    def test_op_and_type_together_name_both_keys(self):
+        aggregates = [{"key": "x", "path": "$.x", "op": "SIZE", "type": "DATE", "fn": "SUM"}]
+        with self.assertRaises(ProfileError) as ctx:
+            parse_profile(variant(aggregates=aggregates), source="p.yaml")
+        self.assertEqual(
+            ctx.exception.problems,
+            [
+                "p.yaml: aggregates[0] (key 'x'): 'op' and 'type' cannot be used together: "
+                "an op measures the raw value, a type reads it as a date or time"
+            ],
+        )
+
     def test_invalid_regex_names_the_entry(self):
         fields = [{"key": "bin", "path": "$.b", "modifier": {"name": "REGEX", "pattern": "[a-"}}]
         self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "Invalid regex")
@@ -258,6 +277,12 @@ class ProfileIdTests(unittest.TestCase):
     def test_unaffected_by_aggregates(self):
         self.assertEqual(
             parse_profile(variant(aggregates=[])).profile_id, parse_profile(VALID).profile_id
+        )
+
+    def test_unaffected_by_an_aggregate_op(self):
+        sized = [{"key": "b", "path": "$.ms", "op": "SIZE", "fn": "SUM"}]
+        self.assertEqual(
+            parse_profile(variant(aggregates=sized)).profile_id, parse_profile(VALID).profile_id
         )
 
     def test_mapping_key_order_does_not_change_the_id(self):

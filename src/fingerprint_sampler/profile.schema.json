@@ -342,6 +342,9 @@
         "path": {
           "$ref": "#/$defs/text"
         },
+        "op": {
+          "$ref": "#/$defs/op"
+        },
         "fn": {
           "description": "One aggregate function or a non-empty list of them.",
           "if": {
@@ -360,6 +363,13 @@
         "type": {
           "$ref": "#/$defs/valuetype"
         }
+      },
+      "not": {
+        "description": "'op' and 'type' cannot be used together: an op measures the raw value, a type reads it as a date or time",
+        "required": [
+          "op",
+          "type"
+        ]
       }
     },
     "aggregator": {
@@ -539,6 +549,12 @@
           }
         ]
       }
+    },
+    "op": {
+      "description": "What to aggregate instead of each selected value: SIZE is its size in bytes (UTF-8 for text, compact JSON otherwise).",
+      "enum": [
+        "SIZE"
+      ]
     },
     "valuetype": {
       "description": "What the path's values are: ISO-8601 DATE or DATETIME.",

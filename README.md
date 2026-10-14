@@ -280,6 +280,18 @@ a function can't use (text for `SUM`, text after numbers for `MIN`) is skipped a
 summary as an unusable aggregate value. A record where the path matches nothing is simply not
 aggregated and is not counted.
 
+**Weighted aggregates.** Add `op: SIZE` to aggregate each value's size in bytes instead of the
+value itself: UTF-8 bytes for text, the compact JSON encoding for anything else (`null` is 4).
+Every function gets the size, so one entry gives `SUM(SIZE(payload))` and more:
+
+```yaml
+aggregates:
+  - {key: payload_bytes, path: $.payload, op: SIZE, fn: [SUM, AVG, MAX]}
+```
+
+`op` and `type` cannot be combined on one aggregate. Like any aggregate change, adding an `op`
+keeps the profile id, so existing sets keep merging.
+
 `merge` checks the profile before reading any event; run `fingerprint check` (above) to see
 every problem at once.
 
