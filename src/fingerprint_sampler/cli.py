@@ -249,7 +249,7 @@ def _report(
     )
     _say(
         f"  skipped: {stats['skipped_lines']} malformed lines, "
-        f"{fingerprints.skipped_values} aggregate values"
+        f"{fingerprints.skipped_values} unusable aggregate values"
     )
     _say(f"  {verb} {destination} (profile {profile.profile_id})")
     if args.output:

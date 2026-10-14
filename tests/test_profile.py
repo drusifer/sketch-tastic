@@ -94,6 +94,33 @@ class ValidationTests(unittest.TestCase):
             variant(fields=fields), "fields[0] (key 'bin') → modifier", "'BOGUS(*)' is not one of"
         )
 
+    def test_rule_named_without_its_arguments_says_which_arguments(self):
+        cases = [
+            (
+                "modifier",
+                "IN_RANGE",
+                "IN_RANGE needs arguments (low, high); write it as {name: IN_RANGE, low: ...}",
+            ),
+            ("modifier", "REGSUB", "REGSUB needs arguments (pattern, replace)"),
+            ("modifier", "TRUNC", "TRUNC needs arguments (unit)"),
+            ("modifier", "ANY", "ANY needs arguments (values)"),
+            ("modifier", "REGEX", "REGEX needs arguments (pattern)"),
+            ("fn", "LAST", "LAST needs arguments (n); write it as {name: LAST, n: ...}"),
+        ]
+        for section_key, name, expected in cases:
+            with self.subTest(name=name):
+                if section_key == "modifier":
+                    data = variant(fields=[{"key": "x", "path": "$.x", "modifier": name}])
+                    where = "fields[0] (key 'x') → modifier: "
+                else:
+                    data = variant(aggregates=[{"key": "x", "path": "$.x", "fn": name}])
+                    where = "aggregates[0] (key 'x') → fn: "
+                self.assert_invalid(data, where + expected)
+
+    def test_unknown_bare_name_is_still_not_one_of_the_allowed_names(self):
+        fields = [{"key": "x", "path": "$.x", "modifier": "GLOBB"}]
+        self.assert_invalid(variant(fields=fields), "'GLOBB' is not one of")
+
     def test_invalid_regex_names_the_entry(self):
         fields = [{"key": "bin", "path": "$.b", "modifier": {"name": "REGEX", "pattern": "[a-"}}]
         self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "Invalid regex")
@@ -164,7 +191,7 @@ class ValidationTests(unittest.TestCase):
                 "p.yaml: (top level): Additional properties are not allowed ('extra' was unexpected)",
                 "p.yaml: fields[0] (key 'route') → modifier: 'replace' is a required property",
                 "p.yaml: fields[1] (key 'x') → modifier: "
-                "'GLOB' is not one of ['DEFAULT', 'IS_PRESENT', 'IS_NULL']",
+                "GLOB needs arguments (pattern); write it as {name: GLOB, pattern: ...}",
             ],
         )
 

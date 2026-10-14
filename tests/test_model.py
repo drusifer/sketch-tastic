@@ -425,7 +425,7 @@ class ValidateModifierFormTests(unittest.TestCase):
     def test_invalid_forms_say_what_is_wrong(self):
         cases = [
             ("IN_RANGE(200, 399)", "'IN_RANGE(200, 399)' is not one of"),
-            ("GLOB", "'GLOB' is not one of ['DEFAULT', 'IS_PRESENT', 'IS_NULL']"),
+            ("GLOB", "GLOB needs arguments (pattern); write it as {name: GLOB, pattern: ...}"),
             ({"pattern": "a"}, "'name' is a required property"),
             ({"name": "REGX", "pattern": "a"}, "name: 'REGX' is not one of"),
             ({"name": "REGEX"}, "'pattern' is a required property"),

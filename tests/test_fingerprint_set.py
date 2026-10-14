@@ -150,7 +150,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         record = wh.get(fingerprint_id({"k": "1"}))
         self.assertEqual(record.meta["count"], 3)
         self.assertEqual(record.aggregates["size"], 2)
-        self.assertEqual(wh.skipped_values, 2)
+        self.assertEqual(wh.skipped_values, 1)  # "big"; the event without size is not a skip
 
 
 class PersistenceTests(unittest.TestCase):

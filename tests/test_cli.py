@@ -149,7 +149,11 @@ class CreateAndMergeTests(CliTestCase):
 
         _, _, err2 = self.fingerprint(self.write_events("run2.jsonl", EVENTS[3:]))
         self.assertIn("1 new, 2 updated, 3 total in set", self._fingerprints_line(err2))
-        self.assertIn("0 malformed lines, 1 aggregate values", err2)  # event 5 has no size
+        self.assertIn("0 malformed lines, 0 unusable aggregate values", err2)  # no size: not a skip
+
+    def test_present_but_unusable_value_is_counted(self):
+        _, _, err = self.fingerprint(self.write_events("bad.jsonl", [{"kind": "a", "size": "big"}]))
+        self.assertIn("0 malformed lines, 1 unusable aggregate values", err)
 
     def test_batch_and_split_runs_produce_equivalent_sets(self):
         # AC3: one batch == the same events split over several runs, at every split point.

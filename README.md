@@ -57,7 +57,7 @@ fingerprint merge -p profile.yaml -s app.fingerprints.yaml events.jsonl
 ```
 fingerprint: 4 events read from events.jsonl
   fingerprints: 3 new, 0 updated, 3 total in set
-  skipped: 0 malformed lines, 0 aggregate values
+  skipped: 0 malformed lines, 0 unusable aggregate values
   wrote app.fingerprints.yaml (profile f50d7a5f85ddf9f7f4c72370f454ae2e)
 ```
 
@@ -257,7 +257,8 @@ together:
 and `LAST`. With one function the set stores its value directly (`count: 12`); with several, a
 map by function name (`{MIN: 1, MAX: 3}`). Numbers and numeric strings count as numbers. A value
 a function can't use (text for `SUM`, text after numbers for `MIN`) is skipped and counted in the
-summary, as is a record where the path matches nothing.
+summary as an unusable aggregate value. A record where the path matches nothing is simply not
+aggregated and is not counted.
 
 `merge` checks the profile before reading any event; run `fingerprint check` (above) to see
 every problem at once.

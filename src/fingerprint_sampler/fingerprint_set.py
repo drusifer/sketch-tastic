@@ -80,7 +80,7 @@ class FingerprintSet:
         self._aggregates = tuple(aggregates)
         self.profile_id = profile_id
         self.skipped_values = 0
-        """Running count of values the profile's aggregates could not use."""
+        """Running count of present values the profile's aggregates could not use."""
 
     def upsert(self, tokens: dict[str, str], record: Any, timestamp: str | None = None) -> str:
         """Fold one record into the set. Returns its fingerprint_id.

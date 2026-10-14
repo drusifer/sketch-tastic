@@ -180,12 +180,10 @@ class Aggregate:
         """Fold one event into `states[self.key]`. Returns how many values were skipped.
 
         With one function the state is stored directly (`count: 12`); with several it is a
-        map by function name (`{SUM: .., MAX: ..}`). One value is skipped if the path selected
-        nothing, and one per selected value that one of its functions could not use.
+        map by function name (`{SUM: .., MAX: ..}`). A path that selects nothing is not a skip:
+        one is counted per selected value that one of its functions could not use.
         """
         values = self.path.values(event)
-        if not values:
-            return 1
         skipped = 0
         for value in typed_values(values, self.type):
             if value is MISSING:  # did not convert to the declared type

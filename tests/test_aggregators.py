@@ -24,7 +24,8 @@ class BuildTests(unittest.TestCase):
             ("$.d", "LAST(3)", "is not one of ['SUM', 'MIN', 'MAX', 'AVG', 'COUNT']"),
             ("$.d", "min", "is not one of"),
             ("$.d", {"name": "LAST"}, "'n' is a required property"),
-            ("$.d", "FIRST", "is not one of ['SUM', 'MIN', 'MAX', 'AVG', 'COUNT']"),
+            ("$.d", "FIRST", "FIRST needs arguments (n); write it as {name: FIRST, n: ...}"),
+            ("$.d", "LAST", "LAST needs arguments (n); write it as {name: LAST, n: ...}"),
             ("$.d", {"name": "LAST", "n": 0}, "n: 0 is less than the minimum of 1"),
             ("$.d", {"name": "MEDIAN"}, "name: 'MEDIAN' is not one of"),
             ("$.d", {"name": "SUM", "n": 2}, "('n' was unexpected)"),
@@ -66,11 +67,11 @@ class NumericAggregatorTests(unittest.TestCase):
         self.assertEqual(state["AVG"]["count"], 1)
         self.assertEqual(skipped, 5)
 
-    def test_event_without_a_match_counts_as_one_skip_and_leaves_state_alone(self):
+    def test_event_without_a_match_is_not_a_skip_and_leaves_state_alone(self):
         entry = Aggregate("d", "$.d", ["MIN", {"name": "LAST", "n": 2}])
         state, skipped = fold(entry, [{"other": 1}])
         self.assertEqual(state, {})
-        self.assertEqual(skipped, 1)
+        self.assertEqual(skipped, 0)
 
     def test_all_matches_in_one_event_feed_the_aggregator(self):
         entry = Aggregate("sizes", "$.args[*].size", ["SUM", "MAX", "AVG"])
