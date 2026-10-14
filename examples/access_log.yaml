@@ -9,7 +9,7 @@ fields:
     path: "$.request.route"
   - key: status_class
     path: "$.response.status"
-    modifier: "IN_RANGE(200, 399)"          # TRUE = success/redirect, FALSE = error
+    modifier: {name: IN_RANGE, low: 200, high: 399}   # TRUE = success/redirect, FALSE = error
   - key: authenticated
     path: "$.user.id"
     modifier: IS_PRESENT

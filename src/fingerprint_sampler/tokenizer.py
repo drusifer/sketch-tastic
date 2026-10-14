@@ -9,9 +9,10 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Any, Callable
+from functools import cached_property, lru_cache
+from typing import Any
 
 import jsonpath
 
@@ -21,11 +22,17 @@ _MISSING = object()
 
 @dataclass(frozen=True)
 class MaskEntry:
-    """One extraction rule: pull `path` out of a record, tag it `key`, tokenize with `modifier`."""
+    """One extraction rule: pull `path` out of a record, tag it `key`, tokenize with `modifier`.
+
+    `modifier` may be given as a Modifier, a bare name or a mapping; it is stored as a Modifier.
+    """
 
     key: str
     path: str
-    modifier: str
+    modifier: Modifier
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "modifier", Modifier.of(self.modifier))
 
 
 @lru_cache(maxsize=None)
@@ -45,185 +52,221 @@ def find_values(record: Any, path: str) -> list[Any]:
     return compile_path(path).findall(record)
 
 
+def _absent(value: Any) -> bool:
+    return value is _MISSING or value is None
+
+
 def _mod_default(value: Any) -> str:
-    return "NULL" if value is _MISSING or value is None else str(value)
+    return "NULL" if _absent(value) else str(value)
 
 
 def _mod_is_present(value: Any) -> str:
-    return "FALSE" if value is _MISSING or value is None else "TRUE"
+    return "FALSE" if _absent(value) else "TRUE"
 
 
 def _mod_is_null(value: Any) -> str:
-    return "TRUE" if value is _MISSING or value is None else "FALSE"
+    return "TRUE" if _absent(value) else "FALSE"
 
 
-def _mod_in_range(value: Any, low: str, high: str) -> str:
-    if value is _MISSING or value is None:
+def _mod_in_range(value: Any, low: float, high: float) -> str:
+    if _absent(value):
         return "FALSE"
     try:
         num = float(value)
     except TypeError, ValueError:
         return "FALSE"
-    return "TRUE" if float(low) <= num <= float(high) else "FALSE"
+    return "TRUE" if low <= num <= high else "FALSE"
 
 
-def _mod_any(value: Any, *options: str) -> str:
-    if value is _MISSING or value is None:
+def _mod_any(value: Any, values: tuple) -> str:
+    if _absent(value):
         return "FALSE"
-    return "TRUE" if str(value) in {str(o) for o in options} else "FALSE"
+    return "TRUE" if str(value) in {str(v) for v in values} else "FALSE"
 
 
 def _mod_glob(value: Any, pattern: str) -> str:
-    if value is _MISSING or value is None:
+    if _absent(value):
         return "FALSE"
     return "TRUE" if fnmatch.fnmatchcase(str(value), pattern) else "FALSE"
 
 
-def _mod_regex(value: Any, pattern: str) -> str:
-    if value is _MISSING or value is None:
+def _mod_regex(value: Any, regex: re.Pattern) -> str:
+    if _absent(value):
         return "FALSE"
-    return "TRUE" if re.search(pattern, str(value)) else "FALSE"
+    return "TRUE" if regex.search(str(value)) else "FALSE"
 
 
-def _mod_regsub(value: Any, pattern: str, replacement: str) -> str:
-    if value is _MISSING or value is None:
+def _mod_regsub(value: Any, regex: re.Pattern, replace: str) -> str:
+    if _absent(value):
         return "NULL"
-    return re.sub(pattern, replacement, str(value))
+    return regex.sub(replace, str(value))
 
 
-_MODIFIERS: dict[str, Callable[..., str]] = {
-    "DEFAULT": _mod_default,
-    "IS_PRESENT": _mod_is_present,
-    "IS_NULL": _mod_is_null,
-    "IN_RANGE": _mod_in_range,
-    "ANY": _mod_any,
-    "GLOB": _mod_glob,
-    "REGEX": _mod_regex,
-    "REGSUB": _mod_regsub,
+# name -> (function, required arguments, optional arguments)
+_MODIFIERS: dict[str, tuple[Callable[..., str], tuple[str, ...], tuple[str, ...]]] = {
+    "DEFAULT": (_mod_default, (), ()),
+    "IS_PRESENT": (_mod_is_present, (), ()),
+    "IS_NULL": (_mod_is_null, (), ()),
+    "IN_RANGE": (_mod_in_range, ("low", "high"), ()),
+    "ANY": (_mod_any, ("values",), ()),
+    "GLOB": (_mod_glob, ("pattern",), ()),
+    "REGEX": (_mod_regex, ("pattern",), ("flags",)),
+    "REGSUB": (_mod_regsub, ("pattern", "replace"), ("flags",)),
 }
 
-
-_ARG_COUNTS: dict[str, tuple[int, int | None]] = {
-    "DEFAULT": (0, 0),
-    "IS_PRESENT": (0, 0),
-    "IS_NULL": (0, 0),
-    "IN_RANGE": (2, 2),
-    "ANY": (1, None),
-    "GLOB": (1, 1),
-    "REGEX": (1, 1),
-    "REGSUB": (2, 2),
-}
-
-_QUOTES = ("'", '"')
+REGEX_FLAGS = {"i": re.IGNORECASE, "m": re.MULTILINE, "s": re.DOTALL, "x": re.VERBOSE}
+"""Letters allowed in a REGEX or REGSUB `flags` argument."""
 
 
-def _split_args(text: str, modifier: str) -> list[str]:
-    """Split the text between a modifier's parentheses into arguments.
+def _mapping_hint(name: str) -> str:
+    args = ", ".join(f"{arg}: ..." for arg in _MODIFIERS[name][1])
+    return f"{{name: {name}, {args}}}"
 
-    Arguments are comma-separated and stripped. An argument written in single
-    or double quotes is taken verbatim, so it can hold commas, parentheses and
-    surrounding spaces; a doubled quote inside it stands for one quote
-    character. Backslashes are never special here, so regex escapes pass through.
+
+@dataclass(frozen=True)
+class Modifier:
+    """A validated modifier: its name and its arguments, sorted by argument name.
+
+    Build one with `Modifier.of(spec)`, where `spec` is a bare name such as
+    "IS_PRESENT" or a mapping such as {"name": "REGEX", "pattern": "^GET"}.
+    Calling it on a value returns that value's token.
     """
-    if not text.strip():
-        return []
-    args: list[str] = []
-    buf: list[str] = []
-    quote = ""  # the open quote character, if inside a quoted argument
-    quoted = False  # the current argument was written in quotes
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        if quote:
-            if ch != quote:
-                buf.append(ch)
-            elif text[i + 1 : i + 2] == quote:
-                buf.append(ch)
-                i += 1
-            else:
-                quote = ""
-        elif ch == ",":
-            args.append("".join(buf) if quoted else "".join(buf).strip())
-            buf, quoted = [], False
-        elif quoted:
-            if not ch.isspace():
-                raise ValueError(
-                    f"Malformed modifier {modifier!r}: unexpected {ch!r} after a quoted argument"
-                )
-        elif ch in _QUOTES and not "".join(buf).strip():
-            quote, quoted, buf = ch, True, []
+
+    name: str
+    params: tuple[tuple[str, Any], ...] = ()
+
+    @classmethod
+    def of(cls, spec: Modifier | str | Mapping[str, Any]) -> Modifier:
+        """Validate `spec` and build a Modifier. Raises ValueError saying what is wrong."""
+        if isinstance(spec, Modifier):
+            return spec
+        if isinstance(spec, str):
+            return _modifier_from_name(spec)
+        if not isinstance(spec, Mapping):
+            raise ValueError(f"Modifier must be a name or a mapping with 'name', got {spec!r}")
+        args = dict(spec)
+        name = args.pop("name", None)
+        if not isinstance(name, str) or name not in _MODIFIERS:
+            raise ValueError(_unknown(name))
+        _, required, optional = _MODIFIERS[name]
+        missing = [arg for arg in required if arg not in args]
+        if missing:
+            raise ValueError(f"{name} needs {', '.join(map(repr, missing))}: {_mapping_hint(name)}")
+        unknown = sorted(set(args) - set(required) - set(optional))
+        if unknown:
+            takes = ", ".join(required + optional) or "no arguments"
+            raise ValueError(
+                f"{name} does not take {', '.join(map(repr, unknown))} (it takes {takes})"
+            )
+        modifier = cls(name, tuple(sorted((k, _freeze(v)) for k, v in args.items())))
+        modifier._check()
+        return modifier
+
+    @property
+    def args(self) -> dict[str, Any]:
+        return dict(self.params)
+
+    @property
+    def spec(self) -> str:
+        """Canonical text of this modifier: the bare name, or sorted compact JSON."""
+        if not self.params:
+            return self.name
+        data = {
+            "name": self.name,
+            **{k: list(v) if isinstance(v, tuple) else v for k, v in self.params},
+        }
+        return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+    @cached_property
+    def _bound_args(self) -> tuple[Any, ...]:
+        args = self.args
+        if self.name in ("REGEX", "REGSUB"):
+            regex = compile_regex(args["pattern"], args.get("flags", ""))
+            return (regex, args["replace"]) if self.name == "REGSUB" else (regex,)
+        return tuple(args[arg] for arg in _MODIFIERS[self.name][1])
+
+    def __call__(self, value: Any) -> str:
+        return _MODIFIERS[self.name][0](value, *self._bound_args)
+
+    def _check(self) -> None:
+        args = self.args
+        if self.name == "IN_RANGE":
+            for bound in ("low", "high"):
+                if isinstance(args[bound], bool) or not isinstance(args[bound], (int, float)):
+                    raise ValueError(f"IN_RANGE {bound} must be a number, got {args[bound]!r}")
+            if args["low"] > args["high"]:
+                raise ValueError(f"IN_RANGE low ({args['low']}) is above high ({args['high']})")
+        elif self.name == "ANY":
+            values = args["values"]
+            if not isinstance(values, tuple) or not values:
+                raise ValueError(f"ANY values must be a non-empty list, got {values!r}")
         else:
-            buf.append(ch)
-        i += 1
-    if quote:
-        raise ValueError(f"Malformed modifier {modifier!r}: missing closing {quote}")
-    args.append("".join(buf) if quoted else "".join(buf).strip())
-    return args
+            for arg in ("pattern", "replace", "flags"):
+                if arg in args and not isinstance(args[arg], str):
+                    raise ValueError(f"{self.name} {arg} must be a string, got {args[arg]!r}")
+            if self.name in ("REGEX", "REGSUB"):
+                regex = compile_regex(args["pattern"], args.get("flags", ""))
+                if self.name == "REGSUB":
+                    try:
+                        regex.sub(args["replace"], "")
+                    except (re.error, IndexError) as exc:
+                        raise ValueError(f"REGSUB replace is not valid: {exc}") from None
+
+
+def _freeze(value: Any) -> Any:
+    return tuple(_freeze(v) for v in value) if isinstance(value, list) else value
+
+
+def _unknown(name: Any) -> str:
+    return f"Unknown modifier: {name!r} (known: {', '.join(_MODIFIERS)})"
 
 
 @lru_cache(maxsize=None)
-def _parse_modifier(modifier: str) -> tuple[str, tuple[str, ...]]:
-    """Split a modifier expression into (name, args). Raises ValueError on unknown names."""
-    name, _, rest = modifier.partition("(")
-    name = name.strip()
+def _modifier_from_name(name: str) -> Modifier:
     if name not in _MODIFIERS:
-        raise ValueError(f"Unknown modifier: {name!r}")
-    rest = rest.rstrip()
-    if rest.endswith(")"):
-        rest = rest[:-1]
-    return name, tuple(_split_args(rest, modifier))
+        raise ValueError(_unknown(name))
+    if _MODIFIERS[name][1]:
+        raise ValueError(f"{name} needs arguments; use a mapping: {_mapping_hint(name)}")
+    return Modifier(name)
 
 
-def validate_modifier(modifier: str) -> None:
-    """Check a modifier expression up front. Raises ValueError saying what is wrong."""
-    if not isinstance(modifier, str) or not modifier.strip():
-        raise ValueError("Modifier must be a non-empty string")
-    name, args = _parse_modifier(modifier)
-    if "(" in modifier and not modifier.rstrip().endswith(")"):
-        raise ValueError(f"Malformed modifier {modifier!r}: missing ')'")
-    low, high = _ARG_COUNTS[name]
-    if len(args) < low or (high is not None and len(args) > high):
-        expected = f"{low}" if low == high else f"at least {low}"
+@lru_cache(maxsize=None)
+def compile_regex(pattern: str, flags: str = "") -> re.Pattern:
+    """Compile a REGEX/REGSUB pattern with its flag letters. Raises ValueError if invalid."""
+    bad = sorted(set(flags) - set(REGEX_FLAGS))
+    if bad:
         raise ValueError(
-            f"Modifier {name} takes {expected} argument(s), got {len(args)}: {modifier!r}"
+            f"Unknown regex flag(s) {''.join(bad)!r}; use any of {''.join(REGEX_FLAGS)!r}"
         )
-    if name == "IN_RANGE":
-        try:
-            bounds = [float(a) for a in args]
-        except ValueError:
-            raise ValueError(f"IN_RANGE bounds must be numbers: {modifier!r}") from None
-        if bounds[0] > bounds[1]:
-            raise ValueError(f"IN_RANGE low bound exceeds high bound: {modifier!r}")
-    if name in ("REGEX", "REGSUB"):
-        try:
-            pattern = re.compile(args[0])
-        except re.error as exc:
-            raise ValueError(f"{name} pattern is not a valid regex ({exc}): {modifier!r}") from None
-        if name == "REGSUB":
-            try:
-                pattern.sub(args[1], "")
-            except (re.error, IndexError) as exc:
-                raise ValueError(f"REGSUB replacement is not valid ({exc}): {modifier!r}") from None
+    try:
+        return re.compile(pattern, sum((REGEX_FLAGS[f] for f in set(flags)), re.NOFLAG))
+    except re.error as exc:
+        raise ValueError(f"Invalid regex {pattern!r}: {exc}") from None
 
 
-def apply_modifier(value: Any, modifier: str) -> str:
-    """Apply a modifier expression (e.g. "IN_RANGE(-999, 0)") to one `value`."""
-    name, args = _parse_modifier(modifier)
-    return _MODIFIERS[name](value, *args)
+def validate_modifier(modifier: Modifier | str | Mapping[str, Any]) -> None:
+    """Check a modifier up front. Raises ValueError saying what is wrong."""
+    Modifier.of(modifier)
 
 
-def tokenize_values(values: list[Any], modifier: str) -> str:
+def apply_modifier(value: Any, modifier: Modifier | str | Mapping[str, Any]) -> str:
+    """Tokenize one `value` with a modifier (a Modifier, a bare name, or a mapping)."""
+    return Modifier.of(modifier)(value)
+
+
+def tokenize_values(values: list[Any], modifier: Modifier | str | Mapping[str, Any]) -> str:
     """Collapse the values one path selected into a single stable token.
 
     No match is tokenized as missing, one match as that value. Several matches
     are tokenized individually, then deduplicated, sorted and comma-joined so
     array order can't cause fingerprint drift.
     """
+    modifier = Modifier.of(modifier)
     if not values:
-        return apply_modifier(_MISSING, modifier)
+        return modifier(_MISSING)
     if len(values) == 1:
-        return apply_modifier(values[0], modifier)
-    return ",".join(sorted({apply_modifier(value, modifier) for value in values}))
+        return modifier(values[0])
+    return ",".join(sorted({modifier(value) for value in values}))
 
 
 def tokenize(record: dict, mask_profile: list[MaskEntry]) -> dict[str, str]:

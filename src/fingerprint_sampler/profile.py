@@ -15,7 +15,7 @@ from typing import Any
 import yaml
 
 from fingerprint_sampler.aggregators import AggregateEntry, make_entry
-from fingerprint_sampler.tokenizer import MaskEntry, compile_path, validate_modifier
+from fingerprint_sampler.tokenizer import MaskEntry, compile_path
 
 PROFILE_VERSION = 1
 
@@ -30,7 +30,7 @@ class ProfileError(ValueError):
 
 def profile_id(fields: tuple[MaskEntry, ...] | list[MaskEntry]) -> str:
     """Stable ID of the identity-defining part of a profile (order-independent)."""
-    lines = sorted(f"{entry.key}|{entry.path}|{entry.modifier}" for entry in fields)
+    lines = sorted(f"{entry.key}|{entry.path}|{entry.modifier.spec}" for entry in fields)
     return hashlib.md5("\n".join(lines).encode("utf-8")).hexdigest()
 
 
@@ -91,13 +91,12 @@ def parse_profile(data: Any, source: str = "<profile>") -> Profile:
     for i, raw in enumerate(raw_fields):
         where = f"{source}: fields[{i}]"
         entry = _entry_mapping(raw, where, _FIELD_KEYS, ("key", "path"))
-        modifier = entry.get("modifier", "DEFAULT")
         try:
             compile_path(entry["path"])
-            validate_modifier(modifier)
+            mask = MaskEntry(entry["key"], entry["path"], entry.get("modifier", "DEFAULT"))
         except ValueError as exc:
             raise ProfileError(f"{where} (key {entry['key']!r}): {exc}") from exc
-        fields.append(MaskEntry(key=entry["key"], path=entry["path"], modifier=modifier))
+        fields.append(mask)
     _no_duplicates([f.key for f in fields], "fields", source)
 
     aggregates = []

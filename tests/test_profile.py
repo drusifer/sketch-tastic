@@ -5,6 +5,8 @@ import tempfile
 import textwrap
 import unittest
 
+import yaml
+
 from fingerprint_sampler.aggregators import AggregateEntry
 from fingerprint_sampler.profile import (
     Profile,
@@ -13,7 +15,7 @@ from fingerprint_sampler.profile import (
     parse_profile,
     profile_id,
 )
-from fingerprint_sampler.tokenizer import MaskEntry, tokenize, validate_modifier
+from fingerprint_sampler.tokenizer import MaskEntry, tokenize
 
 EXAMPLE_PROFILES = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples"
@@ -23,7 +25,11 @@ VALID = {
     "version": 1,
     "fields": [
         {"key": "syscall", "path": "$.fn", "modifier": "DEFAULT"},
-        {"key": "port_ok", "path": "$.args[*].dport", "modifier": "ANY(80, 443)"},
+        {
+            "key": "port_ok",
+            "path": "$.args[*].dport",
+            "modifier": {"name": "ANY", "values": [80, 443]},
+        },
     ],
     "aggregates": [
         {"key": "duration", "path": "$.ms", "fn": ["MIN", "max", "AVG"]},
@@ -45,7 +51,7 @@ class ParseProfileTests(unittest.TestCase):
             profile.fields,
             (
                 MaskEntry("syscall", "$.fn", "DEFAULT"),
-                MaskEntry("port_ok", "$.args[*].dport", "ANY(80, 443)"),
+                MaskEntry("port_ok", "$.args[*].dport", {"name": "ANY", "values": [80, 443]}),
             ),
         )
         self.assertEqual(
@@ -87,12 +93,12 @@ class ValidationTests(unittest.TestCase):
         self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "Unknown modifier")
 
     def test_invalid_regex_names_the_entry(self):
-        fields = [{"key": "bin", "path": "$.b", "modifier": "REGEX([a-)"}]
-        self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "not a valid regex")
+        fields = [{"key": "bin", "path": "$.b", "modifier": {"name": "REGEX", "pattern": "[a-"}}]
+        self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "Invalid regex")
 
     def test_bad_modifier_arguments(self):
-        fields = [{"key": "rc", "path": "$.rc", "modifier": "IN_RANGE(0)"}]
-        self.assert_invalid(variant(fields=fields), "'rc'", "IN_RANGE takes 2")
+        fields = [{"key": "rc", "path": "$.rc", "modifier": {"name": "IN_RANGE", "low": 0}}]
+        self.assert_invalid(variant(fields=fields), "'rc'", "IN_RANGE needs 'high'")
 
     def test_bad_path_names_the_entry(self):
         fields = VALID["fields"] + [{"key": "broken", "path": "$.a[", "modifier": "DEFAULT"}]
@@ -130,34 +136,26 @@ class ValidationTests(unittest.TestCase):
 
 
 class ValidateModifierTests(unittest.TestCase):
-    def test_accepts_every_supported_form(self):
-        for modifier in (
-            "DEFAULT",
-            "IS_PRESENT",
-            "IS_NULL",
-            "IN_RANGE(-999, 0)",
-            "ANY(80, 443)",
-        ) + (
-            "GLOB(/usr/*)",
-            "REGEX(.*)",
-            "REGSUB(a, b)",
-        ):
-            with self.subTest(modifier=modifier):
-                validate_modifier(modifier)
-
-    def test_rejects_malformed_forms(self):
-        for modifier in (
-            "",
-            "ANY()",
-            "IN_RANGE(a, b)",
-            "IN_RANGE(5, 1)",
-            "IN_RANGE(1, 2",
-            "DEFAULT(x)",
-            "BOGUS(.*)",
-            "REGEX(()",
-        ):
-            with self.subTest(modifier=modifier), self.assertRaises(ValueError):
-                validate_modifier(modifier)
+    def test_mapping_modifiers_load_from_yaml(self):
+        data = yaml.safe_load(
+            r"""
+fields:
+  - key: route
+    path: $.path
+    modifier: {name: REGSUB, pattern: '\d+', replace: N}
+  - key: greeting
+    path: $.text
+    modifier:
+      name: REGEX
+      pattern: ^hello\s.*\sgoodbye\.$
+      flags: i
+"""
+        )
+        profile = parse_profile(data)
+        tokens = tokenize(
+            {"path": "/items/17", "text": "Hello there goodbye."}, list(profile.fields)
+        )
+        self.assertEqual(tokens, {"route": "/items/N", "greeting": "TRUE"})
 
 
 class ProfileIdTests(unittest.TestCase):
@@ -176,10 +174,22 @@ class ProfileIdTests(unittest.TestCase):
             parse_profile(variant(aggregates=[])).profile_id, parse_profile(VALID).profile_id
         )
 
+    def test_mapping_key_order_does_not_change_the_id(self):
+        one = {"name": "REGSUB", "pattern": "a", "replace": "b"}
+        two = {"replace": "b", "pattern": "a", "name": "REGSUB"}
+        ids = {
+            parse_profile({"fields": [{"key": "k", "path": "$.k", "modifier": m}]}).profile_id
+            for m in (one, two)
+        }
+        self.assertEqual(len(ids), 1)
+
     def test_changes_when_identity_changes(self):
         base = parse_profile(VALID).profile_id
         changed_modifier = variant(
-            fields=[VALID["fields"][0], {**VALID["fields"][1], "modifier": "ANY(80)"}]
+            fields=[
+                VALID["fields"][0],
+                {**VALID["fields"][1], "modifier": {"name": "ANY", "values": [80]}},
+            ]
         )
         changed_path = variant(
             fields=[{**VALID["fields"][0], "path": "$.other"}, VALID["fields"][1]]

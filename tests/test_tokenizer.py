@@ -5,6 +5,7 @@ import unittest
 
 from fingerprint_sampler.tokenizer import (
     MaskEntry,
+    Modifier,
     apply_modifier,
     compile_path,
     find_values,
@@ -93,7 +94,13 @@ class FullJsonPathSyntaxTests(unittest.TestCase):
         self.assertEqual(find_values(MULTI_ARG_RECORD, "$..dport"), [6379, 443, 80])
 
     def test_filter_feeds_tokenize(self):
-        profile = [MaskEntry("sock_ports", "$.args[?(@.type == 'sock')].dport", "ANY(80, 443)")]
+        profile = [
+            MaskEntry(
+                "sock_ports",
+                "$.args[?(@.type == 'sock')].dport",
+                {"name": "ANY", "values": [80, 443]},
+            )
+        ]
         # 6379 -> FALSE, 443 -> TRUE, 80 -> TRUE; deduplicated + sorted.
         self.assertEqual(tokenize(MULTI_ARG_RECORD, profile), {"sock_ports": "FALSE,TRUE"})
 
@@ -166,21 +173,27 @@ class ApplyModifierTests(unittest.TestCase):
 
     def test_in_range_true_for_kernel_error(self):
         # Verification Task: return_value -110 vs IN_RANGE(-999, 0) -> "TRUE"
-        self.assertEqual(apply_modifier(-110, "IN_RANGE(-999, 0)"), "TRUE")
+        self.assertEqual(apply_modifier(-110, {"name": "IN_RANGE", "low": -999, "high": 0}), "TRUE")
 
     def test_in_range_false_outside_bounds(self):
-        self.assertEqual(apply_modifier(5, "IN_RANGE(-999, 0)"), "FALSE")
+        self.assertEqual(apply_modifier(5, {"name": "IN_RANGE", "low": -999, "high": 0}), "FALSE")
 
     def test_in_range_false_for_missing(self):
         from fingerprint_sampler.tokenizer import _MISSING
 
-        self.assertEqual(apply_modifier(_MISSING, "IN_RANGE(-999, 0)"), "FALSE")
+        self.assertEqual(
+            apply_modifier(_MISSING, {"name": "IN_RANGE", "low": -999, "high": 0}), "FALSE"
+        )
 
     def test_any_true_for_whitelisted_port(self):
-        self.assertEqual(apply_modifier(6379, "ANY(80, 443, 6379, 27017)"), "TRUE")
+        self.assertEqual(
+            apply_modifier(6379, {"name": "ANY", "values": [80, 443, 6379, 27017]}), "TRUE"
+        )
 
     def test_any_false_for_unlisted_port(self):
-        self.assertEqual(apply_modifier(9999, "ANY(80, 443, 6379, 27017)"), "FALSE")
+        self.assertEqual(
+            apply_modifier(9999, {"name": "ANY", "values": [80, 443, 6379, 27017]}), "FALSE"
+        )
 
     def test_unknown_modifier_raises(self):
         with self.assertRaises(ValueError):
@@ -198,10 +211,12 @@ class ApplyModifierTests(unittest.TestCase):
         self.assertEqual(apply_modifier(None, "IS_NULL"), "TRUE")
 
     def test_in_range_false_for_explicit_null(self):
-        self.assertEqual(apply_modifier(None, "IN_RANGE(-999, 0)"), "FALSE")
+        self.assertEqual(
+            apply_modifier(None, {"name": "IN_RANGE", "low": -999, "high": 0}), "FALSE"
+        )
 
     def test_any_false_for_explicit_null(self):
-        self.assertEqual(apply_modifier(None, "ANY(80, 443)"), "FALSE")
+        self.assertEqual(apply_modifier(None, {"name": "ANY", "values": [80, 443]}), "FALSE")
 
 
 class TokenizeTests(unittest.TestCase):
@@ -213,9 +228,13 @@ class TokenizeTests(unittest.TestCase):
             MaskEntry(
                 "network_dest_port",
                 "$.process_kprobe.args[0].sock_arg.dport",
-                "ANY(80, 443, 6379, 27017)",
+                {"name": "ANY", "values": [80, 443, 6379, 27017]},
             ),
-            MaskEntry("kernel_return_state", "$.process_kprobe.return_value", "IN_RANGE(-999, 0)"),
+            MaskEntry(
+                "kernel_return_state",
+                "$.process_kprobe.return_value",
+                {"name": "IN_RANGE", "low": -999, "high": 0},
+            ),
             MaskEntry("missing_field", "$.does.not.exist", "DEFAULT"),
         ]
 
@@ -303,111 +322,135 @@ if __name__ == "__main__":
 
 
 class PatternModifierTests(unittest.TestCase):
-    """GLOB, REGEX and REGSUB (FR-MOD-01)."""
+    """GLOB, REGEX and REGSUB (FR-MOD-01), written as mappings (STORY-FING-36)."""
 
     def test_glob_matches_whole_value(self):
-        self.assertEqual(apply_modifier("/usr/bin/node", "GLOB(/usr/bin/*)"), "TRUE")
-        self.assertEqual(apply_modifier("/opt/usr/bin/node", "GLOB(/usr/bin/*)"), "FALSE")
+        glob = {"name": "GLOB", "pattern": "/usr/bin/*"}
+        self.assertEqual(apply_modifier("/usr/bin/node", glob), "TRUE")
+        self.assertEqual(apply_modifier("/opt/usr/bin/node", glob), "FALSE")
 
     def test_glob_is_case_sensitive(self):
-        self.assertEqual(apply_modifier("/USR/bin/node", "GLOB(/usr/*)"), "FALSE")
+        self.assertEqual(apply_modifier("/USR/bin", {"name": "GLOB", "pattern": "/usr/*"}), "FALSE")
 
     def test_glob_character_class_and_question_mark(self):
-        self.assertEqual(apply_modifier("eth0", "GLOB(eth[0-3])"), "TRUE")
-        self.assertEqual(apply_modifier("eth7", "GLOB(eth[0-3])"), "FALSE")
-        self.assertEqual(apply_modifier("v1", "GLOB(v?)"), "TRUE")
-
-    def test_glob_stringifies_numbers(self):
-        self.assertEqual(apply_modifier(8080, "GLOB(80*)"), "TRUE")
+        self.assertEqual(apply_modifier("eth0", {"name": "GLOB", "pattern": "eth[0-3]"}), "TRUE")
+        self.assertEqual(apply_modifier("eth7", {"name": "GLOB", "pattern": "eth[0-3]"}), "FALSE")
+        self.assertEqual(apply_modifier(8080, {"name": "GLOB", "pattern": "80*"}), "TRUE")
 
     def test_regex_searches_anywhere_unless_anchored(self):
-        self.assertEqual(apply_modifier("/api/v2/users", r"REGEX(/v\d+/)"), "TRUE")
-        self.assertEqual(apply_modifier("/api/v2/users", r"REGEX(^/v\d+/)"), "FALSE")
+        self.assertEqual(
+            apply_modifier("/api/v2/x", {"name": "REGEX", "pattern": r"/v\d+/"}), "TRUE"
+        )
+        self.assertEqual(
+            apply_modifier("/api/v2/x", {"name": "REGEX", "pattern": r"^/v\d+/"}), "FALSE"
+        )
 
-    def test_regex_unquoted_pattern_may_contain_parentheses(self):
-        self.assertEqual(apply_modifier("POST", "REGEX(^(GET|POST)$)"), "TRUE")
-        self.assertEqual(apply_modifier("POSTED", "REGEX(^(GET|POST)$)"), "FALSE")
+    def test_pattern_needs_no_quoting(self):
+        self.assertEqual(apply_modifier("aaa", {"name": "REGEX", "pattern": "^a{2,3}$"}), "TRUE")
+        self.assertEqual(
+            apply_modifier("POST", {"name": "REGEX", "pattern": "^(GET|POST)$"}), "TRUE"
+        )
 
-    def test_quoted_pattern_may_contain_commas_and_spaces(self):
-        self.assertEqual(apply_modifier("aaa", "REGEX('^a{2,3}$')"), "TRUE")
-        self.assertEqual(apply_modifier("a", 'REGEX("^a{2,3}$")'), "FALSE")
-        self.assertEqual(apply_modifier("x y", "GLOB(' x y')"), "FALSE")
-        self.assertEqual(apply_modifier(" x y", "GLOB(' x y')"), "TRUE")
-
-    def test_doubled_quote_is_a_literal_quote(self):
-        self.assertEqual(apply_modifier("it's", "GLOB('it''s')"), "TRUE")
+    def test_regex_flags(self):
+        regex = {"name": "REGEX", "pattern": "^hello", "flags": "i"}
+        self.assertEqual(apply_modifier("HELLO world", regex), "TRUE")
+        self.assertEqual(apply_modifier("HELLO world", {**regex, "flags": ""}), "FALSE")
+        self.assertEqual(
+            apply_modifier("a\nb", {"name": "REGEX", "pattern": "a.b", "flags": "s"}), "TRUE"
+        )
+        self.assertEqual(
+            apply_modifier("x\nend", {"name": "REGEX", "pattern": "^end", "flags": "m"}), "TRUE"
+        )
 
     def test_regsub_replaces_every_match(self):
-        self.assertEqual(
-            apply_modifier("/users/123/orders/4567", r"REGSUB(\d+, N)"), "/users/N/orders/N"
-        )
+        regsub = {"name": "REGSUB", "pattern": r"\d+", "replace": "N"}
+        self.assertEqual(apply_modifier("/items/17", regsub), "/items/N")
+        self.assertEqual(apply_modifier("/u/123/o/4567", regsub), "/u/N/o/N")
 
-    def test_regsub_with_group_reference_and_quoted_arguments(self):
-        self.assertEqual(
-            apply_modifier("10.244.2.14", r"REGSUB('^(\d+\.\d+)\..*$', '\1.x.x')"), "10.244.x.x"
-        )
-
-    def test_regsub_empty_replacement_deletes(self):
-        self.assertEqual(apply_modifier("abc-123", r"REGSUB('-\d+$', '')"), "abc")
+    def test_regsub_group_reference_empty_replacement_and_flags(self):
+        subnet = {"name": "REGSUB", "pattern": r"^(\d+\.\d+)\..*$", "replace": r"\1.x.x"}
+        self.assertEqual(apply_modifier("10.244.2.14", subnet), "10.244.x.x")
+        strip = {"name": "REGSUB", "pattern": r"-\d+$", "replace": ""}
+        self.assertEqual(apply_modifier("abc-123", strip), "abc")
+        upper = {"name": "REGSUB", "pattern": "get", "replace": "R", "flags": "i"}
+        self.assertEqual(apply_modifier("GET", upper), "R")
 
     def test_regsub_without_a_match_passes_the_value_through(self):
-        self.assertEqual(apply_modifier("GET", r"REGSUB(\d+, N)"), "GET")
-        self.assertEqual(apply_modifier(42, r"REGSUB(x, y)"), "42")
+        regsub = {"name": "REGSUB", "pattern": r"\d+", "replace": "N"}
+        self.assertEqual(apply_modifier("GET", regsub), "GET")
 
     def test_missing_and_null_degrade_like_the_other_modifiers(self):
         from fingerprint_sampler.tokenizer import _MISSING
 
         for value in (_MISSING, None):
-            self.assertEqual(apply_modifier(value, "GLOB(*)"), "FALSE")
-            self.assertEqual(apply_modifier(value, "REGEX(.*)"), "FALSE")
-            self.assertEqual(apply_modifier(value, "REGSUB(.*, x)"), "NULL")
+            self.assertEqual(apply_modifier(value, {"name": "GLOB", "pattern": "*"}), "FALSE")
+            self.assertEqual(apply_modifier(value, {"name": "REGEX", "pattern": ".*"}), "FALSE")
+            regsub = {"name": "REGSUB", "pattern": ".*", "replace": "x"}
+            self.assertEqual(apply_modifier(value, regsub), "NULL")
 
     def test_several_matches_are_tokenized_individually(self):
         record = {"paths": ["/tmp/a1", "/tmp/b22", "/etc/passwd"]}
-        self.assertEqual(
-            tokenize(record, [MaskEntry("p", "$.paths[*]", "GLOB(/tmp/*)")]), {"p": "FALSE,TRUE"}
-        )
-        self.assertEqual(
-            tokenize(record, [MaskEntry("p", "$.paths[*]", r"REGSUB(\d+, N)")]),
-            {"p": "/etc/passwd,/tmp/aN,/tmp/bN"},
-        )
-
-    def test_quotes_work_for_existing_modifiers_too(self):
-        self.assertEqual(apply_modifier("a,b", "ANY('a,b', c)"), "TRUE")
-        self.assertEqual(apply_modifier("a", "ANY('a,b', c)"), "FALSE")
+        glob = MaskEntry("p", "$.paths[*]", {"name": "GLOB", "pattern": "/tmp/*"})
+        self.assertEqual(tokenize(record, [glob]), {"p": "FALSE,TRUE"})
+        regsub = MaskEntry("p", "$.paths[*]", {"name": "REGSUB", "pattern": r"\d+", "replace": "N"})
+        self.assertEqual(tokenize(record, [regsub]), {"p": "/etc/passwd,/tmp/aN,/tmp/bN"})
 
 
-class ValidatePatternModifierTests(unittest.TestCase):
-    def test_valid_expressions_pass(self):
+class ModifierObjectTests(unittest.TestCase):
+    def test_mask_entry_normalises_its_modifier(self):
+        entry = MaskEntry("k", "$.k", {"pattern": "a", "name": "GLOB"})
+        self.assertEqual(entry.modifier, Modifier("GLOB", (("pattern", "a"),)))
+        self.assertEqual(MaskEntry("k", "$.k", "DEFAULT").modifier, Modifier("DEFAULT"))
+
+    def test_spec_is_bare_name_or_sorted_json(self):
+        self.assertEqual(Modifier.of("IS_PRESENT").spec, "IS_PRESENT")
+        self.assertEqual(Modifier.of({"name": "IS_PRESENT"}).spec, "IS_PRESENT")
+        spec = Modifier.of({"values": [80, 443], "name": "ANY"}).spec
+        self.assertEqual(spec, '{"name":"ANY","values":[80,443]}')
+
+    def test_modifiers_are_hashable(self):
+        self.assertEqual(len({Modifier.of({"name": "ANY", "values": [1]}) for _ in range(2)}), 1)
+
+
+class ValidateModifierFormTests(unittest.TestCase):
+    def test_valid_forms_pass(self):
         for modifier in (
-            "GLOB(/usr/*)",
-            "REGEX(^(GET|POST)$)",
-            "REGEX('^a{2,3}$')",
-            r"REGSUB(\d+, N)",
-            r"REGSUB('(\d+)', '<\1>')",
-            r"REGSUB('(?P<n>\d+)', '\g<n>')",
-            r"REGSUB(\d+, '')",
+            "DEFAULT",
+            "IS_PRESENT",
+            "IS_NULL",
+            {"name": "IS_NULL"},
+            {"name": "IN_RANGE", "low": 200, "high": 399.5},
+            {"name": "ANY", "values": ["GET", 80]},
+            {"name": "GLOB", "pattern": "/usr/*"},
+            {"name": "REGEX", "pattern": "^(GET|POST)$", "flags": "imsx"},
+            {"name": "REGSUB", "pattern": r"(?P<n>\d+)", "replace": r"<\g<n>>"},
+            {"name": "REGSUB", "pattern": r"\d+", "replace": ""},
         ):
             with self.subTest(modifier=modifier):
                 validate_modifier(modifier)
 
-    def test_invalid_expressions_say_what_is_wrong(self):
-        cases = {
-            "GLOB": "takes 1 argument",
-            "GLOB()": "takes 1 argument",
-            "GLOB(a, b)": "takes 1 argument",
-            "REGEX(a{2,3})": "takes 1 argument",
-            "REGEX(()": "not a valid regex",
-            "REGEX([a-)": "not a valid regex",
-            "REGSUB(a)": "takes 2 argument",
-            "REGSUB([, x)": "not a valid regex",
-            r"REGSUB(a, '\1')": "replacement is not valid",
-            r"REGSUB(a, '\g<nope>')": "replacement is not valid",
-            "REGEX('abc)": "missing closing '",
-            "REGEX('a' b)": "after a quoted argument",
-            "GLOB(/usr/*": "missing ')'",
-        }
-        for modifier, expected in cases.items():
+    def test_invalid_forms_say_what_is_wrong(self):
+        cases = [
+            ("IN_RANGE(200, 399)", "Unknown modifier: 'IN_RANGE(200, 399)'"),
+            ("GLOB", "GLOB needs arguments"),
+            ("BOGUS", "Unknown modifier: 'BOGUS'"),
+            ({"pattern": "a"}, "Unknown modifier: None"),
+            ({"name": "REGX", "pattern": "a"}, "Unknown modifier: 'REGX'"),
+            ({"name": "REGEX"}, "REGEX needs 'pattern'"),
+            ({"name": "REGSUB", "pattern": "a"}, "REGSUB needs 'replace'"),
+            ({"name": "GLOB", "pattern": "a", "flags": "i"}, "GLOB does not take 'flags'"),
+            ({"name": "DEFAULT", "x": 1}, "(it takes no arguments)"),
+            ({"name": "REGEX", "pattern": "("}, "Invalid regex"),
+            ({"name": "REGEX", "pattern": "a", "flags": "iq"}, "Unknown regex flag(s) 'q'"),
+            ({"name": "REGEX", "pattern": 12}, "pattern must be a string"),
+            ({"name": "REGSUB", "pattern": "a", "replace": r"\2"}, "REGSUB replace is not valid"),
+            ({"name": "IN_RANGE", "low": "a", "high": 1}, "IN_RANGE low must be a number"),
+            ({"name": "IN_RANGE", "low": 5, "high": 1}, "IN_RANGE low (5) is above high (1)"),
+            ({"name": "ANY", "values": []}, "ANY values must be a non-empty list"),
+            ({"name": "ANY", "values": 80}, "ANY values must be a non-empty list"),
+            (["GLOB"], "Modifier must be a name or a mapping"),
+        ]
+        for modifier, expected in cases:
             with self.subTest(modifier=modifier):
                 with self.assertRaises(ValueError) as ctx:
                     validate_modifier(modifier)
