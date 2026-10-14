@@ -8,6 +8,7 @@ aggregators, so the set works for any event stream, not just eBPF telemetry.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import os
 import tempfile
@@ -19,7 +20,7 @@ import yaml
 
 from fingerprint_sampler.aggregators import Aggregate
 
-SET_VERSION = 1
+SET_VERSION = 2
 
 
 class FingerprintSetError(ValueError):
@@ -47,10 +48,12 @@ def fingerprint_id(tokens: dict[str, str]) -> str:
 @dataclass
 class Fingerprint:
     tokens: dict[str, str]
-    total_occurrences: int
+    count: int
     first_seen: str
     last_seen: str
     aggregates: dict[str, dict] = field(default_factory=dict)
+    first: list[dict] = field(default_factory=list)
+    last: list[dict] = field(default_factory=list)
 
 
 class FingerprintSet:
@@ -60,31 +63,33 @@ class FingerprintSet:
         self,
         aggregates: Sequence[Aggregate] = (),
         profile_id: str | None = None,
+        samples: int = 3,
     ) -> None:
         self._records: dict[str, Fingerprint] = {}
         self._aggregates = tuple(aggregates)
         self.profile_id = profile_id
+        self.samples = samples
         self.skipped_values = 0
         """Running count of values the aggregates could not use (see `Aggregate.update`)."""
 
     def upsert(self, tokens: dict[str, str], record: Any, timestamp: str | None = None) -> str:
         """Fold one event into the set. Returns its fingerprint_id.
 
-        Match: increments total_occurrences and updates last_seen — no new
-        record block. Drift: creates a new record block. Either way every
-        configured aggregator is folded over `record`.
+        Every fingerprint gets the built-in metadata: `count`, wall-clock `first_seen` /
+        `last_seen`, and the first and last `samples` events with the time each was seen.
+        The profile's aggregates are folded over `record` as well.
         """
         fid = fingerprint_id(tokens)
         ts = timestamp or datetime.now(timezone.utc).isoformat()
         existing = self._records.get(fid)
-
         if existing is None:
-            existing = self._records[fid] = Fingerprint(
-                tokens=dict(tokens), total_occurrences=1, first_seen=ts, last_seen=ts
-            )
-        else:
-            existing.total_occurrences += 1
-            existing.last_seen = ts
+            existing = self._records[fid] = Fingerprint(dict(tokens), 0, ts, ts)
+        existing.count += 1
+        existing.last_seen = ts
+        if len(existing.first) < self.samples:
+            existing.first.append({"seen": ts, "event": copy.deepcopy(record)})
+        existing.last.append({"seen": ts, "event": copy.deepcopy(record)})
+        del existing.last[: max(len(existing.last) - self.samples, 0)]
 
         for entry in self._aggregates:
             state = existing.aggregates.setdefault(entry.key, {})

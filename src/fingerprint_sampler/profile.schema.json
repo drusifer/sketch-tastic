@@ -25,6 +25,12 @@
       "items": {
         "$ref": "#/$defs/aggregate"
       }
+    },
+    "samples": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3,
+      "description": "How many of the first and of the last events each fingerprint keeps, with the time each was seen. 0 keeps none."
     }
   },
   "$defs": {

@@ -48,10 +48,38 @@ class UpsertReconciliationTests(unittest.TestCase):
 
         self.assertEqual(len(wh), 1)  # entry list count stays flat
         record = wh.get(fingerprint_id(tokens))
-        self.assertEqual(record.total_occurrences, 3)
+        self.assertEqual(record.count, 3)
         self.assertEqual(record.last_seen, "t3")
         self.assertEqual(record.first_seen, "t1")
         self.assertEqual(record.tokens, tokens)  # the set explains what the ID means
+
+    def test_first_and_last_samples_with_their_detection_time(self):
+        fingerprints = FingerprintSet()
+        for i in range(5):
+            fingerprints.upsert({"k": "v"}, {"n": i}, timestamp=f"t{i}")
+        record = fingerprints.get(fingerprint_id({"k": "v"}))
+        self.assertEqual(record.first, [{"seen": f"t{i}", "event": {"n": i}} for i in (0, 1, 2)])
+        self.assertEqual(record.last, [{"seen": f"t{i}", "event": {"n": i}} for i in (2, 3, 4)])
+
+    def test_sample_count_comes_from_the_set_and_zero_keeps_none(self):
+        for samples, kept in ((1, 1), (0, 0)):
+            fingerprints = FingerprintSet(samples=samples)
+            for i in range(3):
+                fingerprints.upsert({"k": "v"}, {"n": i})
+            record = fingerprints.get(fingerprint_id({"k": "v"}))
+            self.assertEqual((len(record.first), len(record.last)), (kept, kept))
+
+    def test_samples_are_copies_and_saved_without_yaml_aliases(self):
+        event = {"n": 1}
+        fingerprints = FingerprintSet()
+        fingerprints.upsert({"k": "v"}, event, timestamp="t")
+        event["n"] = 99
+        self.assertEqual(fingerprints.get(fingerprint_id({"k": "v"})).first[0]["event"], {"n": 1})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "set.yaml")
+            fingerprints.save(path)
+            with open(path) as f:
+                self.assertNotIn("&id", f.read())
 
     def test_drift_state_creates_new_record_block(self):
         wh = FingerprintSet()
@@ -106,7 +134,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         wh.upsert({"k": "1"}, {"size": 2}, timestamp="t")
 
         record = wh.get(fingerprint_id({"k": "1"}))
-        self.assertEqual(record.total_occurrences, 3)
+        self.assertEqual(record.count, 3)
         self.assertEqual(record.aggregates["size"], {"SUM": 2})
         self.assertEqual(wh.skipped_values, 2)
 
@@ -136,7 +164,7 @@ class PersistenceTests(unittest.TestCase):
 
         with open(self.path) as f:
             data = yaml.safe_load(f)
-        self.assertEqual(data["version"], 1)
+        self.assertEqual(data["version"], 2)
         self.assertEqual(data["profile_id"], "p1")
         self.assertEqual(list(data["fingerprints"]), [fingerprint_id({"a": "1"})])
 
@@ -152,7 +180,7 @@ class PersistenceTests(unittest.TestCase):
             "profile_id:",
             "fingerprints:",
             "tokens:",
-            "total_occurrences:",
+            "count:",
             "first_seen:",
             "last_seen:",
             "aggregates:",
@@ -205,7 +233,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_load_rejects_pre_aggregator_format_with_clear_error(self):
         with open(self.path, "w") as f:
-            yaml.safe_dump({"abc": {"total_occurrences": 1, "min_duration_ms": 1.0}}, f)
+            yaml.safe_dump({"abc": {"count": 1, "min_duration_ms": 1.0}}, f)
         with self.assertRaises(FingerprintSetError) as ctx:
             FingerprintSet().load(self.path)
         self.assertIn("not a fingerprint set", str(ctx.exception))

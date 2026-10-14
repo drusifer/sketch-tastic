@@ -75,7 +75,7 @@ fingerprints:
       level: INFO
       component: db
       failed: 'FALSE'
-    total_occurrences: 2
+    count: 2
     first_seen: '2026-10-14T03:59:19.796868+00:00'
     last_seen: '2026-10-14T03:59:19.796991+00:00'
     aggregates:
@@ -90,6 +90,16 @@ fingerprints:
         LAST:
         - query ok
         - query ok (cached)
+    first:
+    - seen: '2026-10-14T03:59:19.796868+00:00'
+      event: {level: INFO, logger: db, msg: query ok, took_ms: 3}
+    - seen: '2026-10-14T03:59:19.796991+00:00'
+      event: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
+    last:
+    - seen: '2026-10-14T03:59:19.796868+00:00'
+      event: {level: INFO, logger: db, msg: query ok, took_ms: 3}
+    - seen: '2026-10-14T03:59:19.796991+00:00'
+      event: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
 ```
 
 ## Usage
@@ -224,7 +234,7 @@ profile's identity, like any other change to `fields`.
 |---|---|
 | `SUM`, `MIN`, `MAX` | running sum / smallest / largest |
 | `AVG` | the average, with the sum and count that make it mergeable |
-| `{name: LAST, n: N}` | the `N` most recent values — use path `$` to keep whole events as samples |
+| `{name: LAST, n: N}` | the `N` most recent values of the path (whole events are kept anyway: see below) |
 
 `fn` is one function or a list, written like modifiers: a bare name, or a mapping for `LAST`.
 Numeric functions accept numbers and numeric strings. A missing or non-numeric value is skipped
@@ -236,7 +246,12 @@ every problem at once.
 ## The fingerprint set
 
 - `tokens` shows what each ID stands for.
-- `first_seen` / `last_seen` are when the tool read the events, not times from the events.
+- Every fingerprint gets built-in metadata, with no profile setting needed: `count`,
+  `first_seen` / `last_seen`, and the first and last 3 events in `first` / `last`, each with the
+  time it was seen. Set `samples: N` at the top of the profile to keep a different number, or
+  `samples: 0` for none. Everything under `aggregates` is what your profile asked for.
+- All times are when the tool read the event (wall clock), so they work for any JSONL. To track
+  a time field inside your events, add it to your profile's `aggregates`.
 - A set records the profile that built it (`profile_id`, derived from `fields`). Merging under a
   profile with different `fields` is refused, because the fingerprints would not be comparable.
   Changing `aggregates` is always fine.
@@ -249,12 +264,12 @@ every problem at once.
 from fingerprint_sampler import FingerprintSet, load_profile
 
 profile = load_profile("profile.yaml")
-fingerprints = FingerprintSet(aggregates=profile.aggregates, profile_id=profile.profile_id)
+fingerprints = FingerprintSet(profile.aggregates, profile.profile_id, profile.samples)
 
 event = {"level": "INFO", "logger": "db", "msg": "query ok", "took_ms": 3}
 fingerprint_id = fingerprints.upsert(profile.tokens(event), event)
 
-fingerprints.get(fingerprint_id).total_occurrences   # 1
+fingerprints.get(fingerprint_id).count   # 1
 fingerprints.save("app.fingerprints.yaml")
 ```
 

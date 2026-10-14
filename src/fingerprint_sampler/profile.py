@@ -44,6 +44,8 @@ def profile_id(fields: tuple[Field, ...] | list[Field]) -> str:
 class Profile:
     fields: tuple[Field, ...]
     aggregates: tuple[Aggregate, ...] = ()
+    samples: int = 3
+    """How many of the first and of the last events each fingerprint keeps (not identity)."""
 
     @property
     def profile_id(self) -> str:
@@ -102,7 +104,7 @@ def check_profile(data: Any, source: str = "<profile>") -> tuple[Profile | None,
     built = {section: _build(data, section, source, problems) for section in _SECTIONS}
     if problems:
         return None, problems
-    return Profile(tuple(built["fields"]), tuple(built["aggregates"])), []
+    return Profile(tuple(built["fields"]), tuple(built["aggregates"]), data.get("samples", 3)), []
 
 
 def parse_profile(data: Any, source: str = "<profile>") -> Profile:

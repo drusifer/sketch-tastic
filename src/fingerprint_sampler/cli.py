@@ -197,7 +197,7 @@ def _load_profile(path: str) -> Profile:
 
 
 def _open_set(args: argparse.Namespace, profile: Profile) -> FingerprintSet:
-    fingerprints = FingerprintSet(aggregates=profile.aggregates, profile_id=profile.profile_id)
+    fingerprints = FingerprintSet(profile.aggregates, profile.profile_id, profile.samples)
     if not os.path.exists(args.set_path):
         return fingerprints
     try:

@@ -84,10 +84,14 @@ class CliTestCase(unittest.TestCase):
     @staticmethod
     def without_timestamps(data):
         """Set contents minus wall-clock fields, for comparing sets built at different times."""
-        return {
-            fid: {k: v for k, v in rec.items() if k not in ("first_seen", "last_seen")}
-            for fid, rec in data["fingerprints"].items()
-        }
+
+        def strip(rec):
+            rec = {k: v for k, v in rec.items() if k not in ("first_seen", "last_seen")}
+            for key in ("first", "last"):
+                rec[key] = [sample["event"] for sample in rec[key]]
+            return rec
+
+        return {fid: strip(rec) for fid, rec in data["fingerprints"].items()}
 
 
 EVENTS = [
@@ -107,10 +111,10 @@ class CreateAndMergeTests(CliTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out, "")  # AC7: stdout stays clean
         data = self.load_set()
-        self.assertEqual(data["version"], 1)
+        self.assertEqual(data["version"], 2)
         self.assertEqual(len(data["fingerprints"]), 3)
         by_kind = {rec["tokens"]["kind"]: rec for rec in data["fingerprints"].values()}
-        self.assertEqual(by_kind["a"]["total_occurrences"], 3)
+        self.assertEqual(by_kind["a"]["count"], 3)
         self.assertEqual(by_kind["a"]["aggregates"]["size"]["SUM"], 40.5)
         self.assertEqual(by_kind["a"]["aggregates"]["size"]["AVG"]["avg"], 13.5)  # AC12: readable
         self.assertEqual(by_kind["a"]["aggregates"]["recent"]["LAST"], [3, 4])
@@ -125,7 +129,7 @@ class CreateAndMergeTests(CliTestCase):
         merged = self.load_set()
         by_kind = {rec["tokens"]["kind"]: (fid, rec) for fid, rec in merged["fingerprints"].items()}
         fid_a, rec_a = by_kind["a"]
-        self.assertEqual(rec_a["total_occurrences"], 3)  # 2 + 1: counts add
+        self.assertEqual(rec_a["count"], 3)  # 2 + 1: counts add
         self.assertEqual(rec_a["aggregates"]["size"]["SUM"], 40.5)  # aggregates merge
         self.assertEqual(rec_a["aggregates"]["recent"]["LAST"], [3, 4])  # LAST continues
         self.assertEqual(rec_a["first_seen"], first["fingerprints"][fid_a]["first_seen"])
@@ -214,16 +218,14 @@ class NonTelemetryFixtureTests(CliTestCase):
         self.assertEqual(len(records), 4)
 
         ok_items = by_shape[("GET", "/items/{id}", "TRUE")]
-        self.assertEqual(ok_items["total_occurrences"], 3)
+        self.assertEqual(ok_items["count"], 3)
         self.assertEqual(ok_items["aggregates"]["bytes_out"]["SUM"], 512 + 498 + 505)
         self.assertEqual(ok_items["aggregates"]["latency_ms"]["MIN"], 9.0)
         self.assertEqual(
             ok_items["aggregates"]["recent_paths"]["LAST"], ["/items/17", "/items/42", "/items/3"]
         )
 
-        self.assertEqual(
-            by_shape[("GET", "/items/{id}", "FALSE")]["total_occurrences"], 1
-        )  # the 404
+        self.assertEqual(by_shape[("GET", "/items/{id}", "FALSE")]["count"], 1)  # the 404
 
         orders = by_shape[("POST", "/orders", "TRUE")]
         self.assertEqual(
@@ -420,7 +422,7 @@ aggregates:
         self.assertEqual(len(data["fingerprints"]), 3)
         db_ok = data["fingerprints"]["b738d17a6a5f7265cb4cef73937afd4f"]
         self.assertEqual(db_ok["tokens"], {"level": "INFO", "component": "db", "failed": "FALSE"})
-        self.assertEqual(db_ok["total_occurrences"], 2)
+        self.assertEqual(db_ok["count"], 2)
         self.assertEqual(db_ok["aggregates"]["example"]["LAST"], ["query ok", "query ok (cached)"])
 
 
