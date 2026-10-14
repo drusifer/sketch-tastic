@@ -83,8 +83,12 @@ class ValidationTests(unittest.TestCase):
         self.assert_invalid(["nope"], "expected a mapping")
 
     def test_unknown_modifier_names_the_entry(self):
-        fields = [{"key": "bin", "path": "$.b", "modifier": "GLOB(*)"}]
+        fields = [{"key": "bin", "path": "$.b", "modifier": "BOGUS(*)"}]
         self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "Unknown modifier")
+
+    def test_invalid_regex_names_the_entry(self):
+        fields = [{"key": "bin", "path": "$.b", "modifier": "REGEX([a-)"}]
+        self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "not a valid regex")
 
     def test_bad_modifier_arguments(self):
         fields = [{"key": "rc", "path": "$.rc", "modifier": "IN_RANGE(0)"}]
@@ -127,7 +131,17 @@ class ValidationTests(unittest.TestCase):
 
 class ValidateModifierTests(unittest.TestCase):
     def test_accepts_every_supported_form(self):
-        for modifier in ("DEFAULT", "IS_PRESENT", "IS_NULL", "IN_RANGE(-999, 0)", "ANY(80, 443)"):
+        for modifier in (
+            "DEFAULT",
+            "IS_PRESENT",
+            "IS_NULL",
+            "IN_RANGE(-999, 0)",
+            "ANY(80, 443)",
+        ) + (
+            "GLOB(/usr/*)",
+            "REGEX(.*)",
+            "REGSUB(a, b)",
+        ):
             with self.subTest(modifier=modifier):
                 validate_modifier(modifier)
 
@@ -139,7 +153,8 @@ class ValidateModifierTests(unittest.TestCase):
             "IN_RANGE(5, 1)",
             "IN_RANGE(1, 2",
             "DEFAULT(x)",
-            "REGEX(.*)",
+            "BOGUS(.*)",
+            "REGEX(()",
         ):
             with self.subTest(modifier=modifier), self.assertRaises(ValueError):
                 validate_modifier(modifier)

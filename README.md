@@ -147,6 +147,25 @@ values (IDs, timestamps, sizes) so similar events share a fingerprint:
 | `IS_NULL` | `TRUE` / `FALSE` — absent or null? |
 | `IN_RANGE(low, high)` | `TRUE` if `low <= value <= high` |
 | `ANY(v1, v2, ...)` | `TRUE` if the value is one of those listed |
+| `GLOB(pattern)` | `TRUE` if the whole value matches the shell-style pattern (`*`, `?`, `[a-z]`), case-sensitive |
+| `REGEX(pattern)` | `TRUE` if the regular expression matches anywhere in the value; anchor with `^` and `$` |
+| `REGSUB(pattern, replacement)` | the value with every match replaced (`\1` refers to a group); `NULL` if absent |
+
+`GLOB` and `REGEX` answer yes or no; `REGSUB` keeps the value but removes the part that varies:
+
+```yaml
+  - {key: in_tmp,   path: "$.file",         modifier: 'GLOB(/tmp/*)'}           # TRUE / FALSE
+  - {key: is_write, path: "$.request.method", modifier: 'REGEX(^(POST|PUT|PATCH)$)'}
+  - {key: route,    path: "$.request.path", modifier: 'REGSUB(\d+, N)'}         # /items/17 -> /items/N
+  - {key: subnet,   path: "$.peer",         modifier: 'REGSUB("^(\d+\.\d+)\..*", "\1.x.x")'}
+```
+
+Arguments are separated by commas and trimmed. Put an argument in single or double quotes when it
+contains a comma, starts or ends with a space, or is empty; inside quotes, double the quote
+character to include it. Backslashes are passed to the pattern unchanged, so write the modifier
+as a plain or single-quoted YAML string — a double-quoted YAML string needs every backslash
+doubled. Patterns use Python's `re` syntax. Changing a field's modifier changes the profile's
+identity, like any other change to `fields`.
 
 **Aggregates** are computed across every event that lands on the same fingerprint, over all runs:
 

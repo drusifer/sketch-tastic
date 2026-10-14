@@ -6,7 +6,9 @@ counts) into stable, low-cardinality string tokens before hashing.
 
 from __future__ import annotations
 
+import fnmatch
 import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Callable
@@ -71,12 +73,33 @@ def _mod_any(value: Any, *options: str) -> str:
     return "TRUE" if str(value) in {str(o) for o in options} else "FALSE"
 
 
+def _mod_glob(value: Any, pattern: str) -> str:
+    if value is _MISSING or value is None:
+        return "FALSE"
+    return "TRUE" if fnmatch.fnmatchcase(str(value), pattern) else "FALSE"
+
+
+def _mod_regex(value: Any, pattern: str) -> str:
+    if value is _MISSING or value is None:
+        return "FALSE"
+    return "TRUE" if re.search(pattern, str(value)) else "FALSE"
+
+
+def _mod_regsub(value: Any, pattern: str, replacement: str) -> str:
+    if value is _MISSING or value is None:
+        return "NULL"
+    return re.sub(pattern, replacement, str(value))
+
+
 _MODIFIERS: dict[str, Callable[..., str]] = {
     "DEFAULT": _mod_default,
     "IS_PRESENT": _mod_is_present,
     "IS_NULL": _mod_is_null,
     "IN_RANGE": _mod_in_range,
     "ANY": _mod_any,
+    "GLOB": _mod_glob,
+    "REGEX": _mod_regex,
+    "REGSUB": _mod_regsub,
 }
 
 
@@ -86,17 +109,69 @@ _ARG_COUNTS: dict[str, tuple[int, int | None]] = {
     "IS_NULL": (0, 0),
     "IN_RANGE": (2, 2),
     "ANY": (1, None),
+    "GLOB": (1, 1),
+    "REGEX": (1, 1),
+    "REGSUB": (2, 2),
 }
 
+_QUOTES = ("'", '"')
 
-def _parse_modifier(modifier: str) -> tuple[str, list[str]]:
+
+def _split_args(text: str, modifier: str) -> list[str]:
+    """Split the text between a modifier's parentheses into arguments.
+
+    Arguments are comma-separated and stripped. An argument written in single
+    or double quotes is taken verbatim, so it can hold commas, parentheses and
+    surrounding spaces; a doubled quote inside it stands for one quote
+    character. Backslashes are never special here, so regex escapes pass through.
+    """
+    if not text.strip():
+        return []
+    args: list[str] = []
+    buf: list[str] = []
+    quote = ""  # the open quote character, if inside a quoted argument
+    quoted = False  # the current argument was written in quotes
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if quote:
+            if ch != quote:
+                buf.append(ch)
+            elif text[i + 1 : i + 2] == quote:
+                buf.append(ch)
+                i += 1
+            else:
+                quote = ""
+        elif ch == ",":
+            args.append("".join(buf) if quoted else "".join(buf).strip())
+            buf, quoted = [], False
+        elif quoted:
+            if not ch.isspace():
+                raise ValueError(
+                    f"Malformed modifier {modifier!r}: unexpected {ch!r} after a quoted argument"
+                )
+        elif ch in _QUOTES and not "".join(buf).strip():
+            quote, quoted, buf = ch, True, []
+        else:
+            buf.append(ch)
+        i += 1
+    if quote:
+        raise ValueError(f"Malformed modifier {modifier!r}: missing closing {quote}")
+    args.append("".join(buf) if quoted else "".join(buf).strip())
+    return args
+
+
+@lru_cache(maxsize=None)
+def _parse_modifier(modifier: str) -> tuple[str, tuple[str, ...]]:
     """Split a modifier expression into (name, args). Raises ValueError on unknown names."""
     name, _, rest = modifier.partition("(")
     name = name.strip()
     if name not in _MODIFIERS:
         raise ValueError(f"Unknown modifier: {name!r}")
-    args_str = rest.rstrip(")").strip()
-    return name, [a.strip() for a in args_str.split(",")] if args_str else []
+    rest = rest.rstrip()
+    if rest.endswith(")"):
+        rest = rest[:-1]
+    return name, tuple(_split_args(rest, modifier))
 
 
 def validate_modifier(modifier: str) -> None:
@@ -119,6 +194,16 @@ def validate_modifier(modifier: str) -> None:
             raise ValueError(f"IN_RANGE bounds must be numbers: {modifier!r}") from None
         if bounds[0] > bounds[1]:
             raise ValueError(f"IN_RANGE low bound exceeds high bound: {modifier!r}")
+    if name in ("REGEX", "REGSUB"):
+        try:
+            pattern = re.compile(args[0])
+        except re.error as exc:
+            raise ValueError(f"{name} pattern is not a valid regex ({exc}): {modifier!r}") from None
+        if name == "REGSUB":
+            try:
+                pattern.sub(args[1], "")
+            except (re.error, IndexError) as exc:
+                raise ValueError(f"REGSUB replacement is not valid ({exc}): {modifier!r}") from None
 
 
 def apply_modifier(value: Any, modifier: str) -> str:

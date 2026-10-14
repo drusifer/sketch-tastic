@@ -10,6 +10,7 @@ from fingerprint_sampler.tokenizer import (
     find_values,
     parse_jsonl,
     tokenize,
+    validate_modifier,
 )
 
 SAMPLE_RECORD = {
@@ -183,7 +184,7 @@ class ApplyModifierTests(unittest.TestCase):
 
     def test_unknown_modifier_raises(self):
         with self.assertRaises(ValueError):
-            apply_modifier("x", "GLOB(*)")
+            apply_modifier("x", "BOGUS(*)")
 
     # AC4: "absent OR null" must both degrade gracefully - these exercise an
     # actual JSON `null` value, distinct from an absent/missing path.
@@ -299,3 +300,115 @@ class WildcardAndRecursiveDescentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PatternModifierTests(unittest.TestCase):
+    """GLOB, REGEX and REGSUB (FR-MOD-01)."""
+
+    def test_glob_matches_whole_value(self):
+        self.assertEqual(apply_modifier("/usr/bin/node", "GLOB(/usr/bin/*)"), "TRUE")
+        self.assertEqual(apply_modifier("/opt/usr/bin/node", "GLOB(/usr/bin/*)"), "FALSE")
+
+    def test_glob_is_case_sensitive(self):
+        self.assertEqual(apply_modifier("/USR/bin/node", "GLOB(/usr/*)"), "FALSE")
+
+    def test_glob_character_class_and_question_mark(self):
+        self.assertEqual(apply_modifier("eth0", "GLOB(eth[0-3])"), "TRUE")
+        self.assertEqual(apply_modifier("eth7", "GLOB(eth[0-3])"), "FALSE")
+        self.assertEqual(apply_modifier("v1", "GLOB(v?)"), "TRUE")
+
+    def test_glob_stringifies_numbers(self):
+        self.assertEqual(apply_modifier(8080, "GLOB(80*)"), "TRUE")
+
+    def test_regex_searches_anywhere_unless_anchored(self):
+        self.assertEqual(apply_modifier("/api/v2/users", r"REGEX(/v\d+/)"), "TRUE")
+        self.assertEqual(apply_modifier("/api/v2/users", r"REGEX(^/v\d+/)"), "FALSE")
+
+    def test_regex_unquoted_pattern_may_contain_parentheses(self):
+        self.assertEqual(apply_modifier("POST", "REGEX(^(GET|POST)$)"), "TRUE")
+        self.assertEqual(apply_modifier("POSTED", "REGEX(^(GET|POST)$)"), "FALSE")
+
+    def test_quoted_pattern_may_contain_commas_and_spaces(self):
+        self.assertEqual(apply_modifier("aaa", "REGEX('^a{2,3}$')"), "TRUE")
+        self.assertEqual(apply_modifier("a", 'REGEX("^a{2,3}$")'), "FALSE")
+        self.assertEqual(apply_modifier("x y", "GLOB(' x y')"), "FALSE")
+        self.assertEqual(apply_modifier(" x y", "GLOB(' x y')"), "TRUE")
+
+    def test_doubled_quote_is_a_literal_quote(self):
+        self.assertEqual(apply_modifier("it's", "GLOB('it''s')"), "TRUE")
+
+    def test_regsub_replaces_every_match(self):
+        self.assertEqual(
+            apply_modifier("/users/123/orders/4567", r"REGSUB(\d+, N)"), "/users/N/orders/N"
+        )
+
+    def test_regsub_with_group_reference_and_quoted_arguments(self):
+        self.assertEqual(
+            apply_modifier("10.244.2.14", r"REGSUB('^(\d+\.\d+)\..*$', '\1.x.x')"), "10.244.x.x"
+        )
+
+    def test_regsub_empty_replacement_deletes(self):
+        self.assertEqual(apply_modifier("abc-123", r"REGSUB('-\d+$', '')"), "abc")
+
+    def test_regsub_without_a_match_passes_the_value_through(self):
+        self.assertEqual(apply_modifier("GET", r"REGSUB(\d+, N)"), "GET")
+        self.assertEqual(apply_modifier(42, r"REGSUB(x, y)"), "42")
+
+    def test_missing_and_null_degrade_like_the_other_modifiers(self):
+        from fingerprint_sampler.tokenizer import _MISSING
+
+        for value in (_MISSING, None):
+            self.assertEqual(apply_modifier(value, "GLOB(*)"), "FALSE")
+            self.assertEqual(apply_modifier(value, "REGEX(.*)"), "FALSE")
+            self.assertEqual(apply_modifier(value, "REGSUB(.*, x)"), "NULL")
+
+    def test_several_matches_are_tokenized_individually(self):
+        record = {"paths": ["/tmp/a1", "/tmp/b22", "/etc/passwd"]}
+        self.assertEqual(
+            tokenize(record, [MaskEntry("p", "$.paths[*]", "GLOB(/tmp/*)")]), {"p": "FALSE,TRUE"}
+        )
+        self.assertEqual(
+            tokenize(record, [MaskEntry("p", "$.paths[*]", r"REGSUB(\d+, N)")]),
+            {"p": "/etc/passwd,/tmp/aN,/tmp/bN"},
+        )
+
+    def test_quotes_work_for_existing_modifiers_too(self):
+        self.assertEqual(apply_modifier("a,b", "ANY('a,b', c)"), "TRUE")
+        self.assertEqual(apply_modifier("a", "ANY('a,b', c)"), "FALSE")
+
+
+class ValidatePatternModifierTests(unittest.TestCase):
+    def test_valid_expressions_pass(self):
+        for modifier in (
+            "GLOB(/usr/*)",
+            "REGEX(^(GET|POST)$)",
+            "REGEX('^a{2,3}$')",
+            r"REGSUB(\d+, N)",
+            r"REGSUB('(\d+)', '<\1>')",
+            r"REGSUB('(?P<n>\d+)', '\g<n>')",
+            r"REGSUB(\d+, '')",
+        ):
+            with self.subTest(modifier=modifier):
+                validate_modifier(modifier)
+
+    def test_invalid_expressions_say_what_is_wrong(self):
+        cases = {
+            "GLOB": "takes 1 argument",
+            "GLOB()": "takes 1 argument",
+            "GLOB(a, b)": "takes 1 argument",
+            "REGEX(a{2,3})": "takes 1 argument",
+            "REGEX(()": "not a valid regex",
+            "REGEX([a-)": "not a valid regex",
+            "REGSUB(a)": "takes 2 argument",
+            "REGSUB([, x)": "not a valid regex",
+            r"REGSUB(a, '\1')": "replacement is not valid",
+            r"REGSUB(a, '\g<nope>')": "replacement is not valid",
+            "REGEX('abc)": "missing closing '",
+            "REGEX('a' b)": "after a quoted argument",
+            "GLOB(/usr/*": "missing ')'",
+        }
+        for modifier, expected in cases.items():
+            with self.subTest(modifier=modifier):
+                with self.assertRaises(ValueError) as ctx:
+                    validate_modifier(modifier)
+                self.assertIn(expected, str(ctx.exception))
