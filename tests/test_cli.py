@@ -89,8 +89,8 @@ class CliTestCase(unittest.TestCase):
             meta = dict(rec["meta"])
             meta.pop("first_seen")
             meta.pop("last_seen")
-            for key, fn in (("first", "FIRST"), ("last", "LAST")):
-                meta[key] = [envelope["record"] for envelope in meta[key][fn]]
+            for key in ("first", "last"):
+                meta[key] = [envelope["record"] for envelope in meta[key]]
             return {**rec, "meta": meta}
 
         return {fid: strip(rec) for fid, rec in data["fingerprints"].items()}
@@ -113,13 +113,13 @@ class CreateAndMergeTests(CliTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out, "")  # AC7: stdout stays clean
         data = self.load_set()
-        self.assertEqual(data["version"], 2)
+        self.assertEqual(data["version"], 3)
         self.assertEqual(len(data["fingerprints"]), 3)
         by_kind = {rec["tokens"]["kind"]: rec for rec in data["fingerprints"].values()}
-        self.assertEqual(by_kind["a"]["meta"]["count"]["COUNT"], 3)
+        self.assertEqual(by_kind["a"]["meta"]["count"], 3)
         self.assertEqual(by_kind["a"]["aggregates"]["size"]["SUM"], 40.5)
         self.assertEqual(by_kind["a"]["aggregates"]["size"]["AVG"]["avg"], 13.5)  # AC12: readable
-        self.assertEqual(by_kind["a"]["aggregates"]["recent"]["LAST"], [3, 4])
+        self.assertEqual(by_kind["a"]["aggregates"]["recent"], [3, 4])
         self.assertNotIn("size", by_kind["c"]["aggregates"])
 
     def test_second_run_merges_into_existing_fingerprints(self):
@@ -131,9 +131,9 @@ class CreateAndMergeTests(CliTestCase):
         merged = self.load_set()
         by_kind = {rec["tokens"]["kind"]: (fid, rec) for fid, rec in merged["fingerprints"].items()}
         fid_a, rec_a = by_kind["a"]
-        self.assertEqual(rec_a["meta"]["count"]["COUNT"], 3)  # 2 + 1: counts add
+        self.assertEqual(rec_a["meta"]["count"], 3)  # 2 + 1: counts add
         self.assertEqual(rec_a["aggregates"]["size"]["SUM"], 40.5)  # aggregates merge
-        self.assertEqual(rec_a["aggregates"]["recent"]["LAST"], [3, 4])  # LAST continues
+        self.assertEqual(rec_a["aggregates"]["recent"], [3, 4])  # LAST continues
         self.assertEqual(
             rec_a["meta"]["first_seen"], first["fingerprints"][fid_a]["meta"]["first_seen"]
         )
@@ -222,16 +222,14 @@ class NonTelemetryFixtureTests(CliTestCase):
         self.assertEqual(len(records), 4)
 
         ok_items = by_shape[("GET", "/items/{id}", "TRUE")]
-        self.assertEqual(ok_items["meta"]["count"]["COUNT"], 3)
-        self.assertEqual(ok_items["aggregates"]["bytes_out"]["SUM"], 512 + 498 + 505)
+        self.assertEqual(ok_items["meta"]["count"], 3)
+        self.assertEqual(ok_items["aggregates"]["bytes_out"], 512 + 498 + 505)
         self.assertEqual(ok_items["aggregates"]["latency_ms"]["MIN"], 9.0)
         self.assertEqual(
-            ok_items["aggregates"]["recent_paths"]["LAST"], ["/items/17", "/items/42", "/items/3"]
+            ok_items["aggregates"]["recent_paths"], ["/items/17", "/items/42", "/items/3"]
         )
 
-        self.assertEqual(
-            by_shape[("GET", "/items/{id}", "FALSE")]["meta"]["count"]["COUNT"], 1
-        )  # the 404
+        self.assertEqual(by_shape[("GET", "/items/{id}", "FALSE")]["meta"]["count"], 1)  # the 404
 
         orders = by_shape[("POST", "/orders", "TRUE")]
         self.assertEqual(
@@ -428,8 +426,8 @@ aggregates:
         self.assertEqual(len(data["fingerprints"]), 3)
         db_ok = data["fingerprints"]["b738d17a6a5f7265cb4cef73937afd4f"]
         self.assertEqual(db_ok["tokens"], {"level": "INFO", "component": "db", "failed": "FALSE"})
-        self.assertEqual(db_ok["meta"]["count"]["COUNT"], 2)
-        self.assertEqual(db_ok["aggregates"]["example"]["LAST"], ["query ok", "query ok (cached)"])
+        self.assertEqual(db_ok["meta"]["count"], 2)
+        self.assertEqual(db_ok["aggregates"]["example"], ["query ok", "query ok (cached)"])
 
 
 class ProfileMismatchTests(CliTestCase):

@@ -84,30 +84,22 @@ fingerprints:
           sum: 4
           count: 2
       example:
-        LAST:
-        - query ok
-        - query ok (cached)
+      - query ok
+      - query ok (cached)
     meta:
-      count:
-        COUNT: 2
-      first_seen:
-        FIRST:
-        - '2026-10-14T03:59:19.796868+00:00'
-      last_seen:
-        LAST:
-        - '2026-10-14T03:59:19.796991+00:00'
+      count: 2
+      first_seen: '2026-10-14T03:59:19.796868+00:00'
+      last_seen: '2026-10-14T03:59:19.796991+00:00'
       first:
-        FIRST:
-        - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
-          record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
-        - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
-          record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
+      - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
+        record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
+      - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
+        record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
       last:
-        LAST:
-        - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
-          record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
-        - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
-          record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
+      - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
+        record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
+      - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
+        record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
 ```
 
 ## Usage
@@ -240,16 +232,18 @@ profile's identity, like any other change to `fields`.
 
 | Function | Keeps |
 |---|---|
-| `SUM`, `MIN`, `MAX` | running sum / smallest / largest |
+| `SUM` | running sum of numbers |
+| `MIN`, `MAX` | smallest / largest — numbers, or text such as ISO-8601 times (same format and zone) |
 | `AVG` | the average, with the sum and count that make it mergeable |
 | `COUNT` | how many values the path selected (of any type) |
 | `{name: FIRST, n: N}` | the `N` earliest values of the path |
 | `{name: LAST, n: N}` | the `N` most recent values of the path |
 
 `fn` is one function or a list, written like modifiers: a bare name, or a mapping for `FIRST`
-and `LAST`.
-Numeric functions accept numbers and numeric strings. A missing or non-numeric value is skipped
-for that aggregate and counted in the summary.
+and `LAST`. With one function the set stores its value directly (`count: 12`); with several, a
+map by function name (`{MIN: 1, MAX: 3}`). Numbers and numeric strings count as numbers. A value
+a function can't use (text for `SUM`, text after numbers for `MIN`) is skipped and counted in the
+summary, as is a record where the path matches nothing.
 
 `merge` checks the profile before reading any event; run `fingerprint check` (above) to see
 every problem at once.

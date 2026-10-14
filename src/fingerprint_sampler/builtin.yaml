@@ -4,7 +4,7 @@
 # so injected fields can never clash with the record's own.
 aggregates:
   - {key: count,      path: $.meta.seen, fn: COUNT}
-  - {key: first_seen, path: $.meta.seen, fn: {name: FIRST, n: 1}}
-  - {key: last_seen,  path: $.meta.seen, fn: {name: LAST, n: 1}}
+  - {key: first_seen, path: $.meta.seen, fn: MIN}
+  - {key: last_seen,  path: $.meta.seen, fn: MAX}
   - {key: first,      path: $,           fn: {name: FIRST, n: 3}}
   - {key: last,       path: $,           fn: {name: LAST, n: 3}}

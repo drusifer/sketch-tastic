@@ -48,9 +48,9 @@ class UpsertReconciliationTests(unittest.TestCase):
 
         self.assertEqual(len(wh), 1)  # entry list count stays flat
         record = wh.get(fingerprint_id(tokens))
-        self.assertEqual(record.meta["count"], {"COUNT": 3})
-        self.assertEqual(record.meta["last_seen"], {"LAST": ["t3"]})
-        self.assertEqual(record.meta["first_seen"], {"FIRST": ["t1"]})
+        self.assertEqual(record.meta["count"], 3)
+        self.assertEqual(record.meta["last_seen"], "t3")
+        self.assertEqual(record.meta["first_seen"], "t1")
         self.assertEqual(record.tokens, tokens)  # the set explains what the ID means
 
     def test_first_and_last_records_are_kept_in_their_envelopes(self):
@@ -62,16 +62,16 @@ class UpsertReconciliationTests(unittest.TestCase):
         def envelopes(*ns):
             return [{"meta": {"seen": f"t{i}"}, "record": {"n": i}} for i in ns]
 
-        self.assertEqual(meta["first"], {"FIRST": envelopes(0, 1, 2)})
-        self.assertEqual(meta["last"], {"LAST": envelopes(2, 3, 4)})
+        self.assertEqual(meta["first"], envelopes(0, 1, 2))
+        self.assertEqual(meta["last"], envelopes(2, 3, 4))
 
     def test_record_fields_named_like_built_ins_do_not_clash(self):
         fingerprints = FingerprintSet(aggregates=[Aggregate("count", "$.count", "SUM")])
         fingerprints.upsert({"k": "v"}, {"count": 10, "meta": "x"}, timestamp="t")
         record = fingerprints.get(fingerprint_id({"k": "v"}))
-        self.assertEqual(record.aggregates["count"], {"SUM": 10})
-        self.assertEqual(record.meta["count"], {"COUNT": 1})
-        self.assertEqual(record.meta["first"]["FIRST"][0]["record"], {"count": 10, "meta": "x"})
+        self.assertEqual(record.aggregates["count"], 10)
+        self.assertEqual(record.meta["count"], 1)
+        self.assertEqual(record.meta["first"][0]["record"], {"count": 10, "meta": "x"})
 
     def test_samples_are_copies_and_saved_without_yaml_aliases(self):
         event = {"n": 1}
@@ -79,7 +79,7 @@ class UpsertReconciliationTests(unittest.TestCase):
         fingerprints.upsert({"k": "v"}, event, timestamp="t")
         event["n"] = 99
         meta = fingerprints.get(fingerprint_id({"k": "v"})).meta
-        self.assertEqual(meta["first"]["FIRST"][0]["record"], {"n": 1})
+        self.assertEqual(meta["first"][0]["record"], {"n": 1})
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "set.yaml")
             fingerprints.save(path)
@@ -122,7 +122,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         for i in range(5):
             wh.upsert(tokens, {"seq": i, "duration_ms": 1.0}, timestamp=f"t{i}")
 
-        samples = wh.get(fingerprint_id(tokens)).aggregates["samples"]["LAST"]
+        samples = wh.get(fingerprint_id(tokens)).aggregates["samples"]
         # oldest (seq 0, 1) rotated out; newest 3 retained in order
         self.assertEqual([s["seq"] for s in samples], [2, 3, 4])
 
@@ -144,8 +144,8 @@ class AggregatedUpsertTests(unittest.TestCase):
         wh.upsert({"k": "1"}, {"size": 2}, timestamp="t")
 
         record = wh.get(fingerprint_id({"k": "1"}))
-        self.assertEqual(record.meta["count"], {"COUNT": 3})
-        self.assertEqual(record.aggregates["size"], {"SUM": 2})
+        self.assertEqual(record.meta["count"], 3)
+        self.assertEqual(record.aggregates["size"], 2)
         self.assertEqual(wh.skipped_values, 2)
 
 
@@ -174,7 +174,7 @@ class PersistenceTests(unittest.TestCase):
 
         with open(self.path) as f:
             data = yaml.safe_load(f)
-        self.assertEqual(data["version"], 2)
+        self.assertEqual(data["version"], 3)
         self.assertEqual(data["profile_id"], "p1")
         self.assertEqual(list(data["fingerprints"]), [fingerprint_id({"a": "1"})])
 

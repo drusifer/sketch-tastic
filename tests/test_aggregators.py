@@ -6,9 +6,10 @@ from fingerprint_sampler.aggregators import Aggregate
 
 
 def fold(entry, records, state=None):
-    state = {} if state is None else state
-    skipped = sum(entry.update(state, record) for record in records)
-    return state, skipped
+    """Fold records into one aggregate. Returns (its state, values skipped)."""
+    states = {} if state is None else {entry.key: state}
+    skipped = sum(entry.update(states, record) for record in records)
+    return states.get(entry.key, {}), skipped
 
 
 class BuildTests(unittest.TestCase):
@@ -23,6 +24,7 @@ class BuildTests(unittest.TestCase):
             ("$.d", "LAST(3)", "is not one of ['SUM', 'MIN', 'MAX', 'AVG', 'COUNT']"),
             ("$.d", "min", "is not one of"),
             ("$.d", {"name": "LAST"}, "'n' is a required property"),
+            ("$.d", "FIRST", "is not one of ['SUM', 'MIN', 'MAX', 'AVG', 'COUNT']"),
             ("$.d", {"name": "LAST", "n": 0}, "n: 0 is less than the minimum of 1"),
             ("$.d", {"name": "MEDIAN"}, "name: 'MEDIAN' is not one of"),
             ("$.d", {"name": "SUM", "n": 2}, "('n' was unexpected)"),
@@ -49,8 +51,8 @@ class NumericAggregatorTests(unittest.TestCase):
 
     def test_integer_inputs_keep_integer_sum(self):
         state, _ = fold(Aggregate("d", "$.d", "SUM"), [{"d": 2}, {"d": 3}])
-        self.assertEqual(state["SUM"], 5)
-        self.assertIsInstance(state["SUM"], int)
+        self.assertEqual(state, 5)  # one function: the value itself
+        self.assertIsInstance(state, int)
 
     def test_numeric_strings_are_accepted(self):
         state, skipped = fold(Aggregate("d", "$.d", ["SUM", "MAX"]), [{"d": "2.5"}, {"d": "4"}])
@@ -82,31 +84,55 @@ class LastAggregatorTests(unittest.TestCase):
     def test_keeps_newest_n_in_arrival_order(self):
         entry = Aggregate("s", "$", {"name": "LAST", "n": 3})
         state, _ = fold(entry, [{"seq": i} for i in range(5)])
-        self.assertEqual([s["seq"] for s in state["LAST"]], [2, 3, 4])
+        self.assertEqual([s["seq"] for s in state], [2, 3, 4])
 
     def test_stores_any_json_value_including_null_and_strings(self):
         entry = Aggregate("s", "$.v", {"name": "LAST", "n": 5})
         state, skipped = fold(entry, [{"v": "a"}, {"v": None}, {"v": {"x": 1}}])
-        self.assertEqual(state["LAST"], ["a", None, {"x": 1}])
+        self.assertEqual(state, ["a", None, {"x": 1}])
         self.assertEqual(skipped, 0)
 
     def test_stored_samples_do_not_alias_the_input_record(self):
         record = {"seq": 1}
         state, _ = fold(Aggregate("s", "$", {"name": "LAST", "n": 2}), [record])
         record["seq"] = 99
-        self.assertEqual(state["LAST"], [{"seq": 1}])
+        self.assertEqual(state, [{"seq": 1}])
 
 
 class CountAndFirstTests(unittest.TestCase):
     def test_count_counts_every_selected_value_of_any_type(self):
         state, skipped = fold(Aggregate("c", "$.v", "COUNT"), [{"v": "a"}, {"v": None}, {"v": 2}])
-        self.assertEqual((state, skipped), ({"COUNT": 3}, 0))
+        self.assertEqual((state, skipped), (3, 0))
 
     def test_first_keeps_the_earliest_n(self):
         state, _ = fold(
             Aggregate("f", "$.v", {"name": "FIRST", "n": 2}), [{"v": i} for i in range(5)]
         )
-        self.assertEqual(state, {"FIRST": [0, 1]})
+        self.assertEqual(state, [0, 1])
+
+    def test_first_keeps_an_explicit_null(self):
+        state, _ = fold(Aggregate("f", "$.v", {"name": "FIRST", "n": 1}), [{"v": None}, {"v": 1}])
+        self.assertEqual(state, [None])
+
+    def test_several_functions_are_kept_by_name(self):
+        state, _ = fold(Aggregate("t", "$.v", ["MIN", "MAX", "COUNT"]), [{"v": "b"}, {"v": "a"}])
+        self.assertEqual(state, {"MIN": "a", "MAX": "b", "COUNT": 2})
+
+
+class OrderedMinMaxTests(unittest.TestCase):
+    def test_iso_timestamps_compare_as_text_whatever_the_arrival_order(self):
+        times = ["2024-01-01T15:00:05Z", "2024-01-01T15:00:01Z", "2024-01-01T15:00:09Z"]
+        state, skipped = fold(Aggregate("t", "$.t", ["MIN", "MAX"]), [{"t": t} for t in times])
+        self.assertEqual(state, {"MIN": "2024-01-01T15:00:01Z", "MAX": "2024-01-01T15:00:09Z"})
+        self.assertEqual(skipped, 0)
+
+    def test_numeric_strings_still_compare_as_numbers(self):
+        state, _ = fold(Aggregate("n", "$.n", "MAX"), [{"n": "9"}, {"n": "10"}])
+        self.assertEqual(state, 10)
+
+    def test_a_value_of_another_kind_is_skipped_and_counted(self):
+        state, skipped = fold(Aggregate("m", "$.m", "MIN"), [{"m": 3}, {"m": "abc"}, {"m": None}])
+        self.assertEqual((state, skipped), (3, 2))
 
 
 class MergeabilityTests(unittest.TestCase):
@@ -127,8 +153,8 @@ class MergeabilityTests(unittest.TestCase):
         state, _ = fold(
             Aggregate("s", "$.v", {"name": "LAST", "n": 5}), [{"v": i} for i in range(5)]
         )
-        fold(Aggregate("s", "$.v", {"name": "LAST", "n": 2}), [{"v": 5}], state=state)
-        self.assertEqual(state["LAST"], [4, 5])
+        state, _ = fold(Aggregate("s", "$.v", {"name": "LAST", "n": 2}), [{"v": 5}], state=state)
+        self.assertEqual(state, [4, 5])
 
 
 class AggregateValueTests(unittest.TestCase):

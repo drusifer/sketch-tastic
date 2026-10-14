@@ -21,7 +21,7 @@ import yaml
 
 from fingerprint_sampler.aggregators import Aggregate
 
-SET_VERSION = 2
+SET_VERSION = 3
 
 
 class FingerprintSetError(ValueError):
@@ -49,9 +49,9 @@ def fingerprint_id(tokens: dict[str, str]) -> str:
 @dataclass
 class Fingerprint:
     tokens: dict[str, str]
-    aggregates: dict[str, dict] = field(default_factory=dict)
+    aggregates: dict[str, Any] = field(default_factory=dict)
     """What the profile asked for, keyed by its aggregate keys."""
-    meta: dict[str, dict] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
     """The built-in metadata (`builtin.yaml`): count, first/last seen, first/last records."""
 
 
@@ -62,15 +62,9 @@ def builtin_aggregates() -> tuple[Aggregate, ...]:
     return tuple(Aggregate(**raw) for raw in yaml.safe_load(text)["aggregates"])
 
 
-def _fold(aggregates: Sequence[Aggregate], states: dict[str, dict], event: Any) -> int:
+def _fold(aggregates: Sequence[Aggregate], states: dict[str, Any], event: Any) -> int:
     """Fold `event` into each aggregate's state. Returns how many values were skipped."""
-    skipped = 0
-    for aggregate in aggregates:
-        state = states.setdefault(aggregate.key, {})
-        skipped += aggregate.update(state, event)
-        if not state:
-            del states[aggregate.key]
-    return skipped
+    return sum(aggregate.update(states, event) for aggregate in aggregates)
 
 
 class FingerprintSet:

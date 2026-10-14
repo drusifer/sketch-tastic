@@ -29,9 +29,12 @@ aggregates:
   - key: commits                   # PushEvent commit counts
     path: $.payload.size
     fn: [SUM, AVG, MAX]
-  - key: event_time                # event time from the records (built-in times are wall clock)
+  - key: first_event_time          # event time from the records (built-in times are wall clock)
     path: $.created_at
-    fn: [{name: FIRST, n: 1}, {name: LAST, n: 1}]
+    fn: MIN
+  - key: last_event_time
+    path: $.created_at
+    fn: MAX
   - key: repos                     # a few recent repositories with this shape
     path: $.repo.name
     fn: {name: LAST, n: 5}

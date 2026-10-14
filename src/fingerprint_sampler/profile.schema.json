@@ -464,7 +464,7 @@
                 "n": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "how many earliest values to keep"
+                  "description": "how many values to keep"
                 }
               },
               "additionalProperties": false,
@@ -490,7 +490,7 @@
                 "n": {
                   "type": "integer",
                   "minimum": 1,
-                  "description": "how many recent values to keep"
+                  "description": "how many values to keep"
                 }
               },
               "additionalProperties": false,

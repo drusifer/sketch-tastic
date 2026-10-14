@@ -13,89 +13,120 @@ from __future__ import annotations
 import copy
 import math
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any
 
 from fingerprint_sampler.model import Path, Rule
 
 __all__ = ["Aggregate", "Aggregator", "Avg", "Count", "First", "Last", "Max", "Min", "Sum"]
 
 
+EMPTY = object()
+"""The state of an aggregate function that has not seen a value yet."""
+
+SKIP = object()
+"""Returned by `Aggregator.accept` for a value the function cannot use."""
+
+
 class Aggregator(Rule):
-    """Folds one value into the state of an aggregate. Numeric ones only see numbers."""
+    """Folds one value into an aggregate function's state."""
 
     family = "aggregator"
-    numeric: ClassVar[bool] = True
 
-    def update(self, state: dict, value: Any) -> None:
+    def accept(self, _state: Any, value: Any) -> Any:
+        """The value to fold, or SKIP if this function cannot use it. Any value by default."""
+        return value
+
+    def fold(self, state: Any, value: Any) -> Any:
+        """Return the new state after `value`; `state` is EMPTY before the first value."""
         raise NotImplementedError
 
 
+class _Numeric(Aggregator):
+    """Uses numbers and numeric strings only."""
+
+    def accept(self, _state: Any, value: Any) -> Any:
+        number = _as_number(value)
+        return SKIP if number is None else number
+
+
+class _Ordered(Aggregator):
+    """Uses numbers (and numeric strings), or text such as ISO-8601 times; not a mix."""
+
+    def accept(self, state: Any, value: Any) -> Any:
+        number = _as_number(value)
+        if number is not None:
+            value = number
+        elif not isinstance(value, str):
+            return SKIP
+        if state is not EMPTY and isinstance(state, str) != isinstance(value, str):
+            return SKIP
+        return value
+
+
 @dataclass(frozen=True, kw_only=True)
-class Sum(Aggregator):
+class Sum(_Numeric):
     name = "SUM"
 
-    def update(self, state: dict, value: Any) -> None:
-        state["SUM"] = state.get("SUM", 0) + value
+    def fold(self, state: Any, value: Any) -> Any:
+        return value if state is EMPTY else state + value
 
 
 @dataclass(frozen=True, kw_only=True)
-class Min(Aggregator):
+class Min(_Ordered):
     name = "MIN"
 
-    def update(self, state: dict, value: Any) -> None:
-        state["MIN"] = min(state.get("MIN", value), value)
+    def fold(self, state: Any, value: Any) -> Any:
+        return value if state is EMPTY else min(state, value)
 
 
 @dataclass(frozen=True, kw_only=True)
-class Max(Aggregator):
+class Max(_Ordered):
     name = "MAX"
 
-    def update(self, state: dict, value: Any) -> None:
-        state["MAX"] = max(state.get("MAX", value), value)
+    def fold(self, state: Any, value: Any) -> Any:
+        return value if state is EMPTY else max(state, value)
 
 
 @dataclass(frozen=True, kw_only=True)
-class Avg(Aggregator):
+class Avg(_Numeric):
     name = "AVG"
 
-    def update(self, state: dict, value: Any) -> None:
-        avg = state.setdefault("AVG", {"avg": 0, "sum": 0, "count": 0})
-        avg["sum"] += value
-        avg["count"] += 1
-        avg["avg"] = avg["sum"] / avg["count"]
+    def fold(self, state: Any, value: Any) -> Any:
+        total, count = (0, 0) if state is EMPTY else (state["sum"], state["count"])
+        total, count = total + value, count + 1
+        return {"avg": total / count, "sum": total, "count": count}
 
 
 @dataclass(frozen=True, kw_only=True)
 class Count(Aggregator):
     name = "COUNT"
-    numeric = False
 
-    def update(self, state: dict, value: Any) -> None:
-        state["COUNT"] = state.get("COUNT", 0) + 1
+    def fold(self, state: Any, _value: Any) -> Any:
+        return 1 if state is EMPTY else state + 1
 
 
 @dataclass(frozen=True, kw_only=True)
 class First(Aggregator):
+    """The first `n` values."""
+
     name = "FIRST"
-    numeric = False
     n: int
 
-    def update(self, state: dict, value: Any) -> None:
-        samples = state.setdefault("FIRST", [])
-        if len(samples) < self.n:
-            samples.append(copy.deepcopy(value))
+    def fold(self, state: Any, value: Any) -> Any:
+        samples = [] if state is EMPTY else state
+        return samples if len(samples) >= self.n else [*samples, copy.deepcopy(value)]
 
 
 @dataclass(frozen=True, kw_only=True)
 class Last(Aggregator):
+    """The latest `n` values."""
+
     name = "LAST"
-    numeric = False
     n: int
 
-    def update(self, state: dict, value: Any) -> None:
-        samples = state.setdefault("LAST", [])
-        samples.append(copy.deepcopy(value))
-        del samples[: -self.n]
+    def fold(self, state: Any, value: Any) -> Any:
+        samples = [] if state is EMPTY else state
+        return [*samples, copy.deepcopy(value)][-self.n :]
 
 
 def _as_number(value: Any) -> int | float | None:
@@ -135,22 +166,36 @@ class Aggregate:
         object.__setattr__(self, "path", Path.of(self.path))
         object.__setattr__(self, "fn", functions)
 
-    def update(self, state: dict, event: Any) -> int:
-        """Fold one event into `state`. Returns how many values were skipped.
+    def update(self, states: dict, event: Any) -> int:
+        """Fold one event into `states[self.key]`. Returns how many values were skipped.
 
-        One is skipped if the path selected nothing; otherwise one per selected value that a
-        numeric function could not use.
+        With one function the state is stored directly (`count: 12`); with several it is a
+        map by function name (`{SUM: .., MAX: ..}`). One value is skipped if the path selected
+        nothing, and one per selected value that one of its functions could not use.
         """
         values = self.path.values(event)
         if not values:
             return 1
         skipped = 0
         for value in values:
-            number = _as_number(value)
+            unusable = False
             for function in self.fn:
-                if not function.numeric:
-                    function.update(state, value)
-                elif number is not None:
-                    function.update(state, number)
-            skipped += number is None and any(f.numeric for f in self.fn)
+                state = self._state(states, function)
+                accepted = function.accept(state, value)
+                if accepted is SKIP:
+                    unusable = True
+                else:
+                    self._store(states, function, function.fold(state, accepted))
+            skipped += unusable
         return skipped
+
+    def _state(self, states: dict, function: Aggregator) -> Any:
+        if len(self.fn) == 1:
+            return states.get(self.key, EMPTY)
+        return states.get(self.key, {}).get(function.name, EMPTY)
+
+    def _store(self, states: dict, function: Aggregator, state: Any) -> None:
+        if len(self.fn) == 1:
+            states[self.key] = state
+        else:
+            states.setdefault(self.key, {})[function.name] = state
