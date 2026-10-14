@@ -31,9 +31,11 @@ aggregates:
     fn: [SUM, AVG, MAX]
   - key: first_event_time          # event time from the records (built-in times are wall clock)
     path: $.created_at
+    type: DATETIME
     fn: MIN
   - key: last_event_time
     path: $.created_at
+    type: DATETIME
     fn: MAX
   - key: repos                     # a few recent repositories with this shape
     path: $.repo.name

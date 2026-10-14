@@ -36,7 +36,7 @@ class ProfileError(ValueError):
 
 def profile_id(fields: tuple[Field, ...] | list[Field]) -> str:
     """Stable ID of the identity-defining part of a profile (order-independent)."""
-    lines = sorted(f"{f.key}|{f.path.text}|{f.modifier.spec}" for f in fields)
+    lines = sorted(f.spec for f in fields)
     return hashlib.md5("\n".join(lines).encode("utf-8")).hexdigest()
 
 

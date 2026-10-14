@@ -51,6 +51,9 @@
         },
         "modifier": {
           "$ref": "#/$defs/modifier"
+        },
+        "type": {
+          "$ref": "#/$defs/valuetype"
         }
       }
     },
@@ -81,7 +84,8 @@
               "ANY",
               "GLOB",
               "REGEX",
-              "REGSUB"
+              "REGSUB",
+              "TRUNC"
             ]
           }
         },
@@ -288,6 +292,37 @@
                 "replace"
               ]
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "TRUNC"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "unit": {
+                  "enum": [
+                    "year",
+                    "month",
+                    "day",
+                    "hour",
+                    "minute",
+                    "second"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "unit"
+              ]
+            }
           }
         ]
       }
@@ -321,6 +356,9 @@
           "else": {
             "$ref": "#/$defs/aggregator"
           }
+        },
+        "type": {
+          "$ref": "#/$defs/valuetype"
         }
       }
     },
@@ -501,6 +539,13 @@
           }
         ]
       }
+    },
+    "valuetype": {
+      "description": "What the path's values are: ISO-8601 DATE or DATETIME.",
+      "enum": [
+        "DATE",
+        "DATETIME"
+      ]
     }
   }
 }

@@ -13,9 +13,10 @@ from __future__ import annotations
 import copy
 import math
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any
 
-from fingerprint_sampler.model import Path, Rule
+from fingerprint_sampler.model import MISSING, Path, Rule, ValueType, typed_values
 
 __all__ = ["Aggregate", "Aggregator", "Avg", "Count", "First", "Last", "Max", "Min", "Sum"]
 
@@ -49,16 +50,22 @@ class _Numeric(Aggregator):
         return SKIP if number is None else number
 
 
+def _kind(value: Any) -> str:
+    if isinstance(value, datetime):
+        return "datetime"
+    return "date" if isinstance(value, date) else "text" if isinstance(value, str) else "number"
+
+
 class _Ordered(Aggregator):
-    """Uses numbers (and numeric strings), or text such as ISO-8601 times; not a mix."""
+    """Uses numbers (and numeric strings), dates, datetimes or text; one kind, not a mix."""
 
     def accept(self, state: Any, value: Any) -> Any:
         number = _as_number(value)
         if number is not None:
             value = number
-        elif not isinstance(value, str):
+        elif not isinstance(value, (str, date)):
             return SKIP
-        if state is not EMPTY and isinstance(state, str) != isinstance(value, str):
+        if state is not EMPTY and _kind(state) != _kind(value):
             return SKIP
         return value
 
@@ -155,8 +162,11 @@ class Aggregate:
     key: str
     path: Path
     fn: tuple[Aggregator, ...]
+    type: ValueType | None = None
 
     def __post_init__(self) -> None:
+        if self.type is not None:
+            object.__setattr__(self, "type", ValueType.build(self.type))
         specs = self.fn if isinstance(self.fn, (list, tuple)) else [self.fn]
         functions = tuple(Aggregator.build(spec) for spec in specs)
         names = [f.name for f in functions]
@@ -177,7 +187,10 @@ class Aggregate:
         if not values:
             return 1
         skipped = 0
-        for value in values:
+        for value in typed_values(values, self.type):
+            if value is MISSING:  # did not convert to the declared type
+                skipped += 1
+                continue
             unusable = False
             for function in self.fn:
                 state = self._state(states, function)

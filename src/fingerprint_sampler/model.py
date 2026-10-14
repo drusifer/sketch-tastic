@@ -12,6 +12,7 @@ import fnmatch
 import json
 import re
 from dataclasses import asdict, dataclass, field
+from datetime import date, datetime, timezone
 from functools import cache, cached_property
 from typing import Any, ClassVar, Self
 
@@ -22,6 +23,8 @@ from fingerprint_sampler.schema import schema_errors
 __all__ = [
     "MISSING",
     "AnyOf",
+    "DateType",
+    "DatetimeType",
     "Default",
     "Field",
     "Glob",
@@ -33,7 +36,10 @@ __all__ = [
     "RegSub",
     "Regex",
     "Rule",
+    "Trunc",
+    "ValueType",
     "tokens",
+    "typed_values",
 ]
 
 MISSING = object()
@@ -145,7 +151,7 @@ class Default(Modifier):
     absent = "NULL"
 
     def present(self, value: Any) -> str:
-        return str(value)
+        return value.isoformat() if isinstance(value, date) else str(value)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -243,6 +249,77 @@ class RegSub(Regex):
         return self.regex.sub(self.replace, str(value))
 
 
+_TRUNC_FORMATS = {
+    "year": "%Y",
+    "month": "%Y-%m",
+    "day": "%Y-%m-%d",
+    "hour": "%Y-%m-%dT%H",
+    "minute": "%Y-%m-%dT%H:%M",
+    "second": "%Y-%m-%dT%H:%M:%S",
+}
+
+
+@dataclass(frozen=True, kw_only=True)
+class Trunc(Modifier):
+    """A date or time cut down to `unit`, e.g. hour -> "2024-01-01T15". Needs a DATE/DATETIME type."""
+
+    name = "TRUNC"
+    absent = "NULL"
+    unit: str
+
+    def present(self, value: Any) -> str:
+        return value.strftime(_TRUNC_FORMATS[self.unit]) if isinstance(value, date) else "NULL"
+
+
+class ValueType(Rule):
+    """What a path's values are. `convert` returns the typed value, or None if it isn't one."""
+
+    family = "valuetype"
+
+    def convert(self, value: Any) -> Any:
+        raise NotImplementedError
+
+
+def _utc(moment: datetime) -> datetime:
+    return (
+        moment.replace(tzinfo=timezone.utc)
+        if moment.tzinfo is None
+        else moment.astimezone(timezone.utc)
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class DatetimeType(ValueType):
+    """An ISO-8601 datetime, compared in UTC (a time without a zone is taken as UTC)."""
+
+    name = "DATETIME"
+
+    def convert(self, value: Any) -> datetime | None:
+        try:
+            return _utc(datetime.fromisoformat(value)) if isinstance(value, str) else None
+        except ValueError:
+            return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class DateType(ValueType):
+    """An ISO-8601 date (or the UTC date of an ISO-8601 datetime)."""
+
+    name = "DATE"
+
+    def convert(self, value: Any) -> date | None:
+        moment = DatetimeType().convert(value)
+        return moment.date() if moment else None
+
+
+def typed_values(values: list[Any], value_type: ValueType | None) -> list[Any]:
+    """Convert values to `value_type`; one that won't convert becomes MISSING (null stays null)."""
+    if value_type is None:
+        return values
+    converted = [(value, value_type.convert(value)) for value in values]
+    return [MISSING if new is None and old is not None else new for old, new in converted]
+
+
 @dataclass(frozen=True)
 class Field:
     """One part of a fingerprint's identity: the token `modifier` makes of what `path` selects.
@@ -254,14 +331,25 @@ class Field:
     key: str
     path: Path
     modifier: Modifier = field(default="DEFAULT")
+    type: ValueType | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "path", Path.of(self.path))
         object.__setattr__(self, "modifier", Modifier.build(self.modifier))
+        if self.type is not None:
+            object.__setattr__(self, "type", ValueType.build(self.type))
+        if isinstance(self.modifier, Trunc) and not isinstance(self.type, (DateType, DatetimeType)):
+            raise ValueError("TRUNC needs type DATE or DATETIME on the field")
+
+    @property
+    def spec(self) -> str:
+        """This field's part of the profile id."""
+        text = f"{self.key}|{self.path.text}|{self.modifier.spec}"
+        return f"{text}|{self.type.spec}" if self.type else text
 
     def token(self, event: Any) -> str:
         """No match is tokenized as missing; several are tokenized, de-duplicated, sorted, joined."""
-        values = self.path.values(event) or [MISSING]
+        values = typed_values(self.path.values(event), self.type) or [MISSING]
         return ",".join(sorted({self.modifier.token(value) for value in values}))
 
 

@@ -88,8 +88,8 @@ fingerprints:
       - query ok (cached)
     meta:
       count: 2
-      first_seen: '2026-10-14T03:59:19.796868+00:00'
-      last_seen: '2026-10-14T03:59:19.796991+00:00'
+      first_seen: 2026-10-14 03:59:19.796868+00:00
+      last_seen: 2026-10-14 03:59:19.796991+00:00
       first:
       - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
         record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
@@ -197,6 +197,7 @@ values (IDs, timestamps, sizes) so similar events share a fingerprint:
 | `GLOB` | `pattern` | `TRUE` if the whole value matches the shell-style pattern (`*`, `?`, `[a-z]`), case-sensitive |
 | `REGEX` | `pattern`, optional `flags` | `TRUE` if the regular expression matches anywhere in the value; anchor with `^` and `$` |
 | `REGSUB` | `pattern`, `replace`, optional `flags` | the value with every match replaced (`\1` refers to a group); `NULL` if absent |
+| `TRUNC` | `unit` | a `DATE`/`DATETIME` value cut to `year` … `second`, e.g. hour → `2024-01-01T15` |
 
 A modifier without arguments is written as its bare name (`modifier: IS_PRESENT`); one with
 arguments is a mapping with `name` and its arguments:
@@ -228,12 +229,25 @@ YAML leaves backslashes alone there, and a pattern starting with `*`, `[` or `{`
 `: ` or ` #`, would otherwise not parse as you meant. Changing a field's modifier changes the
 profile's identity, like any other change to `fields`.
 
+**Dates and times.** Add `type: DATETIME` (or `type: DATE`) to a field or aggregate whose path
+holds ISO-8601 text. Values are compared as real times in UTC, so `MIN`/`MAX` are right across
+time zones, and the set stores them as YAML timestamps. A value that isn't valid ISO-8601 counts as
+missing (and is skipped by aggregates). For fields, `TRUNC` buckets a time so events group
+together:
+
+```yaml
+  - key: hour
+    path: $.created_at
+    type: DATETIME
+    modifier: {name: TRUNC, unit: hour}     # year, month, day, hour, minute or second
+```
+
 **Aggregates** are computed across every event that lands on the same fingerprint, over all runs:
 
 | Function | Keeps |
 |---|---|
 | `SUM` | running sum of numbers |
-| `MIN`, `MAX` | smallest / largest — numbers, or text such as ISO-8601 times (same format and zone) |
+| `MIN`, `MAX` | smallest / largest — numbers, dates and times (with `type`), or text |
 | `AVG` | the average, with the sum and count that make it mergeable |
 | `COUNT` | how many values the path selected (of any type) |
 | `{name: FIRST, n: N}` | the `N` earliest values of the path |

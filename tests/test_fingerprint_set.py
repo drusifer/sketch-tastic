@@ -3,6 +3,7 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 
 import yaml
 
@@ -42,15 +43,18 @@ class UpsertReconciliationTests(unittest.TestCase):
         wh = FingerprintSet()
         tokens = {"hook_syscall": "sys_connect"}
 
-        wh.upsert(tokens, {"n": 1}, timestamp="t1")
-        wh.upsert(tokens, {"n": 2}, timestamp="t2")
-        wh.upsert(tokens, {"n": 3}, timestamp="t3")
+        for second in (1, 2, 3):
+            wh.upsert(tokens, {"n": second}, timestamp=f"2024-01-01T15:00:0{second}+00:00")
 
         self.assertEqual(len(wh), 1)  # entry list count stays flat
         record = wh.get(fingerprint_id(tokens))
         self.assertEqual(record.meta["count"], 3)
-        self.assertEqual(record.meta["last_seen"], "t3")
-        self.assertEqual(record.meta["first_seen"], "t1")
+        self.assertEqual(
+            record.meta["first_seen"], datetime(2024, 1, 1, 15, 0, 1, tzinfo=timezone.utc)
+        )
+        self.assertEqual(
+            record.meta["last_seen"], datetime(2024, 1, 1, 15, 0, 3, tzinfo=timezone.utc)
+        )
         self.assertEqual(record.tokens, tokens)  # the set explains what the ID means
 
     def test_first_and_last_records_are_kept_in_their_envelopes(self):
