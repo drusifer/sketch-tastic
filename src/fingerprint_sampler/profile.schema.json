@@ -25,12 +25,6 @@
       "items": {
         "$ref": "#/$defs/aggregate"
       }
-    },
-    "samples": {
-      "type": "integer",
-      "minimum": 0,
-      "default": 3,
-      "description": "How many of the first and of the last events each fingerprint keeps, with the time each was seen. 0 keeps none."
     }
   },
   "$defs": {
@@ -331,7 +325,7 @@
       }
     },
     "aggregator": {
-      "description": "SUM, MIN, MAX or AVG as a bare name, or a mapping with name (and n for LAST).",
+      "description": "SUM, MIN, MAX, AVG or COUNT as a bare name, or a mapping with name (and n for FIRST and LAST).",
       "if": {
         "type": "string"
       },
@@ -340,7 +334,8 @@
           "SUM",
           "MIN",
           "MAX",
-          "AVG"
+          "AVG",
+          "COUNT"
         ]
       },
       "else": {
@@ -355,6 +350,8 @@
               "MIN",
               "MAX",
               "AVG",
+              "COUNT",
+              "FIRST",
               "LAST"
             ]
           }
@@ -430,6 +427,50 @@
                 "name": true
               },
               "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "COUNT"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "FIRST"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "how many earliest values to keep"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "n"
+              ]
             }
           },
           {

@@ -20,7 +20,7 @@ class BuildTests(unittest.TestCase):
     def test_rejects_with_a_reason(self):
         cases = [
             ("$.d[", "MIN", "Invalid JSONPath"),
-            ("$.d", "LAST(3)", "is not one of ['SUM', 'MIN', 'MAX', 'AVG']"),
+            ("$.d", "LAST(3)", "is not one of ['SUM', 'MIN', 'MAX', 'AVG', 'COUNT']"),
             ("$.d", "min", "is not one of"),
             ("$.d", {"name": "LAST"}, "'n' is a required property"),
             ("$.d", {"name": "LAST", "n": 0}, "n: 0 is less than the minimum of 1"),
@@ -95,6 +95,18 @@ class LastAggregatorTests(unittest.TestCase):
         state, _ = fold(Aggregate("s", "$", {"name": "LAST", "n": 2}), [record])
         record["seq"] = 99
         self.assertEqual(state["LAST"], [{"seq": 1}])
+
+
+class CountAndFirstTests(unittest.TestCase):
+    def test_count_counts_every_selected_value_of_any_type(self):
+        state, skipped = fold(Aggregate("c", "$.v", "COUNT"), [{"v": "a"}, {"v": None}, {"v": 2}])
+        self.assertEqual((state, skipped), ({"COUNT": 3}, 0))
+
+    def test_first_keeps_the_earliest_n(self):
+        state, _ = fold(
+            Aggregate("f", "$.v", {"name": "FIRST", "n": 2}), [{"v": i} for i in range(5)]
+        )
+        self.assertEqual(state, {"FIRST": [0, 1]})
 
 
 class MergeabilityTests(unittest.TestCase):

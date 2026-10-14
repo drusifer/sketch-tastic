@@ -17,7 +17,7 @@ from typing import Any, ClassVar
 
 from fingerprint_sampler.model import Path, Rule
 
-__all__ = ["Aggregate", "Aggregator", "Avg", "Last", "Max", "Min", "Sum"]
+__all__ = ["Aggregate", "Aggregator", "Avg", "Count", "First", "Last", "Max", "Min", "Sum"]
 
 
 class Aggregator(Rule):
@@ -63,6 +63,27 @@ class Avg(Aggregator):
         avg["sum"] += value
         avg["count"] += 1
         avg["avg"] = avg["sum"] / avg["count"]
+
+
+@dataclass(frozen=True, kw_only=True)
+class Count(Aggregator):
+    name = "COUNT"
+    numeric = False
+
+    def update(self, state: dict, value: Any) -> None:
+        state["COUNT"] = state.get("COUNT", 0) + 1
+
+
+@dataclass(frozen=True, kw_only=True)
+class First(Aggregator):
+    name = "FIRST"
+    numeric = False
+    n: int
+
+    def update(self, state: dict, value: Any) -> None:
+        samples = state.setdefault("FIRST", [])
+        if len(samples) < self.n:
+            samples.append(copy.deepcopy(value))
 
 
 @dataclass(frozen=True, kw_only=True)

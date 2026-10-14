@@ -217,22 +217,6 @@ fields:
         self.assertEqual(result, {"route": "/items/N", "greeting": "TRUE"})
 
 
-class SamplesSettingTests(unittest.TestCase):
-    def test_defaults_to_three_and_accepts_zero(self):
-        self.assertEqual(parse_profile(VALID).samples, 3)
-        self.assertEqual(parse_profile(variant(samples=0)).samples, 0)
-
-    def test_must_be_a_non_negative_integer(self):
-        for bad in (-1, "3", 1.5):
-            with self.subTest(samples=bad), self.assertRaises(ProfileError):
-                parse_profile(variant(samples=bad))
-
-    def test_does_not_change_the_profile_id(self):
-        self.assertEqual(
-            parse_profile(variant(samples=0)).profile_id, parse_profile(VALID).profile_id
-        )
-
-
 class ProfileIdTests(unittest.TestCase):
     def test_is_32_char_hex_and_stable(self):
         pid = parse_profile(VALID).profile_id

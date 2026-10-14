@@ -1,0 +1,10 @@
+# Built-in metadata, kept for every fingerprint under `meta`.
+# These aggregates read an envelope, not the bare record:
+#   {meta: {seen: <wall-clock time the record was read>}, record: <the record, parsed from its JSONL line>}
+# so injected fields can never clash with the record's own.
+aggregates:
+  - {key: count,      path: $.meta.seen, fn: COUNT}
+  - {key: first_seen, path: $.meta.seen, fn: {name: FIRST, n: 1}}
+  - {key: last_seen,  path: $.meta.seen, fn: {name: LAST, n: 1}}
+  - {key: first,      path: $,           fn: {name: FIRST, n: 3}}
+  - {key: last,       path: $,           fn: {name: LAST, n: 3}}

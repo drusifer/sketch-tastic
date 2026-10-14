@@ -8,12 +8,13 @@ aggregators, so the set works for any event stream, not just eBPF telemetry.
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import os
 import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from functools import cache
+from importlib.resources import files
 from typing import Any, Iterator, Sequence
 
 import yaml
@@ -48,12 +49,28 @@ def fingerprint_id(tokens: dict[str, str]) -> str:
 @dataclass
 class Fingerprint:
     tokens: dict[str, str]
-    count: int
-    first_seen: str
-    last_seen: str
     aggregates: dict[str, dict] = field(default_factory=dict)
-    first: list[dict] = field(default_factory=list)
-    last: list[dict] = field(default_factory=list)
+    """What the profile asked for, keyed by its aggregate keys."""
+    meta: dict[str, dict] = field(default_factory=dict)
+    """The built-in metadata (`builtin.yaml`): count, first/last seen, first/last records."""
+
+
+@cache
+def builtin_aggregates() -> tuple[Aggregate, ...]:
+    """The aggregates every fingerprint gets, from the `builtin.yaml` shipped with the package."""
+    text = files("fingerprint_sampler").joinpath("builtin.yaml").read_text("utf-8")
+    return tuple(Aggregate(**raw) for raw in yaml.safe_load(text)["aggregates"])
+
+
+def _fold(aggregates: Sequence[Aggregate], states: dict[str, dict], event: Any) -> int:
+    """Fold `event` into each aggregate's state. Returns how many values were skipped."""
+    skipped = 0
+    for aggregate in aggregates:
+        state = states.setdefault(aggregate.key, {})
+        skipped += aggregate.update(state, event)
+        if not state:
+            del states[aggregate.key]
+    return skipped
 
 
 class FingerprintSet:
@@ -63,40 +80,28 @@ class FingerprintSet:
         self,
         aggregates: Sequence[Aggregate] = (),
         profile_id: str | None = None,
-        samples: int = 3,
     ) -> None:
         self._records: dict[str, Fingerprint] = {}
         self._aggregates = tuple(aggregates)
         self.profile_id = profile_id
-        self.samples = samples
         self.skipped_values = 0
-        """Running count of values the aggregates could not use (see `Aggregate.update`)."""
+        """Running count of values the profile's aggregates could not use."""
 
     def upsert(self, tokens: dict[str, str], record: Any, timestamp: str | None = None) -> str:
-        """Fold one event into the set. Returns its fingerprint_id.
+        """Fold one record into the set. Returns its fingerprint_id.
 
-        Every fingerprint gets the built-in metadata: `count`, wall-clock `first_seen` /
-        `last_seen`, and the first and last `samples` events with the time each was seen.
-        The profile's aggregates are folded over `record` as well.
+        The profile's aggregates read the record. The built-in ones read an envelope,
+        {"meta": {"seen": <timestamp>}, "record": record}, so injected fields never clash
+        with the record's own.
         """
         fid = fingerprint_id(tokens)
-        ts = timestamp or datetime.now(timezone.utc).isoformat()
-        existing = self._records.get(fid)
-        if existing is None:
-            existing = self._records[fid] = Fingerprint(dict(tokens), 0, ts, ts)
-        existing.count += 1
-        existing.last_seen = ts
-        if len(existing.first) < self.samples:
-            existing.first.append({"seen": ts, "event": copy.deepcopy(record)})
-        existing.last.append({"seen": ts, "event": copy.deepcopy(record)})
-        del existing.last[: max(len(existing.last) - self.samples, 0)]
-
-        for entry in self._aggregates:
-            state = existing.aggregates.setdefault(entry.key, {})
-            self.skipped_values += entry.update(state, record)
-            if not state:
-                del existing.aggregates[entry.key]
-
+        fingerprint = self._records.setdefault(fid, Fingerprint(dict(tokens)))
+        envelope = {
+            "meta": {"seen": timestamp or datetime.now(timezone.utc).isoformat()},
+            "record": record,
+        }
+        self.skipped_values += _fold(self._aggregates, fingerprint.aggregates, record)
+        _fold(builtin_aggregates(), fingerprint.meta, envelope)
         return fid
 
     def get(self, fingerprint_id_: str) -> Fingerprint | None:

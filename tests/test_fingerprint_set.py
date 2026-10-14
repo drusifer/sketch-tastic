@@ -48,38 +48,48 @@ class UpsertReconciliationTests(unittest.TestCase):
 
         self.assertEqual(len(wh), 1)  # entry list count stays flat
         record = wh.get(fingerprint_id(tokens))
-        self.assertEqual(record.count, 3)
-        self.assertEqual(record.last_seen, "t3")
-        self.assertEqual(record.first_seen, "t1")
+        self.assertEqual(record.meta["count"], {"COUNT": 3})
+        self.assertEqual(record.meta["last_seen"], {"LAST": ["t3"]})
+        self.assertEqual(record.meta["first_seen"], {"FIRST": ["t1"]})
         self.assertEqual(record.tokens, tokens)  # the set explains what the ID means
 
-    def test_first_and_last_samples_with_their_detection_time(self):
+    def test_first_and_last_records_are_kept_in_their_envelopes(self):
         fingerprints = FingerprintSet()
         for i in range(5):
             fingerprints.upsert({"k": "v"}, {"n": i}, timestamp=f"t{i}")
-        record = fingerprints.get(fingerprint_id({"k": "v"}))
-        self.assertEqual(record.first, [{"seen": f"t{i}", "event": {"n": i}} for i in (0, 1, 2)])
-        self.assertEqual(record.last, [{"seen": f"t{i}", "event": {"n": i}} for i in (2, 3, 4)])
+        meta = fingerprints.get(fingerprint_id({"k": "v"})).meta
 
-    def test_sample_count_comes_from_the_set_and_zero_keeps_none(self):
-        for samples, kept in ((1, 1), (0, 0)):
-            fingerprints = FingerprintSet(samples=samples)
-            for i in range(3):
-                fingerprints.upsert({"k": "v"}, {"n": i})
-            record = fingerprints.get(fingerprint_id({"k": "v"}))
-            self.assertEqual((len(record.first), len(record.last)), (kept, kept))
+        def envelopes(*ns):
+            return [{"meta": {"seen": f"t{i}"}, "record": {"n": i}} for i in ns]
+
+        self.assertEqual(meta["first"], {"FIRST": envelopes(0, 1, 2)})
+        self.assertEqual(meta["last"], {"LAST": envelopes(2, 3, 4)})
+
+    def test_record_fields_named_like_built_ins_do_not_clash(self):
+        fingerprints = FingerprintSet(aggregates=[Aggregate("count", "$.count", "SUM")])
+        fingerprints.upsert({"k": "v"}, {"count": 10, "meta": "x"}, timestamp="t")
+        record = fingerprints.get(fingerprint_id({"k": "v"}))
+        self.assertEqual(record.aggregates["count"], {"SUM": 10})
+        self.assertEqual(record.meta["count"], {"COUNT": 1})
+        self.assertEqual(record.meta["first"]["FIRST"][0]["record"], {"count": 10, "meta": "x"})
 
     def test_samples_are_copies_and_saved_without_yaml_aliases(self):
         event = {"n": 1}
         fingerprints = FingerprintSet()
         fingerprints.upsert({"k": "v"}, event, timestamp="t")
         event["n"] = 99
-        self.assertEqual(fingerprints.get(fingerprint_id({"k": "v"})).first[0]["event"], {"n": 1})
+        meta = fingerprints.get(fingerprint_id({"k": "v"})).meta
+        self.assertEqual(meta["first"]["FIRST"][0]["record"], {"n": 1})
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "set.yaml")
             fingerprints.save(path)
             with open(path) as f:
                 self.assertNotIn("&id", f.read())
+
+    def test_built_in_profile_does_not_count_toward_skipped_values(self):
+        fingerprints = FingerprintSet()
+        fingerprints.upsert({"k": "v"}, {})
+        self.assertEqual(fingerprints.skipped_values, 0)
 
     def test_drift_state_creates_new_record_block(self):
         wh = FingerprintSet()
@@ -134,7 +144,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         wh.upsert({"k": "1"}, {"size": 2}, timestamp="t")
 
         record = wh.get(fingerprint_id({"k": "1"}))
-        self.assertEqual(record.count, 3)
+        self.assertEqual(record.meta["count"], {"COUNT": 3})
         self.assertEqual(record.aggregates["size"], {"SUM": 2})
         self.assertEqual(wh.skipped_values, 2)
 
@@ -180,10 +190,8 @@ class PersistenceTests(unittest.TestCase):
             "profile_id:",
             "fingerprints:",
             "tokens:",
-            "count:",
-            "first_seen:",
-            "last_seen:",
             "aggregates:",
+            "meta:",
         ]
         positions = [text.index(key) for key in order]
         self.assertEqual(positions, sorted(positions))
