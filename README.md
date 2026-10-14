@@ -59,10 +59,12 @@ fingerprint: 4 events read from events.jsonl
   fingerprints: 3 new, 0 updated, 3 total in set
   skipped: 0 malformed lines, 0 unusable aggregate values
   wrote app.fingerprints.yaml (profile f50d7a5f85ddf9f7f4c72370f454ae2e)
+  history: app.fingerprints.history/2026-10-14T035919Z.yaml
 ```
 
 Four events, three fingerprints: the two successful `db` queries share one. Run the same command
-again and the counts add up instead of new entries appearing — that is the merge.
+again and the counts add up instead of new entries appearing — that is the merge. Each run also
+leaves a file with just its own fingerprints in `app.fingerprints.history/` (see History below).
 
 `app.fingerprints.yaml` now starts like this (the other two fingerprints follow):
 
@@ -137,7 +139,26 @@ fingerprint merge -p profile.yaml -s app.fingerprints.yaml -o /tmp/preview.yaml 
 ```
 
 The summary goes to stderr and stdout stays empty. Exit status: `0` set written and every line
-used · `1` set written but some lines were skipped (listed by line number) · `2` nothing written.
+used · `1` set written but some lines were skipped (listed by line number) · `2` nothing written
+· `3` set written but its history file was not (takes precedence over `1`).
+
+### History
+
+Every run that updates `SET` also writes just that run's fingerprints to a file of its own in
+`<SET without extension>.history/`, named by the run's start time in UTC:
+
+```
+web.fingerprints.yaml
+web.fingerprints.history/
+  2026-10-14T193005Z.yaml
+  2026-10-14T201112Z.yaml
+```
+
+A run file is a fingerprint set (counts, aggregates and shares from that run only), so
+`fingerprint show` reads it. It starts with a `run:` header: `started`, `finished`, `source`,
+`events`, `skipped_lines` and `set`. Runs starting in the same second get `_2`, `_3`, ...; names
+list in run order. History is always on; a run with `-o`, or one that writes nothing, leaves no
+run file. Nothing is pruned.
 
 ### Check a profile
 

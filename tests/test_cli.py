@@ -10,12 +10,13 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from datetime import UTC, datetime
 from unittest import mock
 
 import yaml
 
 from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.cli import main
+from fingerprint_sampler.cli import _history_path, main
 from fingerprint_sampler.fingerprint_set import FingerprintSet, fingerprint_id
 from fingerprint_sampler.profile import load_profile
 
@@ -640,3 +641,91 @@ class ShowTests(CliTestCase):
         self.assertIn("fingerprint show web.fingerprints.yaml", out)
         _, out, _ = self.run_cli("--help")
         self.assertIn("show", out)
+
+
+class HistoryTests(CliTestCase):
+    """Each merge also writes the run's own fingerprints to <set>.history/ (FING-48)."""
+
+    def history_dir(self):
+        return os.path.join(self.dir, "set.history")
+
+    def run_files(self):
+        if not os.path.isdir(self.history_dir()):
+            return []
+        return sorted(os.listdir(self.history_dir()))
+
+    def test_each_merge_writes_a_run_file_with_only_that_runs_data(self):
+        self.fingerprint(self.write_events("one.jsonl", EVENTS[:3]))
+        _, _, err = self.fingerprint(self.write_events("two.jsonl", EVENTS[3:]))
+        files = self.run_files()
+        self.assertEqual(len(files), 2)
+        for name in files:
+            self.assertRegex(name, r"^\d{4}-\d\d-\d\dT\d{6}Z(_\d+)?\.yaml$")
+        second = os.path.join(self.history_dir(), files[-1])
+        self.assertIn(f"  history: {second}", err)
+
+        run = self.load_set(second)
+        self.assertEqual(run["version"], 0)
+        self.assertEqual(run["profile_id"], self.load_set()["profile_id"])
+        kinds = {rec["tokens"]["kind"]: rec for rec in run["fingerprints"].values()}
+        self.assertEqual(sorted(kinds), ["a", "b", "c"])  # events 4-6 only
+        self.assertEqual(kinds["a"]["meta"]["count"], 1)  # the set has 3
+        self.assertEqual(kinds["a"]["share"]["meta"]["count"], 33.33)
+
+    def test_run_header_says_what_the_run_read(self):
+        events = self.write("mixed.jsonl", json.dumps(EVENTS[0]) + "\nnot json\n")
+        self.fingerprint(events)
+        run = self.load_set(os.path.join(self.history_dir(), self.run_files()[0]))
+        header = run["run"]
+        self.assertEqual(list(run)[:3], ["version", "profile_id", "run"])
+        self.assertEqual(
+            {k: header[k] for k in ("source", "events", "skipped_lines", "set")},
+            {"source": events, "events": 1, "skipped_lines": 1, "set": self.set_path},
+        )
+        self.assertLessEqual(header["started"], header["finished"])
+
+    def test_stdin_source_and_empty_run(self):
+        code, _, _ = self.fingerprint("-", stdin=FakeStdin(""))
+        self.assertEqual(code, 0)
+        run = self.load_set(os.path.join(self.history_dir(), self.run_files()[0]))
+        self.assertEqual((run["run"]["source"], run["fingerprints"]), ("stdin", {}))
+
+    def test_run_file_is_readable_by_show(self):
+        self.fingerprint(self.write_events("one.jsonl", EVENTS[:2]))
+        code, out, _ = self.run_cli("show", os.path.join(self.history_dir(), self.run_files()[0]))
+        self.assertEqual(code, 0)
+        self.assertEqual(len(out.splitlines()), 3)  # header + 2 fingerprints
+
+    def test_trial_run_and_failed_run_write_no_history(self):
+        events = self.write_events("one.jsonl", EVENTS)
+        self.fingerprint(events, "-o", os.path.join(self.dir, "preview.yaml"))
+        self.run_cli(
+            "merge", "-p", self.write("bad.yaml", "fields: []"), "-s", self.set_path, events
+        )
+        self.assertEqual(self.run_files(), [])
+
+    def test_unwritable_history_still_updates_the_set_and_exits_3(self):
+        self.write("set.history", "a file, not a directory")
+        events = self.write("mixed.jsonl", json.dumps(EVENTS[0]) + "\nnot json\n")
+        code, _, err = self.fingerprint(events)
+        self.assertEqual(code, 3)  # takes precedence over 1 (a line was skipped)
+        self.assertIn(f"fingerprint: {self.set_path} updated, but history not written: ", err)
+        self.assertEqual(len(self.load_set()["fingerprints"]), 1)
+
+    def test_names_sort_by_time_and_never_collide(self):
+        started = datetime(2026, 10, 14, 19, 30, 5, tzinfo=UTC)
+        set_path = os.path.join(self.dir, "data", "app.fingerprints.yaml")
+        first = _history_path(set_path, started)
+        self.assertEqual(
+            first,
+            os.path.join(self.dir, "data", "app.fingerprints.history", "2026-10-14T193005Z.yaml"),
+        )
+        self.write(os.path.relpath(first, self.dir), "")
+        second = _history_path(set_path, started)
+        self.assertTrue(second.endswith("2026-10-14T193005Z_2.yaml"))
+        self.write(os.path.relpath(second, self.dir), "")
+        self.assertTrue(_history_path(set_path, started).endswith("2026-10-14T193005Z_3.yaml"))
+
+    def test_set_without_an_extension(self):
+        path = _history_path(os.path.join(self.dir, "myset"), datetime(2026, 1, 1, tzinfo=UTC))
+        self.assertEqual(os.path.dirname(path), os.path.join(self.dir, "myset.history"))

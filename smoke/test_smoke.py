@@ -70,10 +70,14 @@ class ReadmeTests(unittest.TestCase):
         return section, result
 
     def test_quickstart_prints_the_output_it_shows(self):
+        # The history file is named by the time of the run, so any run time matches.
+        def any_run_time(text):
+            return re.sub(r"\d{4}-\d\d-\d\dT\d{6}Z(_\d+)?\.yaml", "<run time>.yaml", text)
+
         with tempfile.TemporaryDirectory() as tmp:
             section, result = self.run_quickstart(tmp)
             expected = fenced_blocks(section, "")[0]
-            self.assertEqual(result.stdout + result.stderr, expected)
+            self.assertEqual(any_run_time(result.stdout + result.stderr), any_run_time(expected))
 
     def test_library_examples_run(self):
         blocks = fenced_blocks(readme_section("As a library"), "python")
