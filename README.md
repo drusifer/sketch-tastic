@@ -19,7 +19,7 @@ A million near-identical log lines become a handful of entries you can actually 
 pip install fingerprint-sampler
 ```
 
-Python 3.10 or newer. Installs the `fingerprint` command (also available as
+Python 3.14 or newer. Installs the `fingerprint` command (also available as
 `fingerprint-sampler` and `python -m fingerprint_sampler`).
 
 ## Quickstart

@@ -62,7 +62,7 @@ def _mod_in_range(value: Any, low: str, high: str) -> str:
         return "FALSE"
     try:
         num = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return "FALSE"
     return "TRUE" if float(low) <= num <= float(high) else "FALSE"
 
