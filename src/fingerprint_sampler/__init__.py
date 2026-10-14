@@ -8,8 +8,14 @@ grows across runs.
 from importlib.metadata import PackageNotFoundError, version
 
 from fingerprint_sampler.aggregators import AggregateEntry, make_entry
-from fingerprint_sampler.profile import Profile, ProfileError, load_profile, parse_profile
-from fingerprint_sampler.tokenizer import MaskEntry, tokenize
+from fingerprint_sampler.profile import (
+    Profile,
+    ProfileError,
+    check_profile,
+    load_profile,
+    parse_profile,
+)
+from fingerprint_sampler.tokenizer import MaskEntry, Modifier, tokenize
 from fingerprint_sampler.warehouse import (
     FingerprintRecord,
     FingerprintSetError,
@@ -28,11 +34,13 @@ __all__ = [
     "FingerprintRecord",
     "FingerprintSetError",
     "MaskEntry",
+    "Modifier",
     "Profile",
     "ProfileError",
     "ProfileMismatchError",
     "Warehouse",
     "__version__",
+    "check_profile",
     "fingerprint_id",
     "load_profile",
     "make_entry",

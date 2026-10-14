@@ -22,6 +22,11 @@ pip install fingerprint-sampler
 Python 3.14 or newer. Installs the `fingerprint` command (also available as
 `fingerprint-sampler` and `python -m fingerprint_sampler`).
 
+**New in 0.2.0:** modifier arguments are written as YAML mappings
+(`{name: IN_RANGE, low: 200, high: 399}`); the 0.1 string form (`"IN_RANGE(200, 399)"`) is no
+longer accepted. Added `GLOB`, `REGEX` and `REGSUB` modifiers and the `fingerprint check` command.
+While the version is 0.x, releases may break profiles and set files without a migration path.
+
 ## Quickstart
 
 Paste this into a shell. It writes a profile and a few events, then fingerprints them:
@@ -58,29 +63,32 @@ fingerprint: 4 events read from events.jsonl
 Four events, three fingerprints: the two successful `db` queries share one. Run the same command
 again and the counts add up instead of new entries appearing — that is the merge.
 
-`app.fingerprints.yaml` now holds, for the `INFO`/`db` fingerprint:
+`app.fingerprints.yaml` now starts like this (the other two fingerprints follow):
 
 ```yaml
-b738d17a6a5f7265cb4cef73937afd4f:
-  tokens:
-    level: INFO
-    component: db
-    failed: 'FALSE'
-  total_occurrences: 2
-  first_seen: '2026-10-13T04:03:14.653421+00:00'
-  last_seen: '2026-10-13T04:03:14.653535+00:00'
-  aggregates:
-    took_ms:
-      MIN: 1
-      MAX: 3
-      AVG:
-        avg: 2.0
-        sum: 4
-        count: 2
-    example:
-      LAST:
-      - query ok
-      - query ok (cached)
+version: 1
+profile_id: f50d7a5f85ddf9f7f4c72370f454ae2e
+fingerprints:
+  b738d17a6a5f7265cb4cef73937afd4f:
+    tokens:
+      level: INFO
+      component: db
+      failed: 'FALSE'
+    total_occurrences: 2
+    first_seen: '2026-10-14T03:59:19.796868+00:00'
+    last_seen: '2026-10-14T03:59:19.796991+00:00'
+    aggregates:
+      took_ms:
+        MIN: 1
+        MAX: 3
+        AVG:
+          avg: 2.0
+          sum: 4
+          count: 2
+      example:
+        LAST:
+        - query ok
+        - query ok (cached)
 ```
 
 ## Usage
@@ -220,7 +228,8 @@ profile's identity, like any other change to `fields`.
 Numeric functions accept numbers and numeric strings. A missing or non-numeric value is skipped
 for that aggregate and counted in the summary.
 
-A profile is validated before any event is read; an error names the file and the entry.
+`merge` checks the profile before reading any event; run `fingerprint check` (above) to see
+every problem at once.
 
 ## The fingerprint set
 
@@ -245,6 +254,24 @@ fingerprint_id = fingerprints.upsert(tokenize(event, list(profile.fields)), even
 
 fingerprints.get(fingerprint_id).total_occurrences   # 1
 fingerprints.save("app.fingerprints.yaml")
+```
+
+`load_profile` and `parse_profile` raise `ProfileError`; its `problems` attribute lists every
+problem, located, in the same form `fingerprint check` prints. `check_profile(data, source)`
+returns `(profile_or_None, problems)` without raising.
+
+Without a profile file, build the rules directly. A `MaskEntry`'s modifier is a bare name or a
+mapping, exactly as in YAML, and is validated when the entry is created (`ValueError` if wrong):
+
+```python
+from fingerprint_sampler import MaskEntry, tokenize
+
+rules = [
+    MaskEntry("method", "$.request.method", "DEFAULT"),
+    MaskEntry("route", "$.request.path", {"name": "REGSUB", "pattern": r"\d+", "replace": "N"}),
+]
+tokenize({"request": {"method": "GET", "path": "/items/17"}}, rules)
+# {'method': 'GET', 'route': '/items/N'}
 ```
 
 ## License

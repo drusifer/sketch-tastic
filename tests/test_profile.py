@@ -319,3 +319,23 @@ class LoadProfileTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublicApiTests(unittest.TestCase):
+    def test_checking_api_is_exported_from_the_package(self):
+        import fingerprint_sampler
+
+        for name in ("check_profile", "Modifier", "ProfileError", "MaskEntry"):
+            with self.subTest(name=name):
+                self.assertIn(name, fingerprint_sampler.__all__)
+                self.assertTrue(hasattr(fingerprint_sampler, name))
+
+    def test_check_profile_returns_problems_without_raising(self):
+        from fingerprint_sampler import check_profile
+
+        profile, problems = check_profile({"fields": []}, "p.yaml")
+        self.assertIsNone(profile)
+        self.assertEqual(problems, ["p.yaml: fields: [] should be non-empty"])
+        profile, problems = check_profile(VALID, "p.yaml")
+        self.assertEqual(problems, [])
+        self.assertIsInstance(profile, Profile)
