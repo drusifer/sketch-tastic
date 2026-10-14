@@ -344,3 +344,38 @@ class ShareTests(unittest.TestCase):
         with open(self.path) as f:
             text = f.read()
         self.assertLess(text.index("meta:"), text.index("share:"))
+
+
+class RunHeaderTests(unittest.TestCase):
+    """A run file is a set with a `run:` header (FING-48)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "run.yaml")
+
+    def test_header_is_written_between_profile_id_and_fingerprints(self):
+        fingerprints = FingerprintSet(profile_id="p1")
+        fingerprints.run = {"source": "stdin", "events": 1}
+        fingerprints.upsert({"a": "1"}, {}, timestamp="2024-01-01T00:00:00Z")
+        fingerprints.save(self.path)
+        with open(self.path) as f:
+            text = f.read()
+            data = yaml.safe_load(text)
+        self.assertEqual(data["run"], {"source": "stdin", "events": 1})
+        positions = [text.index(key) for key in ("profile_id:", "run:", "fingerprints:")]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_no_header_unless_set_and_load_ignores_it(self):
+        plain = FingerprintSet(profile_id="p1")
+        plain.save(self.path)
+        with open(self.path) as f:
+            self.assertNotIn("run", yaml.safe_load(f))
+
+        with_run = FingerprintSet(profile_id="p1")
+        with_run.run = {"events": 0}
+        with_run.upsert({"a": "1"}, {}, timestamp="2024-01-01T00:00:00Z")
+        with_run.save(self.path)
+        loaded = FingerprintSet(profile_id="p1")
+        loaded.load(self.path)
+        self.assertEqual((len(loaded), loaded.run), (1, None))

@@ -88,6 +88,8 @@ class FingerprintSet:
         self.profile_id = profile_id
         self.skipped_values = 0
         """Running count of present values the profile's aggregates could not use."""
+        self.run: dict[str, Any] | None = None
+        """Header of a run file (STORY-FING-48): what one run read. Saved if set; never loaded."""
 
     def upsert(self, tokens: dict[str, str], record: Any, timestamp: str | None = None) -> str:
         """Fold one record into the set. Returns its fingerprint_id.
@@ -150,11 +152,10 @@ class FingerprintSet:
         Each record's `share` is recomputed first, so it describes the set as written.
         """
         self._compute_shares()
-        data = {
-            "version": SET_VERSION,
-            "profile_id": self.profile_id,
-            "fingerprints": {fid: asdict(rec) for fid, rec in self._records.items()},
-        }
+        data = {"version": SET_VERSION, "profile_id": self.profile_id}
+        if self.run is not None:
+            data["run"] = self.run
+        data["fingerprints"] = {fid: asdict(rec) for fid, rec in self._records.items()}
         directory = os.path.dirname(os.path.abspath(path))
         fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".fingerprints-", suffix=".tmp")
         try:

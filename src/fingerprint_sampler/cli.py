@@ -272,8 +272,13 @@ def _cmd_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
-def _fold_stream(lines: Iterable[str], profile: Profile, fingerprints: FingerprintSet) -> dict:
-    """Fingerprint each JSONL line into `fingerprints`. Returns run statistics."""
+def _fold_stream(
+    lines: Iterable[str], profile: Profile, fingerprints: FingerprintSet, run: FingerprintSet
+) -> dict:
+    """Fingerprint each JSONL line into `fingerprints` and into `run` (this run only).
+
+    Both get the same timestamp per event, so their times agree. Returns run statistics.
+    """
     known_before = set(fingerprints)
     seen: set[str] = set()
     events = skipped_lines = 0
@@ -297,7 +302,9 @@ def _fold_stream(lines: Iterable[str], profile: Profile, fingerprints: Fingerpri
             skipped_lines += 1
             warn(lineno, f"expected a JSON object, got {type(event).__name__}")
             continue
-        seen.add(fingerprints.upsert(profile.tokens(event), event))
+        tokens, timestamp = profile.tokens(event), datetime.now(UTC).isoformat()
+        run.upsert(tokens, event, timestamp)
+        seen.add(fingerprints.upsert(tokens, event, timestamp))
         events += 1
 
     return {
@@ -387,8 +394,9 @@ def _cmd_merge(args: argparse.Namespace) -> int:
     try:
         profile = _load_profile(args.profile)
         fingerprints = _open_set(args, profile)
+        run = FingerprintSet(profile.aggregates, profile.profile_id)
         with _open_events(args) as stream:
-            stats = _fold_stream(stream, profile, fingerprints)
+            stats = _fold_stream(stream, profile, fingerprints, run)
         try:
             fingerprints.save(destination)
         except OSError as exc:
