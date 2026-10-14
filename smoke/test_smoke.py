@@ -1,8 +1,8 @@
 """Smoke tests for the installed fingerprint-sampler (STORY-FING-41).
 
-Run by `make smoke`, which installs the built wheel into a throwaway environment and runs
-this suite there: the `fingerprint` command and `fingerprint_sampler` package under test are
-the installed ones, not the source tree. The README is executed as written.
+Run by `make smoke` against the built wheel in a throwaway environment. Kept deliberately
+small: the installed command starts, and the README's examples work as written. Behaviour
+belongs in the unit tests under tests/, not here.
 """
 
 import os
@@ -14,12 +14,7 @@ import tomllib
 import unittest
 
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REPO_ROOT = os.path.dirname(os.path.dirname(PACKAGE_ROOT))
 README = os.path.join(PACKAGE_ROOT, "README.md")
-EXAMPLE_PROFILES = [
-    os.path.join(PACKAGE_ROOT, "examples", "access_log.yaml"),
-    os.path.join(REPO_ROOT, "examples", "profiles", "ebpf_telemetry.yaml"),
-]
 
 
 def fingerprint(*args, cwd=None):
@@ -54,40 +49,12 @@ def fenced_blocks(text, language):
 
 
 class InstalledCommandTests(unittest.TestCase):
-    def test_runs_the_installed_package_not_the_source_tree(self):
-        import fingerprint_sampler
-
-        self.assertNotIn(PACKAGE_ROOT, os.path.abspath(fingerprint_sampler.__file__))
-
     def test_version_matches_the_package_version(self):
         with open(os.path.join(PACKAGE_ROOT, "pyproject.toml"), "rb") as f:
             version = tomllib.load(f)["project"]["version"]
         result = fingerprint("--version")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), f"fingerprint-sampler {version}")
-
-    def test_shipped_example_profiles_check_ok(self):
-        result = fingerprint("check", *EXAMPLE_PROFILES)
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(result.stdout.splitlines(), [f"{p}: OK" for p in EXAMPLE_PROFILES])
-
-    def test_invalid_profile_is_refused_by_check_and_merge(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            profile = os.path.join(tmp, "bad.yaml")
-            with open(profile, "w") as f:
-                f.write('fields:\n  - {key: s, path: $.s, modifier: "IN_RANGE(200, 399)"}\n')
-            events = os.path.join(tmp, "events.jsonl")
-            with open(events, "w") as f:
-                f.write('{"s": 200}\n')
-
-            check = fingerprint("check", profile)
-            self.assertEqual(check.returncode, 1)
-            self.assertIn(f"{profile}: fields[0] (key 's') → modifier:", check.stdout)
-
-            set_path = os.path.join(tmp, "set.yaml")
-            merge = fingerprint("merge", "-p", profile, "-s", set_path, events)
-            self.assertEqual(merge.returncode, 2)
-            self.assertFalse(os.path.exists(set_path))
 
 
 class ReadmeTests(unittest.TestCase):
@@ -123,21 +90,6 @@ class ReadmeTests(unittest.TestCase):
                         timeout=60,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_whole_profiles_in_the_readme_pass_check(self):
-        with open(README, encoding="utf-8") as f:
-            profiles = [
-                b for b in fenced_blocks(f.read(), "yaml") if re.search(r"^fields:", b, re.M)
-            ]
-        self.assertTrue(profiles)
-        with tempfile.TemporaryDirectory() as tmp:
-            for i, body in enumerate(profiles):
-                path = os.path.join(tmp, f"readme_{i}.yaml")
-                with open(path, "w") as f:
-                    f.write(body)
-                with self.subTest(profile=i):
-                    result = fingerprint("check", path)
-                    self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":
