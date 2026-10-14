@@ -126,7 +126,9 @@ class ReadmeTests(unittest.TestCase):
 
     def test_whole_profiles_in_the_readme_pass_check(self):
         with open(README, encoding="utf-8") as f:
-            profiles = [b for b in fenced_blocks(f.read(), "yaml") if re.search(r"^fields:", b, re.M)]
+            profiles = [
+                b for b in fenced_blocks(f.read(), "yaml") if re.search(r"^fields:", b, re.M)
+            ]
         self.assertTrue(profiles)
         with tempfile.TemporaryDirectory() as tmp:
             for i, body in enumerate(profiles):
