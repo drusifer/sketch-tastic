@@ -16,6 +16,8 @@ from typing import Any
 
 import jsonpath
 
+from fingerprint_sampler.schema import schema_errors
+
 _MISSING = object()
 """Sentinel handed to modifiers when a path selects nothing."""
 
@@ -102,25 +104,20 @@ def _mod_regsub(value: Any, regex: re.Pattern, replace: str) -> str:
     return regex.sub(replace, str(value))
 
 
-# name -> (function, required arguments, optional arguments)
-_MODIFIERS: dict[str, tuple[Callable[..., str], tuple[str, ...], tuple[str, ...]]] = {
-    "DEFAULT": (_mod_default, (), ()),
-    "IS_PRESENT": (_mod_is_present, (), ()),
-    "IS_NULL": (_mod_is_null, (), ()),
-    "IN_RANGE": (_mod_in_range, ("low", "high"), ()),
-    "ANY": (_mod_any, ("values",), ()),
-    "GLOB": (_mod_glob, ("pattern",), ()),
-    "REGEX": (_mod_regex, ("pattern",), ("flags",)),
-    "REGSUB": (_mod_regsub, ("pattern", "replace"), ("flags",)),
+# name -> (function, the arguments it is called with, in order)
+_MODIFIERS: dict[str, tuple[Callable[..., str], tuple[str, ...]]] = {
+    "DEFAULT": (_mod_default, ()),
+    "IS_PRESENT": (_mod_is_present, ()),
+    "IS_NULL": (_mod_is_null, ()),
+    "IN_RANGE": (_mod_in_range, ("low", "high")),
+    "ANY": (_mod_any, ("values",)),
+    "GLOB": (_mod_glob, ("pattern",)),
+    "REGEX": (_mod_regex, ("regex",)),
+    "REGSUB": (_mod_regsub, ("regex", "replace")),
 }
 
 REGEX_FLAGS = {"i": re.IGNORECASE, "m": re.MULTILINE, "s": re.DOTALL, "x": re.VERBOSE}
 """Letters allowed in a REGEX or REGSUB `flags` argument."""
-
-
-def _mapping_hint(name: str) -> str:
-    args = ", ".join(f"{arg}: ..." for arg in _MODIFIERS[name][1])
-    return f"{{name: {name}, {args}}}"
 
 
 @dataclass(frozen=True)
@@ -137,27 +134,20 @@ class Modifier:
 
     @classmethod
     def of(cls, spec: Modifier | str | Mapping[str, Any]) -> Modifier:
-        """Validate `spec` and build a Modifier. Raises ValueError saying what is wrong."""
+        """Validate `spec` and build a Modifier. Raises ValueError saying what is wrong.
+
+        The shape is checked against the profile schema's `modifier` definition;
+        what a schema cannot express (the regex compiles, low <= high) is checked here.
+        """
         if isinstance(spec, Modifier):
             return spec
         if isinstance(spec, str):
             return _modifier_from_name(spec)
-        if not isinstance(spec, Mapping):
-            raise ValueError(f"Modifier must be a name or a mapping with 'name', got {spec!r}")
+        problems = schema_errors(spec, "modifier")
+        if problems:
+            raise ValueError("; ".join(_describe(path, message) for path, message in problems))
         args = dict(spec)
-        name = args.pop("name", None)
-        if not isinstance(name, str) or name not in _MODIFIERS:
-            raise ValueError(_unknown(name))
-        _, required, optional = _MODIFIERS[name]
-        missing = [arg for arg in required if arg not in args]
-        if missing:
-            raise ValueError(f"{name} needs {', '.join(map(repr, missing))}: {_mapping_hint(name)}")
-        unknown = sorted(set(args) - set(required) - set(optional))
-        if unknown:
-            takes = ", ".join(required + optional) or "no arguments"
-            raise ValueError(
-                f"{name} does not take {', '.join(map(repr, unknown))} (it takes {takes})"
-            )
+        name = args.pop("name")
         modifier = cls(name, tuple(sorted((k, _freeze(v)) for k, v in args.items())))
         modifier._check()
         return modifier
@@ -181,8 +171,7 @@ class Modifier:
     def _bound_args(self) -> tuple[Any, ...]:
         args = self.args
         if self.name in ("REGEX", "REGSUB"):
-            regex = compile_regex(args["pattern"], args.get("flags", ""))
-            return (regex, args["replace"]) if self.name == "REGSUB" else (regex,)
+            args["regex"] = compile_regex(args["pattern"], args.get("flags", ""))
         return tuple(args[arg] for arg in _MODIFIERS[self.name][1])
 
     def __call__(self, value: Any) -> str:
@@ -190,43 +179,30 @@ class Modifier:
 
     def _check(self) -> None:
         args = self.args
-        if self.name == "IN_RANGE":
-            for bound in ("low", "high"):
-                if isinstance(args[bound], bool) or not isinstance(args[bound], (int, float)):
-                    raise ValueError(f"IN_RANGE {bound} must be a number, got {args[bound]!r}")
-            if args["low"] > args["high"]:
-                raise ValueError(f"IN_RANGE low ({args['low']}) is above high ({args['high']})")
-        elif self.name == "ANY":
-            values = args["values"]
-            if not isinstance(values, tuple) or not values:
-                raise ValueError(f"ANY values must be a non-empty list, got {values!r}")
-        else:
-            for arg in ("pattern", "replace", "flags"):
-                if arg in args and not isinstance(args[arg], str):
-                    raise ValueError(f"{self.name} {arg} must be a string, got {args[arg]!r}")
-            if self.name in ("REGEX", "REGSUB"):
-                regex = compile_regex(args["pattern"], args.get("flags", ""))
-                if self.name == "REGSUB":
-                    try:
-                        regex.sub(args["replace"], "")
-                    except (re.error, IndexError) as exc:
-                        raise ValueError(f"REGSUB replace is not valid: {exc}") from None
+        if self.name == "IN_RANGE" and args["low"] > args["high"]:
+            raise ValueError(f"IN_RANGE low ({args['low']}) is above high ({args['high']})")
+        if self.name in ("REGEX", "REGSUB"):
+            regex = compile_regex(args["pattern"], args.get("flags", ""))
+            if self.name == "REGSUB":
+                try:
+                    regex.sub(args["replace"], "")
+                except (re.error, IndexError) as exc:
+                    raise ValueError(f"REGSUB replace is not valid: {exc}") from None
 
 
 def _freeze(value: Any) -> Any:
     return tuple(_freeze(v) for v in value) if isinstance(value, list) else value
 
 
-def _unknown(name: Any) -> str:
-    return f"Unknown modifier: {name!r} (known: {', '.join(_MODIFIERS)})"
+def _describe(path: tuple, message: str) -> str:
+    return f"{'.'.join(map(str, path))}: {message}" if path else message
 
 
 @lru_cache(maxsize=None)
 def _modifier_from_name(name: str) -> Modifier:
-    if name not in _MODIFIERS:
-        raise ValueError(_unknown(name))
-    if _MODIFIERS[name][1]:
-        raise ValueError(f"{name} needs arguments; use a mapping: {_mapping_hint(name)}")
+    problems = schema_errors(name, "modifier")
+    if problems:
+        raise ValueError(_describe(*problems[0]))
     return Modifier(name)
 
 

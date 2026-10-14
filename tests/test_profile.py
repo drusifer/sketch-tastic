@@ -82,15 +82,17 @@ class ValidationTests(unittest.TestCase):
             self.assertIn(fragment, message)
 
     def test_missing_or_empty_fields(self):
-        self.assert_invalid({"version": 1}, "'fields' must be a non-empty list")
-        self.assert_invalid(variant(fields=[]), "'fields' must be a non-empty list")
+        self.assert_invalid({"version": 1}, "(top level): 'fields' is a required property")
+        self.assert_invalid(variant(fields=[]), "fields: [] should be non-empty")
 
     def test_not_a_mapping(self):
-        self.assert_invalid(["nope"], "expected a mapping")
+        self.assert_invalid(["nope"], "['nope'] is not of type 'object'")
 
     def test_unknown_modifier_names_the_entry(self):
         fields = [{"key": "bin", "path": "$.b", "modifier": "BOGUS(*)"}]
-        self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "Unknown modifier")
+        self.assert_invalid(
+            variant(fields=fields), "fields[0] (key 'bin') → modifier", "'BOGUS(*)' is not one of"
+        )
 
     def test_invalid_regex_names_the_entry(self):
         fields = [{"key": "bin", "path": "$.b", "modifier": {"name": "REGEX", "pattern": "[a-"}}]
@@ -98,7 +100,11 @@ class ValidationTests(unittest.TestCase):
 
     def test_bad_modifier_arguments(self):
         fields = [{"key": "rc", "path": "$.rc", "modifier": {"name": "IN_RANGE", "low": 0}}]
-        self.assert_invalid(variant(fields=fields), "'rc'", "IN_RANGE needs 'high'")
+        self.assert_invalid(
+            variant(fields=fields),
+            "fields[0] (key 'rc') → modifier",
+            "'high' is a required property",
+        )
 
     def test_bad_path_names_the_entry(self):
         fields = VALID["fields"] + [{"key": "broken", "path": "$.a[", "modifier": "DEFAULT"}]
@@ -110,29 +116,84 @@ class ValidationTests(unittest.TestCase):
 
     def test_aggregate_without_fn(self):
         self.assert_invalid(
-            variant(aggregates=[{"key": "lat", "path": "$.ms"}]), "'lat'", "'fn' is required"
+            variant(aggregates=[{"key": "lat", "path": "$.ms"}]),
+            "aggregates[0] (key 'lat')",
+            "'fn' is a required property",
         )
 
     def test_duplicate_keys(self):
         fields = [{"key": "a", "path": "$.a"}, {"key": "a", "path": "$.b"}]
-        self.assert_invalid(variant(fields=fields), "duplicate key(s) in fields: a")
+        self.assert_invalid(variant(fields=fields), "fields: duplicate key(s): a")
         aggregates = [
             {"key": "x", "path": "$.a", "fn": "SUM"},
             {"key": "x", "path": "$.b", "fn": "SUM"},
         ]
-        self.assert_invalid(variant(aggregates=aggregates), "duplicate key(s) in aggregates: x")
+        self.assert_invalid(variant(aggregates=aggregates), "aggregates: duplicate key(s): x")
 
     def test_misspelled_setting_is_caught_not_ignored(self):
         fields = [{"key": "a", "path": "$.a", "modifer": "IS_PRESENT"}]
-        self.assert_invalid(variant(fields=fields), "'a'", "unknown setting(s) ['modifer']")
-        self.assert_invalid(variant(agregates=[]), "unknown top-level setting(s) ['agregates']")
+        self.assert_invalid(
+            variant(fields=fields), "fields[0] (key 'a')", "('modifer' was unexpected)"
+        )
+        self.assert_invalid(variant(agregates=[]), "(top level)", "('agregates' was unexpected)")
 
     def test_missing_key_or_path(self):
-        self.assert_invalid(variant(fields=[{"path": "$.a"}]), "fields[0]", "'key' is required")
-        self.assert_invalid(variant(fields=[{"key": "a"}]), "'a'", "'path' is required")
+        self.assert_invalid(
+            variant(fields=[{"path": "$.a"}]), "fields[0]: 'key' is a required property"
+        )
+        self.assert_invalid(
+            variant(fields=[{"key": "a"}]), "fields[0] (key 'a'): 'path' is a required property"
+        )
 
     def test_unsupported_version(self):
-        self.assert_invalid(variant(version=2), "version 2")
+        self.assert_invalid(variant(version=2), "version: 1 was expected")
+
+    def test_every_problem_is_reported_not_just_the_first(self):
+        data = {
+            "fields": [
+                {"key": "route", "path": "$.p", "modifier": {"name": "REGSUB", "pattern": "a"}},
+                {"key": "x", "path": "$.x", "modifier": "GLOB"},
+            ],
+            "extra": 1,
+        }
+        with self.assertRaises(ProfileError) as ctx:
+            parse_profile(data, source="p.yaml")
+        self.assertEqual(
+            ctx.exception.problems,
+            [
+                "p.yaml: (top level): Additional properties are not allowed ('extra' was unexpected)",
+                "p.yaml: fields[0] (key 'route') → modifier: 'replace' is a required property",
+                "p.yaml: fields[1] (key 'x') → modifier: "
+                "'GLOB' is not one of ['DEFAULT', 'IS_PRESENT', 'IS_NULL']",
+            ],
+        )
+
+    def test_semantic_problems_are_all_reported_too(self):
+        fields = [
+            {"key": "a", "path": "$.a[", "modifier": "DEFAULT"},
+            {"key": "b", "path": "$.b", "modifier": {"name": "IN_RANGE", "low": 5, "high": 1}},
+        ]
+        aggregates = [{"key": "c", "path": "$.c", "fn": "MEDIAN"}]
+        with self.assertRaises(ProfileError) as ctx:
+            parse_profile(variant(fields=fields, aggregates=aggregates), source="p.yaml")
+        self.assertEqual(len(ctx.exception.problems), 3)
+
+
+class SchemaFileTests(unittest.TestCase):
+    def test_schema_is_a_valid_draft_2020_12_schema(self):
+        from jsonschema import Draft202012Validator
+
+        from fingerprint_sampler.schema import profile_schema
+
+        Draft202012Validator.check_schema(profile_schema())
+
+    def test_every_shipped_example_passes_the_schema(self):
+        from fingerprint_sampler.schema import schema_errors
+
+        for name in sorted(os.listdir(EXAMPLE_PROFILES)):
+            if name.endswith(".yaml"):
+                with self.subTest(profile=name), open(os.path.join(EXAMPLE_PROFILES, name)) as f:
+                    self.assertEqual(schema_errors(yaml.safe_load(f)), [])
 
 
 class ValidateModifierTests(unittest.TestCase):

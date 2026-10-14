@@ -1,4 +1,4 @@
-"""Tests for the `fingerprint merge` CLI."""
+"""Tests for the `fingerprint merge` and `fingerprint check` CLI."""
 
 import contextlib
 import io
@@ -316,6 +316,72 @@ class BadInputTests(CliTestCase):
         code, _, err = self.run_cli("merge", "-s", self.set_path)
         self.assertEqual(code, 2)
         self.assertIn("--profile", err)
+
+
+class CheckTests(CliTestCase):
+    """STORY-FING-37: fingerprint check."""
+
+    def test_valid_profiles_print_ok_and_exit_0(self):
+        good = self.write("good.yaml", PROFILE)
+        code, out, _ = self.run_cli("check", good, ACCESS_PROFILE)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines(), [f"{good}: OK", f"{ACCESS_PROFILE}: OK"])
+
+    def test_every_problem_is_listed_with_its_location_and_exit_1(self):
+        bad = self.write(
+            "bad.yaml",
+            textwrap.dedent(
+                """\
+                fields:
+                  - key: route
+                    path: $.p
+                    modifier: {name: REGSUB, pattern: '\\d+'}
+                  - key: method
+                    path: $.m
+                    modifier: {name: REGEX, pattern: '(', flags: q}
+                """
+            ),
+        )
+        code, out, _ = self.run_cli("check", bad)
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            out.splitlines(),
+            [
+                f"{bad}: fields[0] (key 'route') → modifier: 'replace' is a required property",
+                f"{bad}: fields[1] (key 'method') → modifier.flags: 'q' does not match '^[imsx]*$'",
+            ],
+        )
+
+    def test_semantic_problems_use_the_same_format(self):
+        bad = self.write(
+            "bad.yaml", "fields:\n  - {key: m, path: $.m, modifier: {name: REGEX, pattern: '('}}\n"
+        )
+        code, out, _ = self.run_cli("check", bad)
+        self.assertEqual(code, 1)
+        self.assertIn(f"{bad}: fields[0] (key 'm'): Invalid regex '('", out)
+
+    def test_yaml_syntax_error_gives_line_and_column(self):
+        bad = self.write("bad.yaml", "fields:\n  - {key: a, path: $.a\n")
+        code, out, _ = self.run_cli("check", bad)
+        self.assertEqual(code, 1)
+        self.assertRegex(out, rf"^{bad}: line \d+, column \d+: not valid YAML")
+
+    def test_one_bad_profile_among_several(self):
+        good = self.write("good.yaml", PROFILE)
+        code, out, _ = self.run_cli("check", good, "/no/such.yaml")
+        self.assertEqual(code, 1)
+        self.assertIn(f"{good}: OK", out)
+        self.assertIn("Cannot read profile /no/such.yaml", out)
+
+    def test_merge_runs_the_same_check_and_writes_nothing(self):
+        bad = self.write("bad.yaml", "fields:\n  - {key: s, path: $.s, modifier: GLOB}\n")
+        code, _, err = self.run_cli(
+            "merge", "-p", bad, "-s", self.set_path, self.write_events("e.jsonl", EVENTS)
+        )
+        self.assertEqual(code, 2)
+        self.assertIn(f"fingerprint: {bad}: fields[0] (key 's') → modifier:", err)
+        self.assertIn(f"check {bad}' lists the same problems", err)
+        self.assertFalse(os.path.exists(self.set_path))
 
 
 class ProfileMismatchTests(CliTestCase):

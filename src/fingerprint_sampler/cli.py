@@ -1,6 +1,7 @@
 """Command-line interface.
 
     fingerprint merge --profile P --set S [EVENTS|-]
+    fingerprint check PROFILE [PROFILE ...]
 
 Folds a stream of JSONL events into a fingerprint set that grows across runs.
 Knows nothing about where the events came from.
@@ -48,6 +49,17 @@ exit status:
   0  set written, every line was used
   1  set written, but some input lines were skipped (see stderr)
   2  nothing written (bad arguments, profile, set file, or profile mismatch)
+"""
+
+
+_CHECK_EPILOG = """\
+Structure is checked against the profile JSON Schema shipped with the package
+(also usable by editors: see the README); regexes, JSONPaths, ranges, duplicate
+keys and aggregate functions are checked as well. Every problem is listed.
+
+exit status:
+  0  every profile is valid
+  1  at least one profile has problems (listed on stdout)
 """
 
 
@@ -102,7 +114,12 @@ def _configure_merge(parser: argparse.ArgumentParser) -> None:
         help="merge even if SET was built with a different profile "
         "(its existing fingerprints are kept as they are)",
     )
-    parser.set_defaults(func=_cmd_merge, merge_cmd=parser.prog)
+    check_cmd = (
+        parser.prog.rsplit(" ", 1)[0] + " check"
+        if parser.prog.endswith(" merge")
+        else "fingerprint check"
+    )
+    parser.set_defaults(func=_cmd_merge, merge_cmd=parser.prog, check_cmd=check_cmd)
 
 
 def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
@@ -115,7 +132,30 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     _configure_merge(
         commands.add_parser("merge", help="merge a JSONL event stream into a fingerprint set")
     )
+    check = commands.add_parser(
+        "check",
+        help="check profiles and list every problem",
+        description="Check one or more profiles without reading any events.",
+        epilog=_CHECK_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    check.add_argument("profiles", nargs="+", metavar="PROFILE", help="YAML profile to check")
+    check.set_defaults(func=_cmd_check)
     return parser
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    status = EXIT_OK
+    for path in args.profiles:
+        try:
+            load_profile(path)
+        except ProfileError as exc:
+            status = 1
+            for problem in exc.problems:
+                print(problem)
+        else:
+            print(f"{path}: OK")
+    return status
 
 
 def _fold_stream(lines: Iterable[str], profile: Profile, warehouse: Warehouse) -> dict:
@@ -159,7 +199,9 @@ def _cmd_merge(args: argparse.Namespace) -> int:
     try:
         profile = load_profile(args.profile)
     except ProfileError as exc:
-        _say(f"fingerprint: {exc}")
+        for problem in exc.problems:
+            _say(f"fingerprint: {problem}")
+        _say(f"  nothing written; '{args.check_cmd} {args.profile}' lists the same problems")
         return EXIT_NOT_WRITTEN
 
     from_stdin = args.events == "-"

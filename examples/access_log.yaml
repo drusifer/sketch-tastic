@@ -1,5 +1,7 @@
+# yaml-language-server: $schema=../src/fingerprint_sampler/profile.schema.json
 # Fingerprint profile for JSON web access logs — nothing eBPF about it.
-# Try it:  make fingerprint ARGS="-p examples/profiles/access_log.yaml -s /tmp/access.fingerprints.yaml examples/data/access_log.jsonl"
+# Try it (from packages/fingerprint-sampler):
+#   fingerprint merge -p examples/access_log.yaml -s /tmp/access.fingerprints.yaml examples/access_log.jsonl
 version: 1
 
 fields:

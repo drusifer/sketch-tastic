@@ -108,6 +108,34 @@ fingerprint merge -p profile.yaml -s app.fingerprints.yaml -o /tmp/preview.yaml 
 The summary goes to stderr and stdout stays empty. Exit status: `0` set written and every line
 used · `1` set written but some lines were skipped (listed by line number) · `2` nothing written.
 
+### Check a profile
+
+```
+fingerprint check PROFILE [PROFILE ...]
+```
+
+Checks profiles without reading any events and lists **every** problem, one per line, with the
+file and where in it:
+
+```
+app.yaml: fields[0] (key 'route') → modifier: 'replace' is a required property
+app.yaml: fields[1] (key 'method') → modifier.flags: 'q' does not match '^[imsx]*$'
+```
+
+A valid profile prints `app.yaml: OK`. Exit status: `0` all valid · `1` problems found. The
+structure is checked against a JSON Schema (`profile.schema.json`, shipped in the package) by the
+standard [`jsonschema`](https://python-jsonschema.readthedocs.io/) validator. Regexes, JSONPaths,
+`IN_RANGE` bounds, duplicate keys and aggregate functions are checked as well. `merge` runs the
+same check first and writes nothing if it fails.
+
+**In your editor.** Put this line at the top of a profile, and an editor with YAML language-server
+support (for example VS Code with the Red Hat YAML extension) checks the profile as you type and
+completes modifier names:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/drusifer/fingerling/main/packages/fingerprint-sampler/src/fingerprint_sampler/profile.schema.json
+```
+
 ## Profiles
 
 ```yaml
