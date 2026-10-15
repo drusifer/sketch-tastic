@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../src/fingerprint_sampler/profile.schema.json
+# Fingerprint profile for GitHub public events from GH Archive (https://www.gharchive.org).
+# Each hourly file is JSONL: one event per line, ~100-250k events.
+# Try it (repository root):  make gharchive            (GH_HOUR=2024-01-01-15 by default)
+version: 0
+
+# sequence: GH Archive event ids only grow, so a re-run over the same hour adds nothing twice.
+sequence: $.id
+
+# fields: the shape of an event — what kind, what happened, who did it.
+fields:
+  - key: type                      # PushEvent, PullRequestEvent, IssuesEvent, ...
+    path: $.type
+  - key: action                    # opened, closed, created, ...; NULL for types without one
+    path: $.payload.action
+  - key: ref_type                  # CreateEvent/DeleteEvent: branch, tag or repository
+    path: $.payload.ref_type
+  - key: default_branch_push       # PushEvent to main/master
+    path: $.payload.ref
+    modifier: {name: REGEX, pattern: '^refs/heads/(main|master)$'}
+  - key: merged                    # PullRequestEvent: was the PR merged?
+    path: $.payload.pull_request.merged
+  - key: bot                       # dependabot[bot], github-actions[bot], ...
+    path: $.actor.login
+    modifier: {name: REGEX, pattern: '\[bot\]$'}
+  - key: org                       # repository belongs to an organization
+    path: $.org
+    modifier: IS_PRESENT
+
+# aggregates: statistics per fingerprint (count and first/last events are built in).
+aggregates:
+  - key: commits                   # PushEvent commit counts
+    path: $.payload.size
+    fn: [SUM, AVG, MAX]
+  - key: payload_bytes             # data volume per fingerprint: SUM(SIZE(payload)), ...
+    path: $.payload
+    op: SIZE
+    fn: [SUM, AVG, MAX]
+  - key: first_event_time          # event time from the records (built-in times are wall clock)
+    path: $.created_at
+    type: DATETIME
+    fn: MIN
+  - key: last_event_time
+    path: $.created_at
+    type: DATETIME
+    fn: MAX
+  - key: repos                     # a few recent repositories with this shape
+    path: $.repo.name
+    fn: {name: LAST, n: 5}

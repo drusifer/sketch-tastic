@@ -1,0 +1,571 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/drusifer/fingerling/main/packages/fingerprint-sampler/src/fingerprint_sampler/profile.schema.json",
+  "title": "fingerprint-sampler profile",
+  "description": "How to fingerprint one kind of JSONL event: fields define a fingerprint's identity, aggregates are tracked per fingerprint.",
+  "type": "object",
+  "required": [
+    "fields"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 0,
+      "description": "Profile format version: 0 until 1.0 (formats may change without notice before then)."
+    },
+    "sequence": {
+      "$ref": "#/$defs/text",
+      "description": "JSONPath to a number in each event that only grows (e.g. $.id). Events at or below the highest number already merged into the set are dropped, so re-running over the same or overlapping input adds nothing twice."
+    },
+    "fields": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "aggregates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/aggregate"
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "key",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/text",
+          "description": "Token name in the fingerprint."
+        },
+        "path": {
+          "$ref": "#/$defs/text",
+          "description": "JSONPath selecting the value(s)."
+        },
+        "modifier": {
+          "$ref": "#/$defs/modifier"
+        },
+        "type": {
+          "$ref": "#/$defs/valuetype"
+        }
+      }
+    },
+    "modifier": {
+      "description": "A bare name (DEFAULT, IS_PRESENT, IS_NULL) or a mapping with name and that modifier's arguments.",
+      "if": {
+        "type": "string"
+      },
+      "then": {
+        "enum": [
+          "DEFAULT",
+          "IS_PRESENT",
+          "IS_NULL"
+        ]
+      },
+      "else": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "DEFAULT",
+              "IS_PRESENT",
+              "IS_NULL",
+              "IN_RANGE",
+              "ANY",
+              "GLOB",
+              "REGEX",
+              "REGSUB",
+              "TRUNC"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "DEFAULT"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "IS_PRESENT"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "IS_NULL"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "IN_RANGE"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "low": {
+                  "type": "number"
+                },
+                "high": {
+                  "type": "number"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "low",
+                "high"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "ANY"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "values": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "values"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "GLOB"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "pattern": {
+                  "type": "string",
+                  "description": "shell-style pattern: * ? [a-z]"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "REGEX"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "pattern": {
+                  "type": "string",
+                  "description": "Python regular expression"
+                },
+                "flags": {
+                  "type": "string",
+                  "pattern": "^[imsx]*$",
+                  "description": "any of i (ignore case), m (multi-line), s (dot matches newline), x (verbose)"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "REGSUB"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "pattern": {
+                  "type": "string",
+                  "description": "Python regular expression"
+                },
+                "replace": {
+                  "type": "string"
+                },
+                "flags": {
+                  "type": "string",
+                  "pattern": "^[imsx]*$",
+                  "description": "any of i (ignore case), m (multi-line), s (dot matches newline), x (verbose)"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "pattern",
+                "replace"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "TRUNC"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "unit": {
+                  "enum": [
+                    "year",
+                    "month",
+                    "day",
+                    "hour",
+                    "minute",
+                    "second"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "unit"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "aggregate": {
+      "type": "object",
+      "required": [
+        "key",
+        "path",
+        "fn"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/text"
+        },
+        "path": {
+          "$ref": "#/$defs/text"
+        },
+        "op": {
+          "$ref": "#/$defs/op"
+        },
+        "fn": {
+          "description": "One aggregate function or a non-empty list of them.",
+          "if": {
+            "type": "array"
+          },
+          "then": {
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/aggregator"
+            }
+          },
+          "else": {
+            "$ref": "#/$defs/aggregator"
+          }
+        },
+        "type": {
+          "$ref": "#/$defs/valuetype"
+        }
+      },
+      "not": {
+        "description": "'op' and 'type' cannot be used together: an op measures the raw value, a type reads it as a date or time",
+        "required": [
+          "op",
+          "type"
+        ]
+      }
+    },
+    "aggregator": {
+      "description": "SUM, MIN, MAX, AVG or COUNT as a bare name, or a mapping with name (and n for FIRST and LAST).",
+      "if": {
+        "type": "string"
+      },
+      "then": {
+        "enum": [
+          "SUM",
+          "MIN",
+          "MAX",
+          "AVG",
+          "COUNT"
+        ]
+      },
+      "else": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "SUM",
+              "MIN",
+              "MAX",
+              "AVG",
+              "COUNT",
+              "FIRST",
+              "LAST"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "SUM"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "MIN"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "MAX"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "AVG"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "COUNT"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true
+              },
+              "additionalProperties": false
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "FIRST"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "how many values to keep"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "n"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "LAST"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "how many values to keep"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "n"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "op": {
+      "description": "What to aggregate instead of each selected value: SIZE is its size in bytes (UTF-8 for text, compact JSON otherwise).",
+      "enum": [
+        "SIZE"
+      ]
+    },
+    "valuetype": {
+      "description": "What the path's values are: ISO-8601 DATE or DATETIME.",
+      "enum": [
+        "DATE",
+        "DATETIME"
+      ]
+    }
+  }
+}

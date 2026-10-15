@@ -1,0 +1,8 @@
+{"ts": "2026-10-12T09:00:01Z", "request": {"method": "GET", "route": "/items/{id}", "path": "/items/17"}, "response": {"status": 200, "ms": 12.5, "bytes": 512}, "user": {"id": "u1"}, "upstreams": [{"name": "db", "ms": 8}]}
+{"ts": "2026-10-12T09:00:02Z", "request": {"method": "GET", "route": "/items/{id}", "path": "/items/42"}, "response": {"status": 200, "ms": 9.0, "bytes": 498}, "user": {"id": "u2"}, "upstreams": [{"name": "db", "ms": 5}]}
+{"ts": "2026-10-12T09:00:03Z", "request": {"method": "GET", "route": "/items/{id}", "path": "/items/99"}, "response": {"status": 404, "ms": 3.1, "bytes": 64}, "user": {"id": "u1"}, "upstreams": [{"name": "db", "ms": 2}]}
+{"ts": "2026-10-12T09:00:04Z", "request": {"method": "POST", "route": "/orders", "path": "/orders"}, "response": {"status": 201, "ms": 840.0, "bytes": 230}, "user": {"id": "u2"}, "upstreams": [{"name": "db", "ms": 20}, {"name": "payments", "ms": 790}]}
+{"ts": "2026-10-12T09:00:05Z", "request": {"method": "GET", "route": "/health", "path": "/health"}, "response": {"status": 200, "ms": 0.4, "bytes": 2}, "upstreams": []}
+{"ts": "2026-10-12T09:00:06Z", "request": {"method": "GET", "route": "/items/{id}", "path": "/items/3"}, "response": {"status": 200, "ms": 11.0, "bytes": 505}, "user": {"id": "u3"}, "upstreams": [{"name": "db", "ms": 7}]}
+{"ts": "2026-10-12T09:00:07Z", "request": {"method": "GET", "route": "/health", "path": "/health"}, "response": {"status": 200, "ms": 0.3, "bytes": 2}, "upstreams": []}
+{"ts": "2026-10-12T09:00:08Z", "request": {"method": "POST", "route": "/orders", "path": "/orders"}, "response": {"status": 201, "ms": 910.0, "bytes": 231}, "user": {"id": "u1"}, "upstreams": [{"name": "db", "ms": 25}, {"name": "payments", "ms": 860}]}
