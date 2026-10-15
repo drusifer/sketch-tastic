@@ -459,8 +459,9 @@ def _fold_stream(
         if sequence is DROP:
             continue
         tokens = profile.tokens(event)
-        run.upsert(tokens, event, sketch.last_run)
-        seen.add(sketch.upsert(tokens, event, sketch.last_run))
+        selected = sketch.select(event, sketch.last_run)  # once for both: the paths cost most
+        run.upsert(tokens, event, sketch.last_run, selected)
+        seen.add(sketch.upsert(tokens, event, sketch.last_run, selected))
 
     return {
         "events": events,

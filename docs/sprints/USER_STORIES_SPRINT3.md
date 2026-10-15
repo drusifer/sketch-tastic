@@ -6,7 +6,7 @@
     target `merge` on the GH Archive hour; profile through a `make profile` target with the
     standard-library cProfile (no new dependency); best effort within KISS, report before/after
     wall time.
-*   **Status**: Draft
+*   **Status**: Approved (Smith Gates 1 and 2, 2026-10-14)
 
 ## Goal
 
@@ -103,10 +103,13 @@ and folds those instead of reading the record again. `_fold_stream` selects once
 passes the selection to both `run.upsert` and `sketch.upsert` (both sketches are built from the
 same profile aggregates).
 
-**D4 — No deep copies.** FIRST and LAST store the value itself. Events come fresh from
-`json.loads` per line and nothing mutates stored state, so sharing is safe; the only reason for
-the copy was YAML writing anchors for an object stored twice. `Sketch.save` uses a `SafeDumper`
-subclass with `ignore_aliases` returning `True`, so output stays alias-free (AC4) and identical.
+**D4 — One cheap copy per event (revised in Phase 2).** The first design (store values
+without copying) broke two tests that pin a library contract: a stored sample never aliases the
+caller's record. Instead, `Aggregate.select` copies each selected value with `_copy`, a deep copy
+specialised for parsed JSON (dicts, lists, immutable scalars; `deepcopy` only for anything else),
+and `Sketch.select` passes one `copies` memo to every aggregate, so the whole event that FIRST and
+LAST both select is copied once per event and shared by the sketch and the run file. `save`
+already rebuilds containers (`asdict`), so the file has no YAML aliases (AC4).
 
 **D5 — Stop rule.** After D2-D4, Neo re-runs `make profile`. A further change is made only if one
 function still dominates and the fix is local and simple; otherwise the sprint stops and the

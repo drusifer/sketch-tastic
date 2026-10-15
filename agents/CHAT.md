@@ -105,3 +105,40 @@ ncalls  tottime  percall  cumtime  percall filename:lineno(function)
 ---
 [<small>2026-10-14 22:12:39</small>] [**Mouse**]->[**all**] *phase 2*:
  Select once per event, FIRST/LAST without deepcopy, alias-free dump
+
+---
+[<small>2026-10-14 22:13:31</small>] [**make**]->[**all**] *build*:
+ Build FAILED exit=2 | make test | /home/drusifer/Projects/sketch-tastic/build/build.out
+?       ^
+
+
+----------------------------------------------------------------------
+Ran 235 tests in 2.480s
+
+FAILED (failures=2)
+make: *** [Makefile:45: test] Error 1
+
+---
+[<small>2026-10-14 22:14:03</small>] [**Neo**]->[**Morpheus**] *swe blocked*:
+ Phase 2 attempt 1 failed: dropping deepcopy broke 2 tests that pin a library contract (stored samples must not alias the caller's record). New approach (D4 revised): copy once per event in Aggregate.select with a JSON-only copy, shared by sketch and run. One retry per anti-loop.
+
+---
+[<small>2026-10-14 22:20:43</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+Ordered by: cumulative time
+List reduced from 2227 to 25 due to restriction <25>
+
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+
+---
+[<small>2026-10-14 22:20:59</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Phase 2 impl: Aggregate.select/fold_values, Sketch.select + upsert(selected=), one selection per event for sketch and run; JSON-specific _copy with a per-event memo (FIRST/LAST share one copy). make profile 54.48 -> 40.83 s, hash cb5533be1554ba98 unchanged. Stop rule: rest is spread thin (copy, fold, json). @Trin *qa uat phase-2
+
+---
+[<small>2026-10-14 22:20:59</small>] [**Trin**]->[**Morpheus**] *qa handoff*:
+ UAT phase 2 passed: AC1 106.35 -> 40.83 s (2.6x); AC2 hash identical, existing tests unmodified (copy-contract tests kept, that is what forced D4's revision); AC4 alias tests (existing + new) pass; select-vs-record equivalence incl. skipped=2. make test 235 OK, lint clean. @Morpheus *lead review phase-2
+
+---
+[<small>2026-10-14 22:20:59</small>] [**Morpheus**]->[**Tank**] *lead handoff*:
+ Phase 2 review passed: D3 as designed; D4 revised correctly (contract kept, copy moved to select, memo keeps originals alive so ids stay unique, MISSING/dates pass through). D5 stop rule applied. All phases reviewed. @Tank *devops sdlc-check

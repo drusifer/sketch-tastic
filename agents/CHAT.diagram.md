@@ -48,4 +48,12 @@ sequenceDiagram
     Note right of Morpheus: "Phase 1 review passed:<br/>D2 as designed, regex<br/>conservative (no<br/>quoted/digit names),<br/>cache still validates<br/>every non-plain path.<br/>Remaining to…"
     Mouse->>All: "phase 2"
     Note right of Mouse: "Select once per event,<br/>FIRST/LAST without<br/>deepcopy, alias-free<br/>dump"
+    Neo->>Morpheus: "swe blocked"
+    Note right of Neo: "Phase 2 attempt 1<br/>failed: dropping<br/>deepcopy broke 2 tests<br/>that pin a library<br/>contract (stored samples<br/>must not alias the<br/>caller's record).…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 2 impl: Aggregate.<br/>select/fold_values,<br/>Sketch.select +<br/>upsert(selected=), one<br/>selection per event for<br/>sketch and run, JSON-<br/>specific _c…"
+    Trin->>Morpheus: "qa handoff"
+    Note right of Trin: "UAT phase 2 passed: AC1<br/>106.35 -> 40.83 s<br/>(2.6x), AC2 hash<br/>identical, existing<br/>tests unmodified (copy-<br/>contract tests kept,<br/>that is what for…"
+    Morpheus->>Tank: "lead handoff"
+    Note right of Morpheus: "Phase 2 review passed:<br/>D3 as designed, D4<br/>revised correctly<br/>(contract kept, copy<br/>moved to select, memo<br/>keeps originals alive so<br/>ids stay un…"
 ```
