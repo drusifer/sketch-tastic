@@ -18,7 +18,7 @@ from typing import Any, Iterator, Sequence
 
 import yaml
 
-from fingerprint_sampler.aggregators import Aggregate
+from sketchtastic.aggregators import Aggregate
 
 SET_VERSION = 0
 """Format version of set files: 0 until 1.0, when the format becomes stable."""
@@ -65,7 +65,7 @@ SHARED_FUNCTIONS = ("SUM", "COUNT")
 @cache
 def builtin_aggregates() -> tuple[Aggregate, ...]:
     """The aggregates every fingerprint gets, from the `builtin.yaml` shipped with the package."""
-    text = files("fingerprint_sampler").joinpath("builtin.yaml").read_text("utf-8")
+    text = files("sketchtastic").joinpath("builtin.yaml").read_text("utf-8")
     return tuple(Aggregate(**raw) for raw in yaml.safe_load(text)["aggregates"])
 
 

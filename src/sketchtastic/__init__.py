@@ -1,4 +1,4 @@
-"""fingerprint-sampler: fingerprint and sample JSONL event streams.
+"""sketch-tastic: mergeable sketches of JSONL event streams.
 
 Reduce each event to a stable fingerprint, and keep one entry per distinct
 fingerprint — with counts, statistics and samples you choose — in a set that
@@ -7,16 +7,16 @@ grows across runs.
 
 from importlib.metadata import PackageNotFoundError, version
 
-from fingerprint_sampler.aggregators import Aggregate, Aggregator, Op
-from fingerprint_sampler.fingerprint_set import (
+from sketchtastic.aggregators import Aggregate, Aggregator, Op
+from sketchtastic.fingerprint_set import (
     Fingerprint,
     FingerprintSet,
     FingerprintSetError,
     ProfileMismatchError,
     fingerprint_id,
 )
-from fingerprint_sampler.model import Field, Modifier, Path, Rule
-from fingerprint_sampler.profile import (
+from sketchtastic.model import Field, Modifier, Path, Rule
+from sketchtastic.profile import (
     Profile,
     ProfileError,
     check_profile,
@@ -25,7 +25,7 @@ from fingerprint_sampler.profile import (
 )
 
 try:
-    __version__ = version("fingerprint-sampler")
+    __version__ = version("sketch-tastic")
 except PackageNotFoundError:  # running from a source tree that was never installed
     __version__ = "0+unknown"
 

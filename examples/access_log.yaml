@@ -1,7 +1,7 @@
-# yaml-language-server: $schema=../src/fingerprint_sampler/profile.schema.json
+# yaml-language-server: $schema=../src/sketchtastic/profile.schema.json
 # Fingerprint profile for JSON web access logs — nothing eBPF about it.
-# Try it (from packages/fingerprint-sampler):
-#   fingerprint merge -p examples/access_log.yaml -s /tmp/access.fingerprints.yaml examples/access_log.jsonl
+# Try it (from the repository root):
+#   sketchtastic merge -p examples/access_log.yaml -s /tmp/access.fingerprints.yaml examples/access_log.jsonl
 version: 0
 
 fields:

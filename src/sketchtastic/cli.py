@@ -1,8 +1,8 @@
 """Command-line interface.
 
-    fingerprint merge --profile P --set S [EVENTS|-]
-    fingerprint check PROFILE [PROFILE ...]
-    fingerprint show SET
+    sketchtastic merge --profile P --set S [EVENTS|-]
+    sketchtastic check PROFILE [PROFILE ...]
+    sketchtastic show SET
 
 Folds a stream of JSONL events into a fingerprint set that grows across runs.
 Knows nothing about where the events came from.
@@ -19,16 +19,16 @@ from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, date, datetime
 from typing import IO, Any, Iterable
 
-from fingerprint_sampler import __version__
-from fingerprint_sampler.aggregators import as_number
-from fingerprint_sampler.fingerprint_set import (
+from sketchtastic import __version__
+from sketchtastic.aggregators import as_number
+from sketchtastic.fingerprint_set import (
     Fingerprint,
     FingerprintSet,
     FingerprintSetError,
     ProfileMismatchError,
 )
-from fingerprint_sampler.model import Path
-from fingerprint_sampler.profile import Profile, ProfileError, load_profile
+from sketchtastic.model import Path
+from sketchtastic.profile import Profile, ProfileError, load_profile
 
 EXIT_OK = 0
 EXIT_LINES_SKIPPED = 1
@@ -47,13 +47,13 @@ _MERGE_DESCRIPTION = (
 _MERGE_EPILOG = """\
 example:
   # first run creates web.fingerprints.yaml; every later run merges into it
-  fingerprint merge -p access_log.yaml -s web.fingerprints.yaml access_log.jsonl
+  sketchtastic merge -p access_log.yaml -s web.fingerprints.yaml access_log.jsonl
 
   # read events from a pipe
-  tail -n 1000 app.jsonl | fingerprint merge -p app.yaml -s app.fingerprints.yaml -
+  tail -n 1000 app.jsonl | sketchtastic merge -p app.yaml -s app.fingerprints.yaml -
 
   # trial run: write the merged result elsewhere, leave the set untouched
-  fingerprint merge -p app.yaml -s app.fingerprints.yaml -o /tmp/preview.yaml new.jsonl
+  sketchtastic merge -p app.yaml -s app.fingerprints.yaml -o /tmp/preview.yaml new.jsonl
 
 The SET file is updated in place (atomically) unless --output is given.
 
@@ -63,7 +63,7 @@ history:
   that saw them. Every run that updates SET also writes just that run's
   fingerprints, with a 'run:' header (id, times, source, counts), to
   <SET without extension>.history/<run id>.yaml, e.g.
-  web.fingerprints.history/261015-0003.yaml; 'fingerprint show' reads it.
+  web.fingerprints.history/261015-0003.yaml; 'sketchtastic show' reads it.
   A run with --output writes no history and uses up no run id.
 
 duplicate protection:
@@ -96,11 +96,11 @@ exit status:
 
 _SHOW_EPILOG = """\
 example:
-  fingerprint show web.fingerprints.yaml
-  fingerprint show web.fingerprints.yaml | less -S    # long values: scroll sideways
+  sketchtastic show web.fingerprints.yaml
+  sketchtastic show web.fingerprints.yaml | less -S    # long values: scroll sideways
 
 ID is the start of the fingerprint ID; FIRST RUN and LAST RUN are the ids of
-the first and last run that saw it (see 'fingerprint merge --help'); '-' means
+the first and last run that saw it (see 'sketchtastic merge --help'); '-' means
 no value.
 Each % column is the fingerprint's share of the set total: COUNT % of all
 events, and one value and % column per SUM or COUNT aggregate (key.FN when
@@ -116,11 +116,17 @@ def _say(message: str) -> None:
     print(message, file=sys.stderr)
 
 
+def _prog() -> str:
+    """The command as invoked (`sketchtastic` or `skt`); `sketchtastic` for `python -m`."""
+    name = os.path.basename(sys.argv[0]) if sys.argv else ""
+    return name if name in ("sketchtastic", "skt") else "sketchtastic"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="fingerprint", description="Fingerprint and sample JSONL event streams."
+        prog=_prog(), description="Mergeable sketches of JSONL event streams."
     )
-    parser.add_argument("--version", action="version", version=f"fingerprint-sampler {__version__}")
+    parser.add_argument("--version", action="version", version=f"sketch-tastic {__version__}")
     commands = parser.add_subparsers(dest="command", metavar="COMMAND", required=True)
 
     merge = commands.add_parser(
@@ -274,7 +280,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     try:
         fingerprints.load(args.set_path)
     except (FingerprintSetError, OSError) as exc:
-        _say(f"fingerprint: cannot use set file: {exc}")
+        _say(f"sketchtastic: cannot use set file: {exc}")
         return EXIT_NOT_WRITTEN
     records = [(fid, fingerprints.get(fid)) for fid in fingerprints]
     if not records:
@@ -333,7 +339,7 @@ def _sequencer(profile: Profile, fingerprints: FingerprintSet) -> _Sequencer | N
     mark = stored.get("max")
     if stored and stored.get("path") != profile.sequence.text:
         _say(
-            f"fingerprint: sequence path changed ({stored.get('path')} -> "
+            f"sketchtastic: sequence path changed ({stored.get('path')} -> "
             f"{profile.sequence.text}); previous mark ignored"
         )
         mark = None
@@ -359,9 +365,9 @@ def _fold_stream(
 
     def warn(lineno: int, reason: str) -> None:
         if skipped_lines <= _MAX_LINE_WARNINGS:
-            _say(f"fingerprint: line {lineno}: {reason} - skipped")
+            _say(f"sketchtastic: line {lineno}: {reason} - skipped")
         elif skipped_lines == _MAX_LINE_WARNINGS + 1:
-            _say("fingerprint: further skipped lines are counted but not listed")
+            _say("sketchtastic: further skipped lines are counted but not listed")
 
     for lineno, line in enumerate(lines, start=1):
         if not line.strip():
@@ -379,7 +385,7 @@ def _fold_stream(
         sequence = sequencer.check(event) if sequencer else 0
         if sequence is None:  # duplicate detection must be exact, so the whole run fails
             raise _NotWritten(
-                f"fingerprint: line {lineno}: no usable sequence at {sequencer.path.text} "
+                f"sketchtastic: line {lineno}: no usable sequence at {sequencer.path.text} "
                 "(missing, several values, or not a number)\n"
                 "  nothing written: the profile declares a sequence, so every event needs one"
             )
@@ -407,8 +413,8 @@ def _load_profile(path: str) -> Profile:
     try:
         return load_profile(path)
     except ProfileError as exc:
-        lines = [f"fingerprint: {problem}" for problem in exc.problems]
-        lines.append(f"  nothing written; 'fingerprint check {path}' lists the same problems")
+        lines = [f"sketchtastic: {problem}" for problem in exc.problems]
+        lines.append(f"  nothing written; 'sketchtastic check {path}' lists the same problems")
         raise _NotWritten("\n".join(lines)) from exc
 
 
@@ -420,12 +426,12 @@ def _open_set(args: argparse.Namespace, profile: Profile) -> FingerprintSet:
         fingerprints.load(args.set_path, force=args.force_profile)
     except ProfileMismatchError as exc:
         raise _NotWritten(
-            f"fingerprint: {exc}.\n"
+            f"sketchtastic: {exc}.\n"
             "  Fingerprints from different profiles are not comparable, so nothing was merged.\n"
             "  Use a separate --set file for this profile, or pass --force-profile to merge anyway."
         ) from exc
     except (FingerprintSetError, OSError) as exc:
-        raise _NotWritten(f"fingerprint: cannot use set file: {exc}") from exc
+        raise _NotWritten(f"sketchtastic: cannot use set file: {exc}") from exc
     return fingerprints
 
 
@@ -436,13 +442,13 @@ def _open_events(args: argparse.Namespace) -> AbstractContextManager[IO[str]]:
         except OSError as exc:
             reason = exc.strerror or exc
             raise _NotWritten(
-                f"fingerprint: cannot read events from {args.events}: {reason}"
+                f"sketchtastic: cannot read events from {args.events}: {reason}"
             ) from exc
     if sys.stdin.isatty():
         raise _NotWritten(
-            "fingerprint: no events to read. Name a JSONL file, or pipe events in:\n"
-            f"  fingerprint merge -p {args.profile} -s {args.set_path} events.jsonl\n"
-            f"  some-command | fingerprint merge -p {args.profile} -s {args.set_path} -"
+            "sketchtastic: no events to read. Name a JSONL file, or pipe events in:\n"
+            f"  sketchtastic merge -p {args.profile} -s {args.set_path} events.jsonl\n"
+            f"  some-command | sketchtastic merge -p {args.profile} -s {args.set_path} -"
         )
     return nullcontext(sys.stdin)
 
@@ -505,7 +511,7 @@ def _report(
     source = _source(args)
     destination = args.output or args.set_path
     verb = "updated" if existed and not args.output else "wrote"
-    _say(f"fingerprint: {stats['events']} events read from {source}")
+    _say(f"sketchtastic: {stats['events']} events read from {source}")
     _say(
         f"  fingerprints: {stats['new']} new, {stats['updated']} updated, "
         f"{len(fingerprints)} total in set"
@@ -531,7 +537,7 @@ def _record_history(
         _say(f"  history: {_write_history(args, run, run_id, stats, started)}")
     except OSError as exc:
         _say(
-            f"fingerprint: {args.set_path} updated, but history not written: {exc.strerror or exc}"
+            f"sketchtastic: {args.set_path} updated, but history not written: {exc.strerror or exc}"
         )
         return EXIT_HISTORY_NOT_WRITTEN
     return EXIT_OK
@@ -556,13 +562,13 @@ def _cmd_merge(args: argparse.Namespace) -> int:
             fingerprints.save(destination)
         except OSError as exc:
             raise _NotWritten(
-                f"fingerprint: cannot write {destination}: {exc.strerror or exc}"
+                f"sketchtastic: cannot write {destination}: {exc.strerror or exc}"
             ) from exc
     except _NotWritten as exc:
         _say(str(exc))
         return EXIT_NOT_WRITTEN
     except KeyboardInterrupt:
-        _say(f"fingerprint: interrupted - {destination} was not modified")
+        _say(f"sketchtastic: interrupted - {destination} was not modified")
         return 130
     _report(args, stats, fingerprints, profile, existed=existed)
     status = EXIT_LINES_SKIPPED if stats["skipped_lines"] else EXIT_OK

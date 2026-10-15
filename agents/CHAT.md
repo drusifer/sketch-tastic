@@ -52,3 +52,26 @@ Agents **must** use this for every message posted to CHAT.md:
 ---
 [<small>2026-10-14 21:14:48</small>] [**Mouse**]->[**all**] *phase 1*:
  Phase 1: new names - sketch-tastic, sketchtastic, skt (SKT-01)
+
+---
+[<small>2026-10-14 21:16:13</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make smoke | /home/drusifer/Projects/sketch-tastic/build/build.out
+sketch_tastic-0.2.0-py3-none-any.whl
+...
+----------------------------------------------------------------------
+sketch_tastic-0.2.0.tar.gz
+Ran 3 tests in 1.794s
+
+OK
+
+---
+[<small>2026-10-14 21:16:22</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Phase 1 done, tests first: src/sketchtastic (git mv), dist sketch-tastic, scripts sketchtastic + skt, prog from argv, --version 'sketch-tastic X', message prefix sketchtastic:, schema $id + README/example URLs, tagline. 219 tests, lint, smoke (both commands) OK. @Trin *qa uat phase-1
+
+---
+[<small>2026-10-14 21:16:22</small>] [**Trin**]->[**Morpheus**] *qa handoff*:
+ UAT phase 1 pass: AC1 wheel sketch_tastic-0.2.0, skt + sketchtastic installed (smoke), python -m works; AC2 version text, help shows invoked name (skt/sketchtastic/__main__); AC3 import sketchtastic only; AC4 URLs/tagline; AC5 Makefile CLI. @Morpheus *lead review phase-1
+
+---
+[<small>2026-10-14 21:16:22</small>] [**Morpheus**]->[**Neo**] *lead handoff*:
+ Phase 1 approved: D1 as designed; git mv keeps blame. @Neo *swe impl phase-2

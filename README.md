@@ -1,8 +1,8 @@
-# fingerprint-sampler
+# sketch-tastic
 
-Fingerprint and sample JSONL event streams.
+Mergeable sketches of JSONL event streams for regression testing and flow analysis.
 
-`fingerprint` reads events — logs, traces, audit records, anything with one JSON object per
+`sketchtastic` reads events — logs, traces, audit records, anything with one JSON object per
 line — and reduces each to a **fingerprint**: a stable ID for "this shape of event". It keeps a
 **fingerprint set** with one entry per distinct fingerprint: how often it was seen, statistics you
 ask for, and a few recent samples. The set is a file that grows across runs:
@@ -16,17 +16,15 @@ A million near-identical log lines become a handful of entries you can actually 
 ## Install
 
 ```sh
-pip install fingerprint-sampler
+pip install sketch-tastic
 ```
 
-Python 3.14 or newer. Installs the `fingerprint` command (also runnable as
-`python -m fingerprint_sampler`).
+Python 3.14 or newer. Installs the `sketchtastic` command and its short alias `skt` (also
+runnable as `python -m sketchtastic`).
 
-**New in 0.2.0:** modifier arguments are written as YAML mappings
-(`{name: IN_RANGE, low: 200, high: 399}`); the 0.1 string form (`"IN_RANGE(200, 399)"`) is no
-longer accepted. Added `GLOB`, `REGEX` and `REGSUB` modifiers and the `fingerprint check` command. Since then
-(mainline): `LAST` is written `{name: LAST, n: 3}`, not `"LAST(3)"`.
-While the version is 0.x, releases may break profiles and set files without a migration path.
+Moved from [drusifer/fingerling](https://github.com/drusifer/fingerling), where it was
+`fingerprint-sampler`. While the version is 0.x, releases may break profiles and sketch files
+without a migration path.
 
 ## Quickstart
 
@@ -51,11 +49,11 @@ cat > events.jsonl <<'JSONL'
 {"level": "INFO", "logger": "http", "msg": "GET /health", "took_ms": 0.4}
 JSONL
 
-fingerprint merge -p profile.yaml -s app.fingerprints.yaml events.jsonl
+sketchtastic merge -p profile.yaml -s app.fingerprints.yaml events.jsonl
 ```
 
 ```
-fingerprint: 4 events read from events.jsonl
+sketchtastic: 4 events read from events.jsonl
   fingerprints: 3 new, 0 updated, 3 total in set
   skipped: 0 malformed lines, 0 unusable aggregate values
   wrote app.fingerprints.yaml (profile f50d7a5f85ddf9f7f4c72370f454ae2e)
@@ -104,7 +102,7 @@ fingerprints:
         count: 50.0
 ```
 
-To read a set without the YAML, print it as a table with `fingerprint show app.fingerprints.yaml`:
+To read a set without the YAML, print it as a table with `sketchtastic show app.fingerprints.yaml`:
 
 ```
 ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
@@ -116,7 +114,7 @@ b738d17a  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
 ## Usage
 
 ```
-fingerprint merge -p PROFILE -s SET [EVENTS|-] [-o OUTPUT] [--force-profile]
+sketchtastic merge -p PROFILE -s SET [EVENTS|-] [-o OUTPUT] [--force-profile]
 ```
 
 | Option | Meaning |
@@ -129,10 +127,10 @@ fingerprint merge -p PROFILE -s SET [EVENTS|-] [-o OUTPUT] [--force-profile]
 
 ```sh
 # read from a pipe
-tail -n 1000 app.jsonl | fingerprint merge -p profile.yaml -s app.fingerprints.yaml -
+tail -n 1000 app.jsonl | sketchtastic merge -p profile.yaml -s app.fingerprints.yaml -
 
 # trial run: see the result without touching the set
-fingerprint merge -p profile.yaml -s app.fingerprints.yaml -o /tmp/preview.yaml new.jsonl
+sketchtastic merge -p profile.yaml -s app.fingerprints.yaml -o /tmp/preview.yaml new.jsonl
 ```
 
 The summary goes to stderr and stdout stays empty. Exit status: `0` set written and every line
@@ -157,7 +155,7 @@ web.fingerprints.history/
 ```
 
 So `last_seen: 261014-0002` points straight at the file for that run. A run file is a fingerprint
-set (counts, aggregates and shares from that run only), so `fingerprint show` reads it. It starts
+set (counts, aggregates and shares from that run only), so `sketchtastic show` reads it. It starts
 with a `run:` header: `id`, `started`, `finished` (UTC), `source`, `events`, `skipped_lines` and
 `set`. A new run's number is one past the highest in the set and its history, so a rebuilt set
 never overwrites an old run file. History is always on; a run with `-o`, or one that writes
@@ -190,7 +188,7 @@ the old mark and say so.
 ### Check a profile
 
 ```
-fingerprint check PROFILE [PROFILE ...]
+sketchtastic check PROFILE [PROFILE ...]
 ```
 
 Checks profiles without reading any events and lists **every** problem, one per line, with the
@@ -212,13 +210,13 @@ support (for example VS Code with the Red Hat YAML extension) checks the profile
 completes modifier names:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/drusifer/fingerling/main/packages/fingerprint-sampler/src/fingerprint_sampler/profile.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/drusifer/sketch-tastic/main/src/sketchtastic/profile.schema.json
 ```
 
 ### Show a set
 
 ```
-fingerprint show SET
+sketchtastic show SET
 ```
 
 Prints one row per fingerprint, most frequent first: the first 8 characters of its ID, its count
@@ -346,7 +344,7 @@ aggregates:
 `op` and `type` cannot be combined on one aggregate. Like any aggregate change, adding an `op`
 keeps the profile id, so existing sets keep merging.
 
-`merge` checks the profile before reading any event; run `fingerprint check` (above) to see
+`merge` checks the profile before reading any event; run `sketchtastic check` (above) to see
 every problem at once.
 
 ## The fingerprint set
@@ -376,7 +374,7 @@ every problem at once.
 ## As a library
 
 ```python
-from fingerprint_sampler import FingerprintSet, load_profile
+from sketchtastic import FingerprintSet, load_profile
 
 profile = load_profile("profile.yaml")
 fingerprints = FingerprintSet(profile.aggregates, profile.profile_id)
@@ -389,7 +387,7 @@ fingerprints.save("app.fingerprints.yaml")
 ```
 
 `load_profile` and `parse_profile` raise `ProfileError`; its `problems` attribute lists every
-problem, located, in the same form `fingerprint check` prints. `check_profile(data, source)`
+problem, located, in the same form `sketchtastic check` prints. `check_profile(data, source)`
 returns `(profile_or_None, problems)` without raising.
 
 Without a profile file, build the pieces directly. `Field` and `Aggregate` take the same keys
@@ -397,7 +395,7 @@ as the YAML (`key`, `path`, `modifier` / `fn`) and are checked when created (`Va
 wrong):
 
 ```python
-from fingerprint_sampler import Field, Profile
+from sketchtastic import Field, Profile
 
 profile = Profile(fields=(
     Field("method", "$.request.method"),

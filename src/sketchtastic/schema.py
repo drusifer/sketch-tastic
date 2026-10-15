@@ -15,7 +15,7 @@ SCHEMA_FILE = "profile.schema.json"
 @cache
 def profile_schema() -> dict[str, Any]:
     """The profile schema shipped with the package."""
-    return json.loads(files("fingerprint_sampler").joinpath(SCHEMA_FILE).read_text("utf-8"))
+    return json.loads(files("sketchtastic").joinpath(SCHEMA_FILE).read_text("utf-8"))
 
 
 @cache

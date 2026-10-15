@@ -2,7 +2,7 @@
 
 import unittest
 
-from fingerprint_sampler.model import MISSING, AnyOf, Default, Field, Glob, Modifier, Path, tokens
+from sketchtastic.model import MISSING, AnyOf, Default, Field, Glob, Modifier, Path, tokens
 
 MaskEntry = Field
 tokenize = tokens

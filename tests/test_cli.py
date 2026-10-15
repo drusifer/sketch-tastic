@@ -15,10 +15,10 @@ from unittest import mock
 
 import yaml
 
-from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.cli import _history_dir, _next_run_id, main
-from fingerprint_sampler.fingerprint_set import FingerprintSet, fingerprint_id
-from fingerprint_sampler.profile import load_profile
+from sketchtastic.aggregators import Aggregate
+from sketchtastic.cli import _history_dir, _next_run_id, main
+from sketchtastic.fingerprint_set import FingerprintSet, fingerprint_id
+from sketchtastic.profile import load_profile
 
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ACCESS_PROFILE = os.path.join(PACKAGE_ROOT, "examples", "access_log.yaml")
@@ -396,7 +396,7 @@ class CheckTests(CliTestCase):
             "merge", "-p", bad, "-s", self.set_path, self.write_events("e.jsonl", EVENTS)
         )
         self.assertEqual(code, 2)
-        self.assertIn(f"fingerprint: {bad}: fields[0] (key 's') → modifier:", err)
+        self.assertIn(f"sketchtastic: {bad}: fields[0] (key 's') → modifier:", err)
         self.assertIn(f"check {bad}' lists the same problems", err)
         self.assertFalse(os.path.exists(self.set_path))
 
@@ -482,7 +482,7 @@ class AtomicWriteTests(CliTestCase):
             before = f.read()
 
         with mock.patch(
-            "fingerprint_sampler.fingerprint_set.os.replace",
+            "sketchtastic.fingerprint_set.os.replace",
             side_effect=OSError(28, "No space left on device"),
         ):
             code, _, err = self.fingerprint(self.write_events("run2.jsonl", EVENTS[3:]))
@@ -496,11 +496,11 @@ class AtomicWriteTests(CliTestCase):
 
 
 class EntryPointTests(unittest.TestCase):
-    """The real `python -m fingerprint_sampler` process, not just main()."""
+    """The real `python -m sketchtastic` process, not just main()."""
 
     def run_module(self, *argv, **kwargs):
         return subprocess.run(
-            [sys.executable, "-m", "fingerprint_sampler", *argv],
+            [sys.executable, "-m", "sketchtastic", *argv],
             cwd=PACKAGE_ROOT,
             capture_output=True,
             text=True,
@@ -511,7 +511,7 @@ class EntryPointTests(unittest.TestCase):
     def test_help_has_worked_example_and_in_place_warning(self):
         result = self.run_module("merge", "--help")
         self.assertEqual(result.returncode, 0)
-        self.assertIn("usage: fingerprint merge", result.stdout)
+        self.assertIn("usage: sketchtastic merge", result.stdout)
         self.assertIn("example:", result.stdout)
         self.assertIn("updated in place", result.stdout)
         self.assertIn("--force-profile", result.stdout)
@@ -529,10 +529,22 @@ class EntryPointTests(unittest.TestCase):
             self.assertIn("8 events read from stdin", result.stderr)
             self.assertIn("4 new, 0 updated, 4 total in set", result.stderr)
 
+    def test_help_names_the_command_it_was_run_as(self):
+        for argv0, prog in (
+            ("/usr/bin/skt", "skt"),
+            ("/x/sketchtastic", "sketchtastic"),
+            ("/x/__main__.py", "sketchtastic"),
+        ):
+            with self.subTest(argv0=argv0), mock.patch.object(sys, "argv", [argv0]):
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
+                    main(["--help"])
+                self.assertTrue(out.getvalue().startswith(f"usage: {prog} "), out.getvalue())
+
     def test_version_flag(self):
         result = self.run_module("--version")
         self.assertEqual(result.returncode, 0)
-        self.assertRegex(result.stdout, r"^fingerprint-sampler \d+\.\d+\.\d+")
+        self.assertRegex(result.stdout, r"^sketch-tastic \d+\.\d+\.\d+")
 
 
 if __name__ == "__main__":
@@ -633,7 +645,7 @@ class ShowTests(CliTestCase):
             with self.subTest(path=path):
                 code, out, err = self.run_cli("show", path)
                 self.assertEqual((code, out), (2, ""))
-                self.assertTrue(err.startswith("fingerprint: cannot use set file: "), err)
+                self.assertTrue(err.startswith("sketchtastic: cannot use set file: "), err)
                 self.assertIn(os.path.basename(path), err)
         with open(not_a_set) as f:
             self.assertEqual(f.read(), "just: text\n")
@@ -641,7 +653,7 @@ class ShowTests(CliTestCase):
     def test_help_describes_show_with_an_example(self):
         code, out, _ = self.run_cli("show", "--help")
         self.assertEqual(code, 0)
-        self.assertIn("fingerprint show web.fingerprints.yaml", out)
+        self.assertIn("sketchtastic show web.fingerprints.yaml", out)
         _, out, _ = self.run_cli("--help")
         self.assertIn("show", out)
 
@@ -712,7 +724,7 @@ class HistoryTests(CliTestCase):
         events = self.write("mixed.jsonl", json.dumps(EVENTS[0]) + "\nnot json\n")
         code, _, err = self.fingerprint(events)
         self.assertEqual(code, 3)  # takes precedence over 1 (a line was skipped)
-        self.assertIn(f"fingerprint: {self.set_path} updated, but history not written: ", err)
+        self.assertIn(f"sketchtastic: {self.set_path} updated, but history not written: ", err)
         self.assertEqual(len(self.load_set()["fingerprints"]), 1)
 
     def test_run_ids_number_on_from_the_set_and_its_history(self):
@@ -806,7 +818,7 @@ class SequenceTests(CliTestCase):
                 lines = [{"id": 7, "kind": "a"}, bad, {"id": 8, "kind": "a"}]
                 code, _, err = self.fingerprint(self.write_events("bad.jsonl", lines))
                 self.assertEqual(code, 2)
-                self.assertIn("fingerprint: line 2: no usable sequence at $.id", err)
+                self.assertIn("sketchtastic: line 2: no usable sequence at $.id", err)
                 self.assertIn("nothing written", err)
                 with open(self.set_path) as f:
                     self.assertEqual(f.read(), before)  # set untouched, mark included
@@ -820,7 +832,7 @@ class SequenceTests(CliTestCase):
             yaml.safe_dump(data, f)
         _, _, err = self.fingerprint(self.events("two.jsonl", [2]))
         self.assertIn(
-            "fingerprint: sequence path changed ($.old -> $.id); previous mark ignored", err
+            "sketchtastic: sequence path changed ($.old -> $.id); previous mark ignored", err
         )
         self.assertEqual(self.load_set()["sequence"], {"path": "$.id", "max": 2})
 

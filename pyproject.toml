@@ -3,15 +3,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "fingerprint-sampler"
+name = "sketch-tastic"
 version = "0.2.0"
-description = "Fingerprint and sample JSONL event streams: one entry per distinct shape of event, with counts, statistics and samples, in a set that grows across runs."
+description = "Mergeable sketches of JSONL event streams for regression testing and flow analysis."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "drusifer" }]
 requires-python = ">=3.14"
-keywords = ["jsonl", "fingerprint", "sampling", "logs", "events", "jsonpath"]
+keywords = ["jsonl", "sketch", "fingerprint", "logs", "events", "jsonpath", "regression"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -30,13 +30,14 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/drusifer/fingerling"
+Repository = "https://github.com/drusifer/sketch-tastic"
 
 [project.scripts]
-fingerprint = "fingerprint_sampler.__main__:main"
+sketchtastic = "sketchtastic.__main__:main"
+skt = "sketchtastic.__main__:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/fingerprint_sampler"]
+packages = ["src/sketchtastic"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "examples", "README.md", "LICENSE"]

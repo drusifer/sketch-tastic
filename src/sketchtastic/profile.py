@@ -19,9 +19,9 @@ from typing import Any
 
 import yaml
 
-from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.model import Field, Path, tokens
-from fingerprint_sampler.schema import schema_errors
+from sketchtastic.aggregators import Aggregate
+from sketchtastic.model import Field, Path, tokens
+from sketchtastic.schema import schema_errors
 
 _SECTIONS = {"fields": Field, "aggregates": Aggregate}
 

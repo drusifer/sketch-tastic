@@ -8,7 +8,7 @@
 PYTHON := .venv/bin/python
 PYTHONS := 3.14 3.15
 # The command the package installs (docs/SDLC.md section 7).
-CLI := .venv/bin/fingerprint
+CLI := .venv/bin/sketchtastic
 
 # First line of any recipe that needs the environment.
 define need_venv

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from fingerprint_sampler.model import MISSING, Path, Rule, ValueType, typed_values
+from sketchtastic.model import MISSING, Path, Rule, ValueType, typed_values
 
 __all__ = [
     "Aggregate",

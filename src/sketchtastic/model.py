@@ -18,7 +18,7 @@ from typing import Any, ClassVar, Self
 
 import jsonpath
 
-from fingerprint_sampler.schema import schema_errors
+from sketchtastic.schema import schema_errors
 
 __all__ = [
     "MISSING",

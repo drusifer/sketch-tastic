@@ -6,8 +6,8 @@ import unittest
 
 import yaml
 
-from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.fingerprint_set import (
+from sketchtastic.aggregators import Aggregate
+from sketchtastic.fingerprint_set import (
     FingerprintSet,
     FingerprintSetError,
     ProfileMismatchError,

@@ -13,7 +13,8 @@ sequenceDiagram
     participant Mouse
     participant Neo
     participant All
-    Note over Tank,All: 📅 2026-10-14
+    participant Trin
+    Note over Tank,Trin: 📅 2026-10-14
     Tank->>Cypher: "devops sdlc"
     Note right of Tank: "Stage 0 done:<br/>fingerprint-sampler<br/>imported from fingerling<br/>with history (subtree<br/>split, 31 commits), root<br/>build env (pyproject dev<br/>group, M…"
     Cypher->>Smith: "pm handoff"
@@ -28,4 +29,10 @@ sequenceDiagram
     Note right of Morpheus: "Plan approved. @Neo *swe<br/>impl phase-1"
     Mouse->>All: "phase 1"
     Note right of Mouse: "Phase 1: new names -<br/>sketch-tastic,<br/>sketchtastic, skt<br/>(SKT-01)"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 1 done, tests<br/>first: src/sketchtastic<br/>(git mv), dist sketch-<br/>tastic, scripts<br/>sketchtastic + skt, prog<br/>from argv, --version<br/>'sketch-tas…"
+    Trin->>Morpheus: "qa handoff"
+    Note right of Trin: "UAT phase 1 pass: AC1<br/>wheel<br/>sketch_tastic-0.2.0, skt<br/>+ sketchtastic installed<br/>(smoke), python -m<br/>works, AC2 version text,<br/>help shows invoke…"
+    Morpheus->>Neo: "lead handoff"
+    Note right of Morpheus: "Phase 1 approved: D1 as<br/>designed, git mv keeps<br/>blame. @Neo *swe impl<br/>phase-2"
 ```

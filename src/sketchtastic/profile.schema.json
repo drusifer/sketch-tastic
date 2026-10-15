@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/drusifer/fingerling/main/packages/fingerprint-sampler/src/fingerprint_sampler/profile.schema.json",
-  "title": "fingerprint-sampler profile",
+  "$id": "https://raw.githubusercontent.com/drusifer/sketch-tastic/main/src/sketchtastic/profile.schema.json",
+  "title": "sketch-tastic profile",
   "description": "How to fingerprint one kind of JSONL event: fields define a fingerprint's identity, aggregates are tracked per fingerprint.",
   "type": "object",
   "required": [

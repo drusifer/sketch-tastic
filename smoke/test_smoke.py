@@ -1,4 +1,4 @@
-"""Smoke tests for the installed fingerprint-sampler (STORY-FING-41).
+"""Smoke tests for the installed sketch-tastic (STORY-FING-41, STORY-SKT-01).
 
 Run by `make smoke` against the built wheel in a throwaway environment. Kept deliberately
 small: the installed command starts, and the README's examples work as written. Behaviour
@@ -17,10 +17,8 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 README = os.path.join(PACKAGE_ROOT, "README.md")
 
 
-def fingerprint(*args, cwd=None):
-    return subprocess.run(
-        ["fingerprint", *args], cwd=cwd, capture_output=True, text=True, timeout=60
-    )
+def sketchtastic(*args, cwd=None, command="sketchtastic"):
+    return subprocess.run([command, *args], cwd=cwd, capture_output=True, text=True, timeout=60)
 
 
 def readme_section(heading):
@@ -52,9 +50,11 @@ class InstalledCommandTests(unittest.TestCase):
     def test_version_matches_the_package_version(self):
         with open(os.path.join(PACKAGE_ROOT, "pyproject.toml"), "rb") as f:
             version = tomllib.load(f)["project"]["version"]
-        result = fingerprint("--version")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), f"fingerprint-sampler {version}")
+        for command in ("sketchtastic", "skt"):  # the full name and the short alias
+            with self.subTest(command=command):
+                result = sketchtastic("--version", command=command)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), f"sketch-tastic {version}")
 
 
 class ReadmeTests(unittest.TestCase):

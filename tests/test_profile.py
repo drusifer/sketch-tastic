@@ -7,9 +7,9 @@ import unittest
 
 import yaml
 
-from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.model import Field, tokens
-from fingerprint_sampler.profile import (
+from sketchtastic.aggregators import Aggregate
+from sketchtastic.model import Field, tokens
+from sketchtastic.profile import (
     Profile,
     ProfileError,
     load_profile,
@@ -234,12 +234,12 @@ class SchemaFileTests(unittest.TestCase):
     def test_schema_is_a_valid_draft_2020_12_schema(self):
         from jsonschema import Draft202012Validator
 
-        from fingerprint_sampler.schema import profile_schema
+        from sketchtastic.schema import profile_schema
 
         Draft202012Validator.check_schema(profile_schema())
 
     def test_every_shipped_example_passes_the_schema(self):
-        from fingerprint_sampler.schema import schema_errors
+        from sketchtastic.schema import schema_errors
 
         for name in sorted(os.listdir(EXAMPLE_PROFILES)):
             if name.endswith(".yaml"):
@@ -383,15 +383,15 @@ if __name__ == "__main__":
 
 class PublicApiTests(unittest.TestCase):
     def test_checking_api_is_exported_from_the_package(self):
-        import fingerprint_sampler
+        import sketchtastic
 
         for name in ("check_profile", "Modifier", "ProfileError", "Field", "Aggregate", "Rule"):
             with self.subTest(name=name):
-                self.assertIn(name, fingerprint_sampler.__all__)
-                self.assertTrue(hasattr(fingerprint_sampler, name))
+                self.assertIn(name, sketchtastic.__all__)
+                self.assertTrue(hasattr(sketchtastic, name))
 
     def test_check_profile_returns_problems_without_raising(self):
-        from fingerprint_sampler import check_profile
+        from sketchtastic import check_profile
 
         profile, problems = check_profile({"fields": []}, "p.yaml")
         self.assertIsNone(profile)

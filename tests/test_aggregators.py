@@ -2,7 +2,7 @@
 
 import unittest
 
-from fingerprint_sampler.aggregators import Aggregate
+from sketchtastic.aggregators import Aggregate
 
 
 def fold(entry, records, state=None):

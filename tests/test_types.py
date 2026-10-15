@@ -3,9 +3,9 @@
 import unittest
 from datetime import date, datetime, timezone
 
-from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.model import Field, ValueType
-from fingerprint_sampler.profile import ProfileError, parse_profile
+from sketchtastic.aggregators import Aggregate
+from sketchtastic.model import Field, ValueType
+from sketchtastic.profile import ProfileError, parse_profile
 
 UTC = timezone.utc
 
@@ -64,7 +64,7 @@ class TypedStatePersistenceTests(unittest.TestCase):
         import os
         import tempfile
 
-        from fingerprint_sampler.fingerprint_set import FingerprintSet, fingerprint_id
+        from sketchtastic.fingerprint_set import FingerprintSet, fingerprint_id
 
         aggregate = Aggregate("t", "$.t", "MAX", type="DATETIME")
         with tempfile.TemporaryDirectory() as tmp:
