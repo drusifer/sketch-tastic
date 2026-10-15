@@ -62,7 +62,7 @@ targets as `bobp make <target>`.
 | `build` | `uv build --out-dir dist`, then runs the built wheel's command in a clean environment | wheel + sdist in `dist/` (gitignored) |
 | `release-check` | compares `TAG=v<x.y.z>` with the package version | used by the publish workflow |
 | `check` | `python -m compileall -q` over `src`, `tests`, `smoke` | syntax check only |
-| `run` | the installed command with `$(ARGS)` | the CLI |
+| `run` | `.venv/bin/sketchtastic $(ARGS)` | the CLI |
 | `gharchive` | downloads one GH Archive hour (`GH_HOUR`) into `data/` once, then merges it with `examples/gharchive.yaml` into `data/gharchive/` | example at scale; needs network and `curl` |
 | `clean` | removes `__pycache__`, `.ruff_cache`, `dist`, `data` | keeps `.venv` |
 | `distclean` | `clean` + removes `.venv/` | |
@@ -201,13 +201,11 @@ Run by Tank at sprint close (`*devops sdlc-check`):
 
 ## 11. Agreed changes not yet built
 
-- **Sprint 1 renames** (owner, 2026-10-14): distribution `sketch-tastic`, import `sketchtastic`,
-  commands `sketchtastic` and `skt`; vocabulary — the set file is a **sketch**, one fingerprint
-  is a **skit**. Until built, the package is still `fingerprint-sampler` / `fingerprint_sampler`
-  with the `fingerprint` command.
+None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`, commands
+`sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
 
 ---
-*Last verified: 2026-10-14 at Stage 0 of Sprint 1 (`*devops sdlc`), by Tank — from-clean
-`make install`, `make test` (218), `make test ARGS=test_cli`, `make lint`, `make smoke`,
-`make test-all` (3.14, 3.15), `make quality`, `make secrets`, all green after importing the
-package with its history.*
+*Last verified: 2026-10-14 at Sprint 1 close (`*devops sdlc-check`), by Tank — from-clean
+`make distclean install lint test secrets build`, `make test-all` (3.14, 3.15) and `make smoke`
+(both commands from the built `sketch_tastic` wheel) green; lockfile current; venv isolated;
+hooks set; workflows call existing targets only.*
