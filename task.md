@@ -1,6 +1,6 @@
 # Task Board
 
-**No sprint in flight.** Last sprint: 4 (below). fingerling depends on this repository (pin at 849b4ec, merged locally in fingerling, not yet pushed).
+**No sprint in flight.** Last sprint: 4 (below), then two fixes on 2026-10-15 (pushed 636243e): every aggregate created in profile order at its initial state; skit ids from token values in profile order. fingerling: leave alone unless the owner asks.
 
 ## Sprint 4: Parallel Merge
 

@@ -68,3 +68,15 @@ OK
 ---
 [<small>2026-10-15 09:48:32</small>] [**Neo**]->[**User**] *swe fix*:
  Skit id = MD5 of JSON token values in profile order (no keys); profile_id = field specs in profile order. Golden ids, README quickstart (smoke-verified) updated. Profile evolution + the two-id question backlogged (owner). test 243 OK, smoke OK, lint clean.
+
+---
+[<small>2026-10-15 09:58:28</small>] [**User**]->[**all**] *request*:
+ push main
+
+---
+[<small>2026-10-15 09:58:28</small>] [**Tank**]->[**all**] *devops push*:
+ Pushed main to origin (through 636243e: profile-order defaults, profile-ordered skit ids).
+
+---
+[<small>2026-10-15 09:59:30</small>] [**Mouse**]->[**User**] *handoff*:
+ Prepared for a context clear: Mouse/Neo/Morpheus state and task.md updated (pipeline, profile-order rules, measurements, owner rules, backlog incl. profile evolution). No sprint in flight; main pushed at 636243e. Next: owner picks sprint-5 (STORY-SKT-08).

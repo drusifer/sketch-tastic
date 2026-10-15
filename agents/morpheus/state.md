@@ -2,13 +2,14 @@
 
 ## Context
 ### Recent Decisions
-None yet
+- The profile is the single source of truth for key order (aggregates, functions, meta, show columns, skit id value order, profile id). See docs/DECISIONS.md 2026-10-15 entries.
+- Design rule (owner): one mechanism that covers every case; producers wait on full buffers; no fallback side channels; prefer a standard library to a partial reimplementation.
 
 ### Key Findings
-None yet
+- Parallel speed-up is bounded by serial parent work (reading, YAML writing); libyaml removed the largest piece.
 
 ### Important Notes
-None yet
+- Backlog for a future sprint: profile evolution (updating a profile, adding/removing fields, two ids).
 
 ## Current Task
 **Status:** Not started
