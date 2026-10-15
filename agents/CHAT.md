@@ -18,3 +18,11 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_2.md` (2026-10-14 21:47:20) — Sprint 2, Sort the Show (Tier 2, 2 pts, 0 fix cycles). Owner: sort lowest first only, KEY = header any case, default COUNT (flips most-frequent-first), --top N dropped. Phase 1 refactored show columns to (header, value, cell) data, output unchanged. Phase 2 added show --sort KEY: '-' first, numbers before text, ties in file order, unknown/ambiguous key exits 2 listing columns; help and README. GH Archive: | tail shows heaviest skit. No release (mainline).
 
 ---
+
+---
+[<small>2026-10-14 21:48:07</small>] [**User**]->[**all**] *request*:
+ push it
+
+---
+[<small>2026-10-14 21:48:07</small>] [**Tank**]->[**all**] *devops push*:
+ Pushed main to origin (6c4606f..849b4ec): Sprint 2 sort the show. Repo is on GitHub, so fingerling can now depend on it.

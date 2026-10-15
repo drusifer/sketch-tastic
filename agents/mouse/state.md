@@ -8,7 +8,7 @@
 **Status:** No sprint in flight.
 
 ## Next Steps
-1. After the owner pushes this repo: fingerling (`../fingerling`) drops `packages/fingerprint-sampler` and depends on sketch-tastic via git (pinned commit), updating its parked code to the new names.
+1. Done: fingerling Sprint 18 already depends on sketch-tastic (git pin 6c4606f, pushed). Bumping its pin is optional; its parked code does not use `show`.
 2. Backlog in `task.md` (show --sort done; next candidates: test-internal fingerprint names, history fold speed).
 3. Next sprint is sprint-3, next story STORY-SKT-04. Keep chat messages under 512 characters and check every `bobp chat` result.
 

@@ -1,6 +1,6 @@
 # Task Board
 
-**No sprint in flight.** Last sprint: 2 (below). Next: fingerling depends on this repository (after it is pushed).
+**No sprint in flight.** Last sprint: 2 (below). fingerling already depends on this repository (its Sprint 18, pinned to 6c4606f).
 
 ## Sprint 2: Sort the Show
 
