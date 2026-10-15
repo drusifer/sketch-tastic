@@ -25,8 +25,8 @@ classifiers = [
 ]
 dependencies = [
     "PyYAML>=6.0",
+    "jsonpath-rfc9535>=2.0.2",
     "jsonschema>=4.23",
-    "python-jsonpath>=2.0",
 ]
 
 [project.urls]

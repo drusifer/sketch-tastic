@@ -28,3 +28,14 @@ samples copied once per event with a JSON-specific copy). 2.6x overall.
 (dropping the copy was tried and rejected for that reason). What remains is spread thin: one copy
 of each event (~16% profiled), folding, JSON parsing, and SIZE's JSON encoding. Further gains need
 bigger changes (e.g. a copy-free ownership mode for the CLI, a faster JSON parser), not taken.
+
+**Decision (owner, 2026-10-14, after Sprint 3):** JSONPath is evaluated by `jsonpath-rfc9535` 2.x
+(strict RFC 9535, no extensions) instead of `python-jsonpath`, and the Sprint 3 plain-path
+shortcut is removed. The point of JSONPath is a standard; a hand-written evaluator for some paths
+adds complexity without fixing the cause. The cause was python-jsonpath building a match node and
+a path string for every step (compilation was already cached); jsonpath-rfc9535's `findall` uses
+a resolver that tracks no locations.
+**Consequences:** `make profile` 40.83 s with the shortcut → 46.25 s without it, same sketch; path
+evaluation ~19 s of profiled time (146 s with python-jsonpath). Profiles must use RFC 9535 syntax
+only. New transitive runtime dependencies: `regex` and `iregexp-check` (for I-Regexp in
+`match()`/`search()`).
