@@ -13,9 +13,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from contextlib import AbstractContextManager, nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import IO, Any, Iterable
 
 from fingerprint_sampler import __version__
@@ -55,10 +56,13 @@ example:
 The SET file is updated in place (atomically) unless --output is given.
 
 history:
-  Every run that updates SET also writes just that run's fingerprints, with a
-  'run:' header (times, source, counts), to <SET without extension>.history/,
-  e.g. web.fingerprints.history/2026-10-14T193005Z.yaml. 'fingerprint show'
-  reads it. A run with --output writes no history.
+  Each run gets an id, YYMMDD-SEQ (UTC date, then a number that only goes up
+  for this set), e.g. 261015-0003. Fingerprints record the first and last run
+  that saw them. Every run that updates SET also writes just that run's
+  fingerprints, with a 'run:' header (id, times, source, counts), to
+  <SET without extension>.history/<run id>.yaml, e.g.
+  web.fingerprints.history/261015-0003.yaml; 'fingerprint show' reads it.
+  A run with --output writes no history and uses up no run id.
 
 exit status:
   0  set written, every line was used
@@ -84,7 +88,9 @@ example:
   fingerprint show web.fingerprints.yaml
   fingerprint show web.fingerprints.yaml | less -S    # long values: scroll sideways
 
-ID is the start of the fingerprint ID; times are UTC; '-' means no value.
+ID is the start of the fingerprint ID; FIRST RUN and LAST RUN are the ids of
+the first and last run that saw it (see 'fingerprint merge --help'); '-' means
+no value.
 Each % column is the fingerprint's share of the set total: COUNT % of all
 events, and one value and % column per SUM or COUNT aggregate (key.FN when
 the aggregate has several functions).
@@ -163,7 +169,7 @@ def build_parser() -> argparse.ArgumentParser:
         "show",
         help="print a fingerprint set as a table",
         description="Print one row per fingerprint in SET, most frequent first: "
-        "its count and share of all events, when it was first and last seen, "
+        "its count and share of all events, the first and last run that saw it, "
         "its summed and counted aggregates with their shares, and its tokens.",
         epilog=_SHOW_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -185,20 +191,6 @@ def _cmd_check(args: argparse.Namespace) -> int:
         else:
             print(f"{path}: OK")
     return status
-
-
-def _time(value: Any) -> str:
-    """A stored time as UTC `YYYY-MM-DD HH:MM:SS` ('-' if absent; as stored if not a time)."""
-    if isinstance(value, str):
-        try:
-            value = datetime.fromisoformat(value)
-        except ValueError:
-            return value
-    if not isinstance(value, datetime):
-        return "-"
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _table(rows: list[list[str]]) -> str:
@@ -238,7 +230,7 @@ def _shared_columns(records: Iterable[Fingerprint]) -> list[tuple[str, str | Non
 def _show_row(
     fid: str, record: Fingerprint, shared: list[tuple[str, str | None]], keys: list[str]
 ) -> list[str]:
-    """One `show` row: ID, count and share, times, each shared value and share, tokens."""
+    """One `show` row: ID, count and share, first/last run, each shared value and share, tokens."""
     meta, shares = record.meta, record.share.get("aggregates", {})
     values = []
     for key, function in shared:
@@ -248,8 +240,8 @@ def _show_row(
         fid[:8],
         _cell(meta.get("count")),
         _percent(record.share.get("meta", {}).get("count")),
-        _time(meta.get("first_seen")),
-        _time(meta.get("last_seen")),
+        _cell(meta.get("first_seen")),
+        _cell(meta.get("last_seen")),
         *values,
         *(str(record.tokens.get(key, "-")) for key in keys),
     ]
@@ -261,7 +253,7 @@ def _show_table(records: list[tuple[str, Fingerprint]]) -> str:
     keys = sorted({key for _, record in records for key in record.tokens})
     shared = _shared_columns(record for _, record in records)
     names = [key if function is None else f"{key}.{function}" for key, function in shared]
-    header = ["ID", "COUNT", "COUNT %", "FIRST SEEN", "LAST SEEN"]
+    header = ["ID", "COUNT", "COUNT %", "FIRST RUN", "LAST RUN"]
     header += [column for name in names for column in (name, f"{name} %")] + keys
     return _table([header] + [_show_row(fid, record, shared, keys) for fid, record in records])
 
@@ -286,7 +278,8 @@ def _fold_stream(
 ) -> dict:
     """Fingerprint each JSONL line into `fingerprints` and into `run` (this run only).
 
-    Both get the same timestamp per event, so their times agree. Returns run statistics.
+    Both record the run's id (`fingerprints.last_run`) as where each event was seen.
+    Returns run statistics.
     """
     known_before = set(fingerprints)
     seen: set[str] = set()
@@ -311,9 +304,9 @@ def _fold_stream(
             skipped_lines += 1
             warn(lineno, f"expected a JSON object, got {type(event).__name__}")
             continue
-        tokens, timestamp = profile.tokens(event), datetime.now(UTC).isoformat()
-        run.upsert(tokens, event, timestamp)
-        seen.add(fingerprints.upsert(tokens, event, timestamp))
+        tokens = profile.tokens(event)
+        run.upsert(tokens, event, fingerprints.last_run)
+        seen.add(fingerprints.upsert(tokens, event, fingerprints.last_run))
         events += 1
 
     return {
@@ -376,25 +369,33 @@ def _source(args: argparse.Namespace) -> str:
     return "stdin" if args.events == "-" else args.events
 
 
-def _history_path(set_path: str, started: datetime) -> str:
-    """A new file in `<set without extension>.history/`, named by UTC start time (STORY-FING-48).
+RUN_ID = re.compile(r"\d{6}-(\d{4,})")
+"""A run id, `YYMMDD-SEQ`: the UTC date of the run and a per-set sequence number."""
 
-    Creates the directory. A run starting in the same second as an earlier one gets _2, _3, ... (sorts after the first)
+
+def _history_dir(set_path: str) -> str:
+    """`<set without its last extension>.history`, where each run's own set is kept."""
+    return os.path.splitext(set_path)[0] + ".history"
+
+
+def _next_run_id(last_run: str | None, history_dir: str, day: date) -> str:
+    """`YYMMDD-SEQ` for a new run: SEQ is one past the highest in the set and its history.
+
+    Counting the history too means a rebuilt set never reuses a number a run file holds.
     """
-    directory = os.path.splitext(set_path)[0] + ".history"
-    os.makedirs(directory, exist_ok=True)
-    stem = started.strftime("%Y-%m-%dT%H%M%SZ")
-    path, n = os.path.join(directory, f"{stem}.yaml"), 2
-    while os.path.exists(path):
-        path, n = os.path.join(directory, f"{stem}_{n}.yaml"), n + 1
-    return path
+    ids = [last_run or ""]
+    if os.path.isdir(history_dir):
+        ids += [os.path.splitext(name)[0] for name in os.listdir(history_dir)]
+    seqs = [int(match.group(1)) for match in map(RUN_ID.fullmatch, ids) if match]
+    return f"{day:%y%m%d}-{max(seqs, default=0) + 1:04d}"
 
 
 def _write_history(
-    args: argparse.Namespace, run: FingerprintSet, stats: dict, started: datetime
+    args: argparse.Namespace, run: FingerprintSet, run_id: str, stats: dict, started: datetime
 ) -> str:
     """Save this run's own set, with its `run:` header, to SET's history. Returns its path."""
     run.run = {
+        "id": run_id,
         "started": started.isoformat(),
         "finished": datetime.now(UTC).isoformat(),
         "source": _source(args),
@@ -402,7 +403,9 @@ def _write_history(
         "skipped_lines": stats["skipped_lines"],
         "set": args.set_path,
     }
-    path = _history_path(args.set_path, started)
+    directory = _history_dir(args.set_path)
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"{run_id}.yaml")
     run.save(path)
     return path
 
@@ -439,6 +442,8 @@ def _cmd_merge(args: argparse.Namespace) -> int:
     try:
         profile = _load_profile(args.profile)
         fingerprints = _open_set(args, profile)
+        run_id = _next_run_id(fingerprints.last_run, _history_dir(args.set_path), started.date())
+        fingerprints.last_run = run_id
         run = FingerprintSet(profile.aggregates, profile.profile_id)
         with _open_events(args) as stream:
             stats = _fold_stream(stream, profile, fingerprints, run)
@@ -459,7 +464,7 @@ def _cmd_merge(args: argparse.Namespace) -> int:
     if args.output:
         return status
     try:
-        _say(f"  history: {_write_history(args, run, stats, started)}")
+        _say(f"  history: {_write_history(args, run, run_id, stats, started)}")
     except OSError as exc:
         _say(
             f"fingerprint: {args.set_path} updated, but history not written: {exc.strerror or exc}"

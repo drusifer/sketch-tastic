@@ -59,7 +59,7 @@ fingerprint: 4 events read from events.jsonl
   fingerprints: 3 new, 0 updated, 3 total in set
   skipped: 0 malformed lines, 0 unusable aggregate values
   wrote app.fingerprints.yaml (profile f50d7a5f85ddf9f7f4c72370f454ae2e)
-  history: app.fingerprints.history/2026-10-14T035919Z.yaml
+  history: app.fingerprints.history/261014-0001.yaml
 ```
 
 Four events, three fingerprints: the two successful `db` queries share one. Run the same command
@@ -71,6 +71,7 @@ leaves a file with just its own fingerprints in `app.fingerprints.history/` (see
 ```yaml
 version: 0
 profile_id: f50d7a5f85ddf9f7f4c72370f454ae2e
+last_run: 261014-0001
 fingerprints:
   b738d17a6a5f7265cb4cef73937afd4f:
     tokens:
@@ -90,13 +91,13 @@ fingerprints:
       - query ok (cached)
     meta:
       count: 2
-      first_seen: 2026-10-14 03:59:19.796868+00:00
-      last_seen: 2026-10-14 03:59:19.796991+00:00
+      first_seen: 261014-0001
+      last_seen: 261014-0001
       first:
-      - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
+      - meta: {run: 261014-0001}
         record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
       last:
-      - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
+      - meta: {run: 261014-0001}
         record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
     share:
       meta:
@@ -106,10 +107,10 @@ fingerprints:
 To read a set without the YAML, print it as a table with `fingerprint show app.fingerprints.yaml`:
 
 ```
-ID        COUNT  COUNT %  FIRST SEEN           LAST SEEN            component  failed  level
-b738d17a  2      50.0     2026-10-14 03:59:19  2026-10-14 03:59:19  db         FALSE   INFO
-5c56a234  1      25.0     2026-10-14 03:59:19  2026-10-14 03:59:19  db         TRUE    ERROR
-0a13defd  1      25.0     2026-10-14 03:59:19  2026-10-14 03:59:19  http       FALSE   INFO
+ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
+b738d17a  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
+5c56a234  1      25.0     261014-0001  261014-0001  db         TRUE    ERROR
+0a13defd  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
 ```
 
 ## Usage
@@ -140,21 +141,27 @@ used · `1` set written but some lines were skipped (listed by line number) · `
 
 ### History
 
-Every run that updates `SET` also writes just that run's fingerprints to a file of its own in
-`<SET without extension>.history/`, named by the run's start time in UTC:
+Each run gets a **run id**, `YYMMDD-SEQ`: the UTC date, then a number that only goes up for this
+set (`261015-0003`). The set keeps the latest as `last_run`, and every fingerprint's
+`first_seen` / `last_seen` name the first and last run that saw it.
+
+Every run that updates `SET` also writes just that run's fingerprints to a file named by its run
+id in `<SET without extension>.history/`:
 
 ```
-web.fingerprints.yaml
+web.fingerprints.yaml                  # last_run: 261015-0003
 web.fingerprints.history/
-  2026-10-14T193005Z.yaml
-  2026-10-14T201112Z.yaml
+  261014-0001.yaml
+  261014-0002.yaml
+  261015-0003.yaml
 ```
 
-A run file is a fingerprint set (counts, aggregates and shares from that run only), so
-`fingerprint show` reads it. It starts with a `run:` header: `started`, `finished`, `source`,
-`events`, `skipped_lines` and `set`. Runs starting in the same second get `_2`, `_3`, ...; names
-list in run order. History is always on; a run with `-o`, or one that writes nothing, leaves no
-run file. Nothing is pruned.
+So `last_seen: 261014-0002` points straight at the file for that run. A run file is a fingerprint
+set (counts, aggregates and shares from that run only), so `fingerprint show` reads it. It starts
+with a `run:` header: `id`, `started`, `finished` (UTC), `source`, `events`, `skipped_lines` and
+`set`. A new run's number is one past the highest in the set and its history, so a rebuilt set
+never overwrites an old run file. History is always on; a run with `-o`, or one that writes
+nothing, leaves no run file and uses up no run id. Nothing is pruned.
 
 ### Check a profile
 
@@ -191,7 +198,7 @@ fingerprint show SET
 ```
 
 Prints one row per fingerprint, most frequent first: the first 8 characters of its ID, its count
-and `COUNT %` (its share of all events), when it was first and last seen (UTC), then a value and
+and `COUNT %` (its share of all events), the first and last run that saw it, then a value and
 a `%` column for each `SUM` or `COUNT` aggregate (`payload_bytes.SUM`, `payload_bytes.SUM %`), and
 one column per token. Shares come from the set file's `share` section; a set written before
 shares existed shows `-` until its next merge. A set with no fingerprints prints
@@ -322,19 +329,20 @@ every problem at once.
 
 - `tokens` shows what each ID stands for.
 - `aggregates` holds what your profile asked for. `meta` holds what every fingerprint gets for
-  free: `count`, `first_seen` / `last_seen`, and the first and last record (one each, to keep
+  free: `count`, `first_seen` / `last_seen` (the first and last run id that saw it, see History
+  above), and the first and last record (one each, to keep
   sets and run files small; add `FIRST`/`LAST` aggregates to your profile for more samples).
 - `meta` comes from a small built-in profile shipped with the package (`builtin.yaml`), which
   uses the same aggregate functions you can. It reads each record wrapped in an envelope,
-  `{meta: {seen: <time read>}, record: <the parsed record>}`, so the fields the tool adds can never
-  clash with the record's own, and the stored first/last records carry the time they were seen.
+  `{meta: {run: <run id>}, record: <the parsed record>}`, so the fields the tool adds can never
+  clash with the record's own, and the stored first/last records carry the run they came from.
 - `share` gives each fingerprint's percentage of the whole set for every value that adds up:
   `share.meta.count` is its share of all events, and `share.aggregates` holds the share of each
   `SUM` and `COUNT`, laid out like `aggregates` (`payload_bytes: {SUM: 31.25}`, or `requests: 25.0`
   for a single-function aggregate). It is recomputed on every write; a value whose total is 0 has
   no share.
-- Times are wall clock, when the tool read the record, so they work for any JSONL. To track a
-  time field inside your records, add it to your profile's `aggregates`.
+- The tool records runs, not times, per fingerprint; a run's start and finish times are in its run
+  file. To track a time field inside your records, add it to your profile's `aggregates`.
 - A set records the profile that built it (`profile_id`, derived from `fields`). Merging under a
   profile with different `fields` is refused, because the fingerprints would not be comparable.
   Changing `aggregates` is always fine.

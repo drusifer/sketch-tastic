@@ -10,13 +10,13 @@ import sys
 import tempfile
 import textwrap
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest import mock
 
 import yaml
 
 from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.cli import _history_path, main
+from fingerprint_sampler.cli import _history_dir, _next_run_id, main
 from fingerprint_sampler.fingerprint_set import FingerprintSet, fingerprint_id
 from fingerprint_sampler.profile import load_profile
 
@@ -87,7 +87,7 @@ class CliTestCase(unittest.TestCase):
 
     @staticmethod
     def without_timestamps(data):
-        """Set contents minus wall-clock fields, for comparing sets built at different times."""
+        """Set contents minus run ids, for comparing sets built over different runs."""
 
         def strip(rec):
             meta = dict(rec["meta"])
@@ -138,9 +138,12 @@ class CreateAndMergeTests(CliTestCase):
         self.assertEqual(rec_a["meta"]["count"], 3)  # 2 + 1: counts add
         self.assertEqual(rec_a["aggregates"]["size"]["SUM"], 40.5)  # aggregates merge
         self.assertEqual(rec_a["aggregates"]["recent"], [3, 4])  # LAST continues
-        self.assertEqual(
-            rec_a["meta"]["first_seen"], first["fingerprints"][fid_a]["meta"]["first_seen"]
-        )
+        today = datetime.now(UTC).strftime("%y%m%d")
+        self.assertEqual(first["last_run"], f"{today}-0001")
+        self.assertEqual(merged["last_run"], f"{today}-0002")
+        self.assertEqual(rec_a["meta"]["first_seen"], f"{today}-0001")  # the run, not a time
+        self.assertEqual(rec_a["meta"]["last_seen"], f"{today}-0002")
+        self.assertEqual(rec_a["meta"]["last"][0]["meta"], {"run": f"{today}-0002"})
         self.assertIn("c", by_kind)  # new fingerprint appended
 
     def _fingerprints_line(self, err):
@@ -540,20 +543,20 @@ class ShowTests(CliTestCase):
     """`fingerprint show SET` (STORY-FING-42)."""
 
     def save_set(self, observations):
-        """Build a set from (tokens, timestamp) pairs, in order, and save it."""
+        """Build a set from (tokens, run id) pairs, in order, and save it."""
         fingerprints = FingerprintSet()
-        for tokens, timestamp in observations:
-            fingerprints.upsert(tokens, {}, timestamp=timestamp)
+        for tokens, run in observations:
+            fingerprints.upsert(tokens, {}, run=run)
         fingerprints.save(self.set_path)
 
     def test_prints_one_row_per_fingerprint_most_frequent_first(self):
         a, b, c = {"kind": "a"}, {"kind": "b", "route": "/x"}, {"kind": "c"}
         self.save_set(
             [
-                (a, "2024-01-01T10:00:00+02:00"),
-                (b, "2024-01-01T09:00:00Z"),
-                (b, "2024-01-02T09:30:05Z"),
-                (c, "2024-01-03T00:00:00Z"),
+                (a, "261014-0001"),
+                (b, "261014-0001"),
+                (b, "261014-0002"),
+                (c, "261015-0003"),
             ]
         )
         code, out, err = self.run_cli("show", self.set_path)
@@ -562,10 +565,10 @@ class ShowTests(CliTestCase):
         self.assertEqual(
             out.splitlines(),
             [
-                "ID        COUNT  COUNT %  FIRST SEEN           LAST SEEN            kind  route",
-                f"{idb}  2      50.0     2024-01-01 09:00:00  2024-01-02 09:30:05  b     /x",
-                f"{ida}  1      25.0     2024-01-01 08:00:00  2024-01-01 08:00:00  a     -",
-                f"{idc}  1      25.0     2024-01-03 00:00:00  2024-01-03 00:00:00  c     -",
+                "ID        COUNT  COUNT %  FIRST RUN    LAST RUN     kind  route",
+                f"{idb}  2      50.0     261014-0001  261014-0002  b     /x",
+                f"{ida}  1      25.0     261014-0001  261014-0001  a     -",
+                f"{idc}  1      25.0     261015-0003  261015-0003  c     -",
             ],
         )
 
@@ -574,28 +577,28 @@ class ShowTests(CliTestCase):
             [Aggregate("size", "$.size", ["SUM", "MAX"]), Aggregate("n", "$.size", "COUNT")]
         )
         for kind, size in (("a", 10), ("a", 30), ("b", 60)):
-            fingerprints.upsert({"k": kind}, {"size": size}, timestamp="2024-01-01T00:00:00Z")
+            fingerprints.upsert({"k": kind}, {"size": size}, run="261014-0001")
         fingerprints.save(self.set_path)
         code, out, _ = self.run_cli("show", self.set_path)
         self.assertEqual(code, 0)
         rows = [re.split(r"\s{2,}", line) for line in out.splitlines()]
-        time = "2024-01-01 00:00:00"
+        run = "261014-0001"
         self.assertEqual(
             [row[1:] for row in rows],
             [
                 [
                     "COUNT",
                     "COUNT %",
-                    "FIRST SEEN",
-                    "LAST SEEN",
+                    "FIRST RUN",
+                    "LAST RUN",
                     "size.SUM",
                     "size.SUM %",
                     "n",
                     "n %",
                     "k",
                 ],
-                ["2", "66.7", time, time, "40", "40.0", "2", "66.7", "a"],
-                ["1", "33.3", time, time, "60", "60.0", "1", "33.3", "b"],
+                ["2", "66.7", run, run, "40", "40.0", "2", "66.7", "a"],
+                ["1", "33.3", run, run, "60", "60.0", "1", "33.3", "b"],
             ],
         )
 
@@ -616,7 +619,7 @@ class ShowTests(CliTestCase):
         code, out, _ = self.run_cli("show", self.set_path)
         self.assertEqual(code, 0)
         header, row = (re.split(r"\s{2,}", line) for line in out.splitlines())
-        self.assertEqual(header, ["ID", "COUNT", "COUNT %", "FIRST SEEN", "LAST SEEN", "k"])
+        self.assertEqual(header, ["ID", "COUNT", "COUNT %", "FIRST RUN", "LAST RUN", "k"])
         self.assertEqual(row[1:3], ["1", "-"])
 
     def test_empty_set_says_so(self):
@@ -660,7 +663,7 @@ class HistoryTests(CliTestCase):
         files = self.run_files()
         self.assertEqual(len(files), 2)
         for name in files:
-            self.assertRegex(name, r"^\d{4}-\d\d-\d\dT\d{6}Z(_\d+)?\.yaml$")
+            self.assertRegex(name, r"^\d{6}-\d{4}\.yaml$")
         second = os.path.join(self.history_dir(), files[-1])
         self.assertIn(f"  history: {second}", err)
 
@@ -712,20 +715,36 @@ class HistoryTests(CliTestCase):
         self.assertIn(f"fingerprint: {self.set_path} updated, but history not written: ", err)
         self.assertEqual(len(self.load_set()["fingerprints"]), 1)
 
-    def test_names_sort_by_time_and_never_collide(self):
-        started = datetime(2026, 10, 14, 19, 30, 5, tzinfo=UTC)
-        set_path = os.path.join(self.dir, "data", "app.fingerprints.yaml")
-        first = _history_path(set_path, started)
-        self.assertEqual(
-            first,
-            os.path.join(self.dir, "data", "app.fingerprints.history", "2026-10-14T193005Z.yaml"),
-        )
-        self.write(os.path.relpath(first, self.dir), "")
-        second = _history_path(set_path, started)
-        self.assertTrue(second.endswith("2026-10-14T193005Z_2.yaml"))
-        self.write(os.path.relpath(second, self.dir), "")
-        self.assertTrue(_history_path(set_path, started).endswith("2026-10-14T193005Z_3.yaml"))
+    def test_run_ids_number_on_from_the_set_and_its_history(self):
+        today = date(2026, 10, 15)
+        history = os.path.join(self.dir, "set.history")
+        self.assertEqual(_next_run_id(None, history, today), "261015-0001")
+        self.assertEqual(_next_run_id("261014-0005", history, today), "261015-0006")
+        os.makedirs(history)
+        for name in ("261014-0007.yaml", "notes.txt", "261014-0002.yaml"):
+            self.write(os.path.join("set.history", name), "")
+        # a rebuilt set must not reuse a number its history already holds
+        self.assertEqual(_next_run_id("261014-0005", history, today), "261015-0008")
+        self.assertEqual(_next_run_id(None, history, today), "261015-0008")
 
-    def test_set_without_an_extension(self):
-        path = _history_path(os.path.join(self.dir, "myset"), datetime(2026, 1, 1, tzinfo=UTC))
-        self.assertEqual(os.path.dirname(path), os.path.join(self.dir, "myset.history"))
+    def test_run_file_is_named_by_run_id_and_header_carries_it(self):
+        self.fingerprint(self.write_events("one.jsonl", EVENTS[:2]))
+        self.fingerprint(self.write_events("two.jsonl", EVENTS[2:]))
+        today = datetime.now(UTC).strftime("%y%m%d")
+        self.assertEqual(self.run_files(), [f"{today}-0001.yaml", f"{today}-0002.yaml"])
+        run = self.load_set(os.path.join(self.history_dir(), f"{today}-0002.yaml"))
+        self.assertEqual(run["run"]["id"], f"{today}-0002")
+
+    def test_history_dir_drops_only_the_last_extension(self):
+        self.assertEqual(
+            _history_dir("data/app.fingerprints.yaml"), "data/app.fingerprints.history"
+        )
+        self.assertEqual(_history_dir("data/myset"), "data/myset.history")
+
+    def test_trial_run_does_not_use_up_a_run_id(self):
+        events = self.write_events("one.jsonl", EVENTS)
+        self.fingerprint(events)
+        self.fingerprint(events, "-o", os.path.join(self.dir, "preview.yaml"))
+        self.fingerprint(events)
+        today = datetime.now(UTC).strftime("%y%m%d")
+        self.assertEqual(self.load_set()["last_run"], f"{today}-0002")

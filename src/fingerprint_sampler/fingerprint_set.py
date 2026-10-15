@@ -12,7 +12,6 @@ import hashlib
 import os
 import tempfile
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from functools import cache
 from importlib.resources import files
 from typing import Any, Iterator, Sequence
@@ -53,7 +52,7 @@ class Fingerprint:
     aggregates: dict[str, Any] = field(default_factory=dict)
     """What the profile asked for, keyed by its aggregate keys."""
     meta: dict[str, Any] = field(default_factory=dict)
-    """The built-in metadata (`builtin.yaml`): count, first/last seen, first/last records."""
+    """The built-in metadata (`builtin.yaml`): count, first/last run seen in, first/last records."""
     share: dict[str, Any] = field(default_factory=dict)
     """Percent of the set total for each SUM and COUNT in `meta` and `aggregates`, laid out
     like them. Derived: rewritten on every save, never folded."""
@@ -88,22 +87,21 @@ class FingerprintSet:
         self.profile_id = profile_id
         self.skipped_values = 0
         """Running count of present values the profile's aggregates could not use."""
+        self.last_run: str | None = None
+        """Id of the latest run merged into this set (`YYMMDD-SEQ`); saved and loaded."""
         self.run: dict[str, Any] | None = None
         """Header of a run file (STORY-FING-48): what one run read. Saved if set; never loaded."""
 
-    def upsert(self, tokens: dict[str, str], record: Any, timestamp: str | None = None) -> str:
+    def upsert(self, tokens: dict[str, str], record: Any, run: str | None = None) -> str:
         """Fold one record into the set. Returns its fingerprint_id.
 
         The profile's aggregates read the record. The built-in ones read an envelope,
-        {"meta": {"seen": <timestamp>}, "record": record}, so injected fields never clash
-        with the record's own.
+        {"meta": {"run": run}, "record": record}, so injected fields never clash with the
+        record's own; `run` is the id of the run reading it.
         """
         fid = fingerprint_id(tokens)
         fingerprint = self._records.setdefault(fid, Fingerprint(dict(tokens)))
-        envelope = {
-            "meta": {"seen": timestamp or datetime.now(timezone.utc).isoformat()},
-            "record": record,
-        }
+        envelope = {"meta": {"run": run}, "record": record}
         self.skipped_values += _fold(self._aggregates, fingerprint.aggregates, record)
         _fold(builtin_aggregates(), fingerprint.meta, envelope)
         return fid
@@ -153,6 +151,8 @@ class FingerprintSet:
         """
         self._compute_shares()
         data = {"version": SET_VERSION, "profile_id": self.profile_id}
+        if self.last_run is not None:
+            data["last_run"] = self.last_run
         if self.run is not None:
             data["run"] = self.run
         data["fingerprints"] = {fid: asdict(rec) for fid, rec in self._records.items()}
@@ -180,6 +180,7 @@ class FingerprintSet:
         stored = data.get("profile_id")
         if not force and None not in (stored, self.profile_id) and stored != self.profile_id:
             raise ProfileMismatchError(path, stored, self.profile_id)
+        self.last_run = data.get("last_run")
         try:
             self._records = {
                 fid: Fingerprint(**rec) for fid, rec in (data["fingerprints"] or {}).items()

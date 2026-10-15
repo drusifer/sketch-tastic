@@ -70,9 +70,9 @@ class ReadmeTests(unittest.TestCase):
         return section, result
 
     def test_quickstart_prints_the_output_it_shows(self):
-        # The history file is named by the time of the run, so any run time matches.
+        # The history file is named by the run id, which starts with today's date.
         def any_run_time(text):
-            return re.sub(r"\d{4}-\d\d-\d\dT\d{6}Z(_\d+)?\.yaml", "<run time>.yaml", text)
+            return re.sub(r"\d{6}-\d{4}\.yaml", "<run id>.yaml", text)
 
         with tempfile.TemporaryDirectory() as tmp:
             section, result = self.run_quickstart(tmp)

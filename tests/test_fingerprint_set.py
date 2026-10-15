@@ -3,7 +3,6 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
 
 import yaml
 
@@ -43,35 +42,31 @@ class UpsertReconciliationTests(unittest.TestCase):
         wh = FingerprintSet()
         tokens = {"hook_syscall": "sys_connect"}
 
-        for second in (1, 2, 3):
-            wh.upsert(tokens, {"n": second}, timestamp=f"2024-01-01T15:00:0{second}+00:00")
+        for run in ("261014-0001", "261014-0002", "261015-0003"):
+            wh.upsert(tokens, {"n": 1}, run=run)
 
         self.assertEqual(len(wh), 1)  # entry list count stays flat
         record = wh.get(fingerprint_id(tokens))
         self.assertEqual(record.meta["count"], 3)
-        self.assertEqual(
-            record.meta["first_seen"], datetime(2024, 1, 1, 15, 0, 1, tzinfo=timezone.utc)
-        )
-        self.assertEqual(
-            record.meta["last_seen"], datetime(2024, 1, 1, 15, 0, 3, tzinfo=timezone.utc)
-        )
+        self.assertEqual(record.meta["first_seen"], "261014-0001")  # runs, not times
+        self.assertEqual(record.meta["last_seen"], "261015-0003")
         self.assertEqual(record.tokens, tokens)  # the set explains what the ID means
 
     def test_first_and_last_records_are_kept_in_their_envelopes(self):
         fingerprints = FingerprintSet()
         for i in range(5):
-            fingerprints.upsert({"k": "v"}, {"n": i}, timestamp=f"t{i}")
+            fingerprints.upsert({"k": "v"}, {"n": i}, run=f"t{i}")
         meta = fingerprints.get(fingerprint_id({"k": "v"})).meta
 
         def envelopes(*ns):
-            return [{"meta": {"seen": f"t{i}"}, "record": {"n": i}} for i in ns]
+            return [{"meta": {"run": f"t{i}"}, "record": {"n": i}} for i in ns]
 
         self.assertEqual(meta["first"], envelopes(0))  # one each keeps sets and run files small
         self.assertEqual(meta["last"], envelopes(4))
 
     def test_record_fields_named_like_built_ins_do_not_clash(self):
         fingerprints = FingerprintSet(aggregates=[Aggregate("count", "$.count", "SUM")])
-        fingerprints.upsert({"k": "v"}, {"count": 10, "meta": "x"}, timestamp="t")
+        fingerprints.upsert({"k": "v"}, {"count": 10, "meta": "x"}, run="t")
         record = fingerprints.get(fingerprint_id({"k": "v"}))
         self.assertEqual(record.aggregates["count"], 10)
         self.assertEqual(record.meta["count"], 1)
@@ -80,7 +75,7 @@ class UpsertReconciliationTests(unittest.TestCase):
     def test_samples_are_copies_and_saved_without_yaml_aliases(self):
         event = {"n": 1}
         fingerprints = FingerprintSet()
-        fingerprints.upsert({"k": "v"}, event, timestamp="t")
+        fingerprints.upsert({"k": "v"}, event, run="t")
         event["n"] = 99
         meta = fingerprints.get(fingerprint_id({"k": "v"})).meta
         self.assertEqual(meta["first"][0]["record"], {"n": 1})
@@ -97,14 +92,14 @@ class UpsertReconciliationTests(unittest.TestCase):
 
     def test_drift_state_creates_new_record_block(self):
         wh = FingerprintSet()
-        wh.upsert({"a": "1"}, {}, timestamp="t1")
-        wh.upsert({"a": "2"}, {}, timestamp="t1")
+        wh.upsert({"a": "1"}, {}, run="t1")
+        wh.upsert({"a": "2"}, {}, run="t1")
 
         self.assertEqual(len(wh), 2)
 
     def test_no_aggregators_keeps_only_built_in_counters(self):
         wh = FingerprintSet()
-        wh.upsert({"a": "1"}, {"duration_ms": 5.0}, timestamp="t1")
+        wh.upsert({"a": "1"}, {"duration_ms": 5.0}, run="t1")
         self.assertEqual(wh.get(fingerprint_id({"a": "1"})).aggregates, {})
         self.assertEqual(wh.skipped_values, 0)
 
@@ -115,7 +110,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         wh = FingerprintSet(aggregates=SAMPLE_AGGREGATES)
         tokens = {"a": "1"}
         for i, duration in enumerate((5.0, 1.0, 9.0)):
-            wh.upsert(tokens, {"duration_ms": duration}, timestamp=f"t{i}")
+            wh.upsert(tokens, {"duration_ms": duration}, run=f"t{i}")
 
         duration = wh.get(fingerprint_id(tokens)).aggregates["duration_ms"]
         self.assertEqual(duration, {"MIN": 1.0, "MAX": 9.0})
@@ -124,7 +119,7 @@ class AggregatedUpsertTests(unittest.TestCase):
         wh = FingerprintSet(aggregates=SAMPLE_AGGREGATES)
         tokens = {"a": "1"}
         for i in range(5):
-            wh.upsert(tokens, {"seq": i, "duration_ms": 1.0}, timestamp=f"t{i}")
+            wh.upsert(tokens, {"seq": i, "duration_ms": 1.0}, run=f"t{i}")
 
         samples = wh.get(fingerprint_id(tokens)).aggregates["samples"]
         # oldest (seq 0, 1) rotated out; newest 3 retained in order
@@ -132,9 +127,9 @@ class AggregatedUpsertTests(unittest.TestCase):
 
     def test_aggregates_are_kept_per_fingerprint(self):
         wh = FingerprintSet(aggregates=[Aggregate("size", "$.size", ["SUM", "AVG"])])
-        wh.upsert({"kind": "a"}, {"size": 10}, timestamp="t")
-        wh.upsert({"kind": "a"}, {"size": 30}, timestamp="t")
-        wh.upsert({"kind": "b"}, {"size": 7}, timestamp="t")
+        wh.upsert({"kind": "a"}, {"size": 10}, run="t")
+        wh.upsert({"kind": "a"}, {"size": 30}, run="t")
+        wh.upsert({"kind": "b"}, {"size": 7}, run="t")
 
         a = wh.get(fingerprint_id({"kind": "a"})).aggregates["size"]
         b = wh.get(fingerprint_id({"kind": "b"})).aggregates["size"]
@@ -143,9 +138,9 @@ class AggregatedUpsertTests(unittest.TestCase):
 
     def test_unusable_values_are_counted_not_fatal(self):
         wh = FingerprintSet(aggregates=[Aggregate("size", "$.size", "SUM")])
-        wh.upsert({"k": "1"}, {"size": "big"}, timestamp="t")
-        wh.upsert({"k": "1"}, {}, timestamp="t")
-        wh.upsert({"k": "1"}, {"size": 2}, timestamp="t")
+        wh.upsert({"k": "1"}, {"size": "big"}, run="t")
+        wh.upsert({"k": "1"}, {}, run="t")
+        wh.upsert({"k": "1"}, {"size": 2}, run="t")
 
         record = wh.get(fingerprint_id({"k": "1"}))
         self.assertEqual(record.meta["count"], 3)
@@ -162,8 +157,8 @@ class PersistenceTests(unittest.TestCase):
     def test_save_and_load_round_trip(self):
         wh = FingerprintSet(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
         tokens = {"a": "1"}
-        wh.upsert(tokens, {"x": 1, "duration_ms": 1.0}, timestamp="t1")
-        wh.upsert(tokens, {"x": 2, "duration_ms": 2.0}, timestamp="t2")
+        wh.upsert(tokens, {"x": 1, "duration_ms": 1.0}, run="t1")
+        wh.upsert(tokens, {"x": 2, "duration_ms": 2.0}, run="t2")
         wh.save(self.path)
 
         reloaded = FingerprintSet(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
@@ -173,7 +168,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_file_is_versioned_and_records_profile_id(self):
         wh = FingerprintSet(profile_id="p1")
-        wh.upsert({"a": "1"}, {}, timestamp="t1")
+        wh.upsert({"a": "1"}, {}, run="t1")
         wh.save(self.path)
 
         with open(self.path) as f:
@@ -184,7 +179,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_file_reads_top_down_header_then_tokens_before_statistics(self):
         wh = FingerprintSet(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
-        wh.upsert({"syscall": "sys_connect"}, {"duration_ms": 1.0}, timestamp="t1")
+        wh.upsert({"syscall": "sys_connect"}, {"duration_ms": 1.0}, run="t1")
         wh.save(self.path)
 
         with open(self.path) as f:
@@ -209,16 +204,16 @@ class PersistenceTests(unittest.TestCase):
 
         one_pass = FingerprintSet(aggregates=aggs)
         for i, (tokens, event) in enumerate(events):
-            one_pass.upsert(tokens, event, timestamp=f"t{i}")
+            one_pass.upsert(tokens, event, run=f"t{i}")
 
         first = FingerprintSet(aggregates=aggs)
         for i, (tokens, event) in enumerate(events[:4]):
-            first.upsert(tokens, event, timestamp=f"t{i}")
+            first.upsert(tokens, event, run=f"t{i}")
         first.save(self.path)
         second = FingerprintSet(aggregates=aggs)
         second.load(self.path)
         for i, (tokens, event) in enumerate(events[4:], start=4):
-            second.upsert(tokens, event, timestamp=f"t{i}")
+            second.upsert(tokens, event, run=f"t{i}")
 
         # Shares describe the set as last written, so compare both as written.
         second.save(self.path)
@@ -238,7 +233,7 @@ class PersistenceTests(unittest.TestCase):
 
     def test_load_with_force_adopts_a_mismatched_set(self):
         old = FingerprintSet(profile_id="old")
-        old.upsert({"a": "1"}, {}, timestamp="t1")
+        old.upsert({"a": "1"}, {}, run="t1")
         old.save(self.path)
 
         wh = FingerprintSet(profile_id="new")
@@ -265,12 +260,12 @@ class PersistenceTests(unittest.TestCase):
 
     def test_failed_save_leaves_previous_file_intact_and_no_temp_files(self):
         wh = FingerprintSet(profile_id="p1")
-        wh.upsert({"a": "1"}, {}, timestamp="t1")
+        wh.upsert({"a": "1"}, {}, run="t1")
         wh.save(self.path)
         with open(self.path) as f:
             before = f.read()
 
-        wh.upsert({"a": "2"}, {"bad": object()}, timestamp="t2")
+        wh.upsert({"a": "2"}, {"bad": object()}, run="t2")
         wh._records[fingerprint_id({"a": "2"})].aggregates["x"] = {"LAST": [object()]}
         with self.assertRaises(yaml.YAMLError):
             wh.save(self.path)
@@ -301,7 +296,7 @@ class ShareTests(unittest.TestCase):
     def build(self, aggregates, events):
         fingerprints = FingerprintSet(aggregates=aggregates)
         for kind, record in events:
-            fingerprints.upsert({"k": kind}, record, timestamp="2024-01-01T00:00:00Z")
+            fingerprints.upsert({"k": kind}, record, run="2024-01-01T00:00:00Z")
         return fingerprints
 
     def test_shares_of_counts_and_sums_mirror_the_value_layout(self):
@@ -332,7 +327,7 @@ class ShareTests(unittest.TestCase):
 
         merged = FingerprintSet(aggregates=aggregates)
         merged.load(self.path)
-        merged.upsert({"k": "b"}, {"size": 30}, timestamp="2024-01-01T00:00:00Z")
+        merged.upsert({"k": "b"}, {"size": 30}, run="2024-01-01T00:00:00Z")
         shares = self.saved_shares(merged)
         self.assertEqual(shares["a"]["aggregates"], {"size": 25.0})
         self.assertEqual(shares["b"]["aggregates"], {"size": 75.0})
@@ -357,7 +352,7 @@ class RunHeaderTests(unittest.TestCase):
     def test_header_is_written_between_profile_id_and_fingerprints(self):
         fingerprints = FingerprintSet(profile_id="p1")
         fingerprints.run = {"source": "stdin", "events": 1}
-        fingerprints.upsert({"a": "1"}, {}, timestamp="2024-01-01T00:00:00Z")
+        fingerprints.upsert({"a": "1"}, {}, run="2024-01-01T00:00:00Z")
         fingerprints.save(self.path)
         with open(self.path) as f:
             text = f.read()
@@ -374,8 +369,33 @@ class RunHeaderTests(unittest.TestCase):
 
         with_run = FingerprintSet(profile_id="p1")
         with_run.run = {"events": 0}
-        with_run.upsert({"a": "1"}, {}, timestamp="2024-01-01T00:00:00Z")
+        with_run.upsert({"a": "1"}, {}, run="2024-01-01T00:00:00Z")
         with_run.save(self.path)
         loaded = FingerprintSet(profile_id="p1")
         loaded.load(self.path)
         self.assertEqual((len(loaded), loaded.run), (1, None))
+
+
+class LastRunTests(unittest.TestCase):
+    """The set remembers its latest run id, so the next run can number itself."""
+
+    def test_last_run_is_saved_after_profile_id_and_loaded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "set.yaml")
+            fingerprints = FingerprintSet(profile_id="p1")
+            fingerprints.last_run = "261015-0003"
+            fingerprints.save(path)
+            with open(path) as f:
+                text = f.read()
+            self.assertLess(text.index("profile_id:"), text.index("last_run: 261015-0003"))
+            self.assertLess(text.index("last_run:"), text.index("fingerprints:"))
+            loaded = FingerprintSet(profile_id="p1")
+            loaded.load(path)
+            self.assertEqual(loaded.last_run, "261015-0003")
+
+    def test_no_last_run_until_one_is_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "set.yaml")
+            FingerprintSet().save(path)
+            with open(path) as f:
+                self.assertNotIn("last_run", yaml.safe_load(f))
