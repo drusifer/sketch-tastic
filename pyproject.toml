@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sketch-tastic"
+version = "0.2.0"
+description = "Mergeable sketches of JSONL event streams for regression testing and flow analysis."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "drusifer" }]
+requires-python = ">=3.14"
+keywords = ["jsonl", "sketch", "fingerprint", "logs", "events", "jsonpath", "regression"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: System :: Logging",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "PyYAML>=6.0",
+    "jsonschema>=4.23",
+    "python-jsonpath>=2.0",
+]
+
+[project.urls]
+Repository = "https://github.com/drusifer/sketch-tastic"
+
+[project.scripts]
+sketchtastic = "sketchtastic.__main__:main"
+skt = "sketchtastic.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sketchtastic"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples", "README.md", "LICENSE"]
+
+[dependency-groups]
+# Development tools; installed by `make install` (uv sync), never shipped.
+dev = [
+    "radon>=6.0.1",
+    "ruff>=0.6",
+    "vulture>=2.16",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+# agents/ is BobProtocol tooling, maintained in its own repository. Markdown is excluded so
+# hand-aligned code sketches in the docs are left alone.
+extend-exclude = ["agents", "*.md"]
+
+[tool.ruff.lint]
+# Baseline gate: real errors (pyflakes, syntax/runtime-level pycodestyle) and import order.
+# Kept explicit so a ruff upgrade cannot silently widen the gate.
+select = ["E4", "E7", "E9", "F", "I"]

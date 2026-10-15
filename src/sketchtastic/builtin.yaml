@@ -1,0 +1,10 @@
+# Built-in metadata, kept for every skit under `meta`.
+# These aggregates read an envelope, not the bare record:
+#   {meta: {run: <id of the run that read it, e.g. 261015-0003>}, record: <the record, parsed from its JSONL line>}
+# so injected fields can never clash with the record's own. Run ids sort in run order.
+aggregates:
+  - {key: count,      path: $.meta,     fn: COUNT}
+  - {key: first_seen, path: $.meta.run, fn: MIN}
+  - {key: last_seen,  path: $.meta.run, fn: MAX}
+  - {key: first,      path: $,          fn: {name: FIRST, n: 1}}
+  - {key: last,       path: $,          fn: {name: LAST, n: 1}}
