@@ -55,3 +55,11 @@ for sketch-to-sketch merge (backlog).
 record after passing it. The two tests that pinned the old copy guarantee are removed.
 **Consequences:** `make profile` 39.36 s → 32.88 s, same sketch (LAST deep-copied every event to
 keep one per skit). `Sketch.merge` still copies, so a sketch and its run never share state.
+
+**Decision (owner, 2026-10-14, Sprint 4):** All YAML is read and written through libyaml
+(`CSafeLoader`/`CSafeDumper`, included in PyYAML's wheels), in one module, `sketchtastic._yaml`,
+for sketches, run files, profiles and the built-ins alike.
+**Consequences:** `make profile` -j 1 31.99 s → 29.55 s, parallel 16.46 s → 13.54 s (writing the
+sketch and run file was the largest serial cost of a parallel merge). The bytes of a sketch file
+change (libyaml formats differently; new hash bd657fe6fd331918), its content does not (tested
+by a round trip of strings that look like other YAML types, unicode, multi-line and long text).

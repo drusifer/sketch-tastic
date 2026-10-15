@@ -31,4 +31,6 @@ sequenceDiagram
     Note right of Neo: "Phase 1-2 impl: merge -j<br/>N (ProcessPoolExecutor,<br/>batches of 5000 lines,<br/><=2 per worker in<br/>flight, merged as they<br/>finish, warnings in line<br/>o…"
     Neo->>User: "swe status"
     Note right of Neo: "Parallel merge reworked<br/>with the owner: long-<br/>lived workers, task<br/>queue (3 per worker) of<br/>5000-line byte batches,<br/>output queue with one<br/>fold…"
+    Neo->>User: "swe status"
+    Note right of Neo: "libyaml everywhere<br/>(sketchtastic/_yaml.py:<br/>sketches, run files,<br/>profiles, built-ins).<br/>make profile: parallel<br/>13.54 s (was 16.46), -j<br/>1 29.5…"
 ```

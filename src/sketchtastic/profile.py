@@ -19,6 +19,7 @@ from typing import Any
 
 import yaml
 
+from sketchtastic import _yaml
 from sketchtastic.aggregators import Aggregate
 from sketchtastic.model import Field, Path, tokens
 from sketchtastic.schema import schema_errors
@@ -125,7 +126,7 @@ def read_profile(path: str) -> Any:
     """Read a profile file's YAML. Raises ProfileError (with line and column for YAML errors)."""
     try:
         with open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f)
+            return _yaml.load(f)
     except OSError as exc:
         raise ProfileError([f"Cannot read profile {path}: {exc.strerror or exc}"]) from exc
     except yaml.YAMLError as exc:

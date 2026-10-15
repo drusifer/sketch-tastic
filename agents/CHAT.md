@@ -107,3 +107,17 @@ List reduced from 2598 to 25 due to restriction <25>
 ---
 [<small>2026-10-14 23:49:33</small>] [**Neo**]->[**User**] *swe status*:
  Parallel merge reworked with the owner: long-lived workers, task queue (3 per worker) of 5000-line byte batches, output queue with one fold per worker merged on arrival; first fold becomes the run. Shared-memory ring tried and dropped (25.7 s). make profile: parallel 16.46 s, -j 1 31.99 s, hash cb5533be1554ba98. test 237 OK, lint clean. Remaining serial: YAML writing ~10.7 s profiled.
+
+---
+[<small>2026-10-14 23:55:14</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+99234045 function calls (95448646 primitive calls) in 72.580 seconds
+
+Ordered by: cumulative time
+List reduced from 2207 to 25 due to restriction <25>
+
+
+---
+[<small>2026-10-14 23:55:23</small>] [**Neo**]->[**User**] *swe status*:
+ libyaml everywhere (sketchtastic/_yaml.py: sketches, run files, profiles, built-ins). make profile: parallel 13.54 s (was 16.46), -j 1 29.55 s (was 31.99). Sketch bytes change, content identical (round-trip test); new -j 1 hash bd657fe6fd331918. test 238 OK, lint clean.

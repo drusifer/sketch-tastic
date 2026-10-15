@@ -153,6 +153,21 @@ class PersistenceTests(unittest.TestCase):
 
         self.assertEqual(reloaded.get(skit_id(tokens)), wh.get(skit_id(tokens)))
 
+    def test_tricky_values_round_trip_exactly(self):
+        record = {
+            "looks_like": ["yes", "no", "on", "null", "~", "1e3", "0x10", "2026-10-14", "12:30"],
+            "text": ["", " padded ", "a\nb\n", "tab\there", "héllo ✓ 🚀", ": #", "- x", "'\""],
+            "long": "x" * 5000 + " y" * 500,
+            "numbers": [0, -1, 2**70, 0.1, 1e300, -2.5e-8],
+            "other": [True, False, None, {}, [], {"nested": [{"deep": "v"}]}],
+        }
+        wh = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
+        wh.upsert({"a": "1"}, record, run="t1")
+        wh.save(self.path)
+        reloaded = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
+        reloaded.load(self.path)
+        self.assertEqual(reloaded.get(skit_id({"a": "1"})), wh.get(skit_id({"a": "1"})))
+
     def test_file_is_versioned_and_records_profile_id(self):
         wh = Sketch(profile_id="p1")
         wh.upsert({"a": "1"}, {}, run="t1")
