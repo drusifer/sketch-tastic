@@ -9,7 +9,8 @@ None yet
 
 ### Important Notes
 - 2026-10-14 Sprint 3 (Faster Merge) SKT-04..05 launched: 2.6x faster merge.
-- Next story id STORY-SKT-06. Ask the owner design questions before writing stories (it cut scope again in Sprint 2).
+- 2026-10-15 Sprint 4 (Parallel Merge) SKT-06..07 launched.
+- Next story id STORY-SKT-08. Ask the owner design questions before writing stories (it cut scope again in Sprint 2).
 
 ## Current Task
 **Status:** Not started

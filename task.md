@@ -1,6 +1,21 @@
 # Task Board
 
-**No sprint in flight.** Last sprint: 3 (below). fingerling depends on this repository (pin at 849b4ec, merged locally in fingerling, not yet pushed).
+**No sprint in flight.** Last sprint: 4 (below). fingerling depends on this repository (pin at 849b4ec, merged locally in fingerling, not yet pushed).
+
+## Sprint 4: Parallel Merge
+
+**Status:** Complete — launched 2026-10-15 (5/5 pts); merged to `main`; no release (mainline)
+**Branch:** `sprint-4` (merged and deleted)
+**Record:** `agents/chat_archive/CHAT_SPRINT_4.diagram.md`
+**Source:** `docs/sprints/USER_STORIES_SPRINT4.md` (STORY-SKT-06..07 + architecture D1-D4) · **Points:** 5 · **Tier:** 2
+**Result:** `make profile` parallel 13.54 s (4 cores), `-j 1` 29.55 s; libyaml for all YAML
+
+- [x] **1** `_fold_lines` as the one fold; `-j N`; workers + bounded task queue + output queue (after a pool version and a shared-memory version were measured and dropped). [Neo, owner]
+- [x] **2** `make profile`: all cores and `-j 1`, `PROFILE_ARGS`. [Tank]
+- [x] **3** libyaml everywhere (`sketchtastic._yaml`); docs for `-j`. [Neo]
+- [x] Close: Tank `*devops sdlc-check` · Oracle groom · Smith user test · retro + launch · chat report · merge [All]
+
+Between Sprints 3 and 4 (owner review of Sprint 3): JSONPath via `jsonpath-rfc9535` (no shortcut), fold once then merge (`Sketch.merge`), no FIRST/LAST copies.
 
 ## Sprint 3: Faster Merge
 
@@ -73,4 +88,4 @@ Carried over from fingerling's `task.md`:
 - `-o`: owner may revisit (keep or drop).
 - In-run duplicate detection if a stream needs it.
 - JSON Schema for sketch files; set-to-set (sketch-to-sketch) merge; more aggregate ops (`LEN`, `ABS`).
-- Copy-free ownership mode for the CLI (skip the per-event copy when the caller owns the events) — only if merge speed matters again (Sprint 3).
+- `show` column order follows skit order in the file, which with `-j` > 1 follows worker completion; make it stable (Sprint 4).
