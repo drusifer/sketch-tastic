@@ -99,6 +99,8 @@ GH_DIR := data/gharchive
 
 GH_DATA := $(GH_DIR)/$(GH_HOUR).json.gz
 PROFILE_DIR := build/profile
+# Options for the cProfile run; PROFILE_ARGS= profiles the parallel run's parent process.
+PROFILE_ARGS ?= -j 1
 
 $(GH_DATA):
 	@mkdir -p $(GH_DIR)
@@ -108,14 +110,21 @@ gharchive: $(GH_DATA) ## Merge one hour of GitHub events from GH Archive (GH_HOU
 	$(need_venv)
 	@gunzip -c $(GH_DATA) | $(CLI) merge -p examples/gharchive.yaml -s $(GH_DIR)/gh.sketch.yaml -
 
-profile: $(GH_DATA) ## Time, then cProfile, the GH Archive merge into a fresh sketch; top functions in build/profile/profile.txt
+# One timed merge into a fresh sketch: $(1) = label, $(2) = extra merge options.
+define timed_merge
+	@rm -rf $(PROFILE_DIR)/$(1).sketch.*
+	@start=$$(date +%s.%N); \
+	gunzip -c $(GH_DATA) | $(CLI) merge -p examples/gharchive.yaml -s $(PROFILE_DIR)/$(1).sketch.yaml $(2) - >/dev/null || exit $$?; \
+	end=$$(date +%s.%N); awk -v s=$$start -v e=$$end 'BEGIN { printf "wall time, $(1): %.2f s\n", e - s }' | tee -a $(PROFILE_DIR)/profile.txt
+endef
+
+profile: $(GH_DATA) ## Time the GH Archive merge (all cores, then -j 1 with a sketch hash), then cProfile (PROFILE_ARGS, default -j 1); report in build/profile/profile.txt
 	$(need_venv)
 	@rm -rf $(PROFILE_DIR) && mkdir -p $(PROFILE_DIR)
-	@start=$$(date +%s.%N); \
-	gunzip -c $(GH_DATA) | $(CLI) merge -p examples/gharchive.yaml -s $(PROFILE_DIR)/timed.sketch.yaml - >/dev/null || exit $$?; \
-	end=$$(date +%s.%N); awk -v s=$$start -v e=$$end 'BEGIN { printf "wall time (no profiler): %.2f s\n", e - s }' | tee $(PROFILE_DIR)/profile.txt; \
-	echo "sketch sha256: $$(sha256sum < $(PROFILE_DIR)/timed.sketch.yaml | cut -c1-16) (same day, same code -> same hash)" | tee -a $(PROFILE_DIR)/profile.txt
-	@gunzip -c $(GH_DATA) | $(PYTHON) -m cProfile -o $(PROFILE_DIR)/profile.out -m sketchtastic merge -p examples/gharchive.yaml -s $(PROFILE_DIR)/profiled.sketch.yaml - >/dev/null
+	$(call timed_merge,parallel,)
+	$(call timed_merge,single,-j 1)
+	@echo "sketch sha256 (-j 1): $$(sha256sum < $(PROFILE_DIR)/single.sketch.yaml | cut -c1-16) (same day, same code -> same hash)" | tee -a $(PROFILE_DIR)/profile.txt
+	@gunzip -c $(GH_DATA) | $(PYTHON) -m cProfile -o $(PROFILE_DIR)/profile.out -m sketchtastic merge -p examples/gharchive.yaml -s $(PROFILE_DIR)/profiled.sketch.yaml $(PROFILE_ARGS) - >/dev/null
 	@$(PYTHON) -c "import pstats, sys; pstats.Stats('$(PROFILE_DIR)/profile.out', stream=sys.stdout).strip_dirs().sort_stats('tottime').print_stats(25); pstats.Stats('$(PROFILE_DIR)/profile.out', stream=sys.stdout).strip_dirs().sort_stats('cumulative').print_stats(25)" >> $(PROFILE_DIR)/profile.txt
 	@sed -n '1,45p' $(PROFILE_DIR)/profile.txt
 

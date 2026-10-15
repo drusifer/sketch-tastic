@@ -67,3 +67,29 @@ ncalls  tottime  percall  cumtime  percall filename:lineno(function)
 ---
 [<small>2026-10-14 22:58:26</small>] [**Neo**]->[**User**] *swe fix*:
  fix/fold-once: deepcopy dropped from FIRST/LAST; upsert docstring says the sketch keeps references (caller must not modify the record); two copy-guarantee tests removed (owner). make profile 32.88 s (was 39.36), hash unchanged; test 232 OK, lint clean.
+
+---
+[<small>2026-10-14 23:09:11</small>] [**Cypher**]->[**Smith**] *pm handoff*:
+ Sprint 4 (Parallel Merge, Tier 2, 5 pts): SKT-06 merge -j N (processes, default all cores), batches merged as they finish; FIRST/LAST any matching sample (owner). SKT-07 make profile reports parallel + -j 1 time, hash from -j 1. Arch D1-D4 in docs/sprints/USER_STORIES_SPRINT4.md. @Smith *user review sprint-4
+
+---
+[<small>2026-10-14 23:09:11</small>] [**Smith**]->[**Mouse**] *user approve*:
+ *user approve. rubric STORIES: OUT=S TEST=S FAIL=S SCOPE=S SIZE=S DESIGN=A; rubric ARCH: BOUND=S FLOW=S FAIL=A USER=S DECS=S FEAS=S. Warnings sorted by line keep output stable; FIRST/LAST caveat must be in --help. @Mouse *sm plan sprint
+
+---
+[<small>2026-10-14 23:09:11</small>] [**Mouse**]->[**Neo**] *sm handoff*:
+ rubric PLAN: SIZE=A GATE=S VERIF=S ALIGN=S OWNER=S. Phase 1 (Neo): D1 _fold_lines refactor, -j 1 unchanged, tests green. Phase 2 (Neo): D2-D3 pool, -j, tests with tiny batches. Phase 3 (Tank): D4 make profile. Close as usual. @Neo *swe impl phase-1
+
+---
+[<small>2026-10-14 23:17:17</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+24929802 function calls (22564295 primitive calls) in 25.727 seconds
+
+Ordered by: cumulative time
+List reduced from 2745 to 25 due to restriction <25>
+
+
+---
+[<small>2026-10-14 23:17:51</small>] [**Neo**]->[**User**] *swe status*:
+ Phase 1-2 impl: merge -j N (ProcessPoolExecutor, batches of 5000 lines, <=2 per worker in flight, merged as they finish, warnings in line order, sequence range absorbed). make profile: parallel 17-19 s vs -j 1 35.5 s (~2x on 4 cores), -j 1 hash unchanged. Parent profile: YAML pure-Python emitter ~10.5 s, merge deepcopy ~5.4 s, line split+pickle ~6.4 s serial. Proposed to owner: libyaml, no-copy merge, byte blocks.

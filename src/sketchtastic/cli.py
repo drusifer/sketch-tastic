@@ -11,13 +11,15 @@ Knows nothing about where the events came from.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import os
 import re
 import sys
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, as_completed, wait
 from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, date, datetime
-from typing import IO, Any, Callable, Iterable, NamedTuple
+from typing import IO, Any, Callable, Iterable, Iterator, NamedTuple
 
 from sketchtastic import __version__
 from sketchtastic.aggregators import as_number
@@ -115,6 +117,16 @@ exit status:
 """
 
 
+def _jobs(text: str) -> int:
+    try:
+        jobs = int(text)
+    except ValueError:
+        jobs = 0
+    if jobs < 1:
+        raise argparse.ArgumentTypeError(f"must be a whole number of at least 1, not {text!r}")
+    return jobs
+
+
 def _say(message: str) -> None:
     print(message, file=sys.stderr)
 
@@ -166,6 +178,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         metavar="OUTPUT",
         help="write the merged sketch here instead, leaving SKETCH unchanged",
+    )
+    merge.add_argument(
+        "-j",
+        "--jobs",
+        type=_jobs,
+        default=os.process_cpu_count() or 1,
+        metavar="N",
+        help="worker processes (default: all cores, here %(default)s); 1 folds in-process",
     )
     merge.add_argument(
         "--force-profile",
@@ -387,6 +407,13 @@ class _Sequencer:
         self.high = number if self.high is None else max(self.high, number)
         return number
 
+    def absorb(self, other: _Sequencer) -> None:
+        """Add the counts of a sequencer that checked other events of this run (a worker's)."""
+        self.dropped += other.dropped
+        lows = [n for n in (self.low, other.low) if n is not None]
+        highs = [n for n in (self.high, other.high) if n is not None]
+        self.low, self.high = min(lows, default=None), max(highs, default=None)
+
     def stats(self) -> dict:
         merged = None if self.high is None else {"min": self.low, "max": self.high}
         return {"dropped": self.dropped, "mark": self.mark, "sequence": merged}
@@ -412,38 +439,41 @@ def _sequencer(profile: Profile, sketch: Sketch) -> _Sequencer | None:
     return _Sequencer(profile.sequence, mark)
 
 
-def _fold_stream(
-    lines: Iterable[str],
+Folded = tuple[Sketch, dict, list[tuple[int, str]], "_Sequencer | None"]
+"""What one fold returns: its run sketch, counts, its first warnings, its sequencer."""
+
+
+def _fold_lines(
+    numbered_lines: Iterable[tuple[int, str]],
     profile: Profile,
-    run: Sketch,
     run_id: str,
-    sequencer: _Sequencer | None = None,
-) -> dict:
-    """Fold each JSONL line into `run` (this run only), recording `run_id` as where it was seen.
+    sequencer: _Sequencer | None,
+) -> Folded:
+    """Fold `(line number, JSONL line)` pairs into a new run sketch, recording `run_id`.
 
     With a `sequencer`, events already merged are dropped, and an event without a usable
-    sequence fails the run (_NotWritten). Returns run statistics.
+    sequence fails the run (_NotWritten). Keeps the first `_MAX_LINE_WARNINGS + 1` warnings.
     """
+    run = Sketch(profile.aggregates, profile.profile_id)
     events = skipped_lines = 0
+    warnings: list[tuple[int, str]] = []
 
-    def warn(lineno: int, reason: str) -> None:
-        if skipped_lines <= _MAX_LINE_WARNINGS:
-            _say(f"sketchtastic: line {lineno}: {reason} - skipped")
-        elif skipped_lines == _MAX_LINE_WARNINGS + 1:
-            _say("sketchtastic: further skipped lines are counted but not listed")
+    def skip(lineno: int, reason: str) -> None:
+        nonlocal skipped_lines
+        skipped_lines += 1
+        if len(warnings) <= _MAX_LINE_WARNINGS:
+            warnings.append((lineno, reason))
 
-    for lineno, line in enumerate(lines, start=1):
+    for lineno, line in numbered_lines:
         if not line.strip():
             continue
         try:
             event = json.loads(line)
         except json.JSONDecodeError as exc:
-            skipped_lines += 1
-            warn(lineno, f"invalid JSON ({exc.msg} at column {exc.colno})")
+            skip(lineno, f"invalid JSON ({exc.msg} at column {exc.colno})")
             continue
         if not isinstance(event, dict):
-            skipped_lines += 1
-            warn(lineno, f"expected a JSON object, got {type(event).__name__}")
+            skip(lineno, f"expected a JSON object, got {type(event).__name__}")
             continue
         sequence = sequencer.check(event) if sequencer else 0
         if sequence is None:  # duplicate detection must be exact, so the whole run fails
@@ -456,12 +486,103 @@ def _fold_stream(
         if sequence is DROP:
             continue
         run.upsert(profile.tokens(event), event, run_id)
+    return run, {"events": events, "skipped_lines": skipped_lines}, warnings, sequencer
 
-    return {
-        "events": events,
-        "skipped_lines": skipped_lines,
-        **(sequencer.stats() if sequencer else {}),
-    }
+
+_BATCH_LINES = 5000
+"""Lines per batch handed to a worker process."""
+
+_worker: tuple[Profile, str, Path | None, int | float | None] | None = None
+"""In a worker process: the profile, run id, sequence path and mark (`_init_worker`)."""
+
+
+def _init_worker(
+    profile: Profile, run_id: str, sequence: Path | None, mark: int | float | None
+) -> None:
+    global _worker
+    _worker = (profile, run_id, sequence, mark)
+
+
+def _fold_batch(start: int, lines: list[str]) -> Folded:
+    """In a worker: fold one batch of lines, the first being line `start`."""
+    assert _worker is not None
+    profile, run_id, sequence, mark = _worker
+    sequencer = None if sequence is None else _Sequencer(sequence, mark)
+    return _fold_lines(enumerate(lines, start), profile, run_id, sequencer)
+
+
+def _batches(stream: Iterable[str]) -> Iterator[tuple[int, list[str]]]:
+    """`(first line number, lines)` for each `_BATCH_LINES` lines of `stream`."""
+    start = 1
+    for lines in itertools.batched(stream, _BATCH_LINES):
+        yield start, list(lines)
+        start += len(lines)
+
+
+def _fold_parallel(
+    batches: Iterable[tuple[int, list[str]]],
+    profile: Profile,
+    run_id: str,
+    sequencer: _Sequencer | None,
+    jobs: int,
+) -> Iterator[Folded]:
+    """Fold batches in `jobs` worker processes; yield each result as it completes.
+
+    At most two batches per worker are in flight, so memory stays bounded. A worker's error
+    (e.g. _NotWritten) is raised here and the remaining batches are cancelled.
+    """
+    initargs = (profile, run_id, sequencer and sequencer.path, sequencer and sequencer.mark)
+    pool = ProcessPoolExecutor(jobs, initializer=_init_worker, initargs=initargs)
+    try:
+        pending: set[Future[Folded]] = set()
+        for start, lines in batches:
+            pending.add(pool.submit(_fold_batch, start, lines))
+            if len(pending) >= 2 * jobs:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                yield from (future.result() for future in done)
+        for future in as_completed(pending):
+            yield future.result()
+    finally:
+        pool.shutdown(cancel_futures=True)
+
+
+def _fold_stream(
+    stream: Iterable[str],
+    profile: Profile,
+    run_id: str,
+    sequencer: _Sequencer | None,
+    jobs: int = 1,
+) -> tuple[Sketch, dict]:
+    """Fold a JSONL stream into this run's sketch, in-process or on `jobs` workers.
+
+    Worker results are merged as they complete: counts, aggregates, run ids and the sequence
+    range are exact; FIRST/LAST samples come from matching events, not necessarily the first
+    or last. Warnings are printed in line order. Returns the run sketch and run statistics.
+    """
+    batches = _batches(stream)
+    head = list(itertools.islice(batches, 2))
+    if jobs == 1 or len(head) < 2:  # one batch: a pool would only add start-up time
+        numbered = ((n, line) for start, lines in head for n, line in enumerate(lines, start))
+        rest = ((n, line) for start, lines in batches for n, line in enumerate(lines, start))
+        parts: Iterable[Folded] = [
+            _fold_lines(itertools.chain(numbered, rest), profile, run_id, sequencer)
+        ]
+    else:
+        parts = _fold_parallel(itertools.chain(head, batches), profile, run_id, sequencer, jobs)
+    run = Sketch(profile.aggregates, profile.profile_id)
+    stats = {"events": 0, "skipped_lines": 0}
+    warnings: list[tuple[int, str]] = []
+    for part, counts, part_warnings, part_sequencer in parts:
+        run.merge(part)
+        stats = {key: stats[key] + counts[key] for key in stats}
+        warnings += part_warnings
+        if sequencer and part_sequencer is not sequencer:
+            sequencer.absorb(part_sequencer)
+    for lineno, reason in sorted(warnings)[:_MAX_LINE_WARNINGS]:
+        _say(f"sketchtastic: line {lineno}: {reason} - skipped")
+    if stats["skipped_lines"] > _MAX_LINE_WARNINGS:
+        _say("sketchtastic: further skipped lines are counted but not listed")
+    return run, {**stats, **(sequencer.stats() if sequencer else {})}
 
 
 class _NotWritten(Exception):
@@ -608,10 +729,9 @@ def _cmd_merge(args: argparse.Namespace) -> int:
         sketch = _open_sketch(args, profile)
         run_id = _next_run_id(sketch.last_run, _history_dir(args.sketch_path), started.date())
         sketch.last_run = run_id
-        run = Sketch(profile.aggregates, profile.profile_id)
         sequencer = _sequencer(profile, sketch)
         with _open_events(args) as stream:
-            stats = _fold_stream(stream, profile, run, run_id, sequencer)
+            run, stats = _fold_stream(stream, profile, run_id, sequencer, args.jobs)
         known_before = set(sketch)
         sketch.merge(run)  # fold once, into the run; merge it once
         stats["new"] = len(set(run) - known_before)
