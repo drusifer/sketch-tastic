@@ -24,7 +24,7 @@ Other required tools:
 - `uv` — install once per machine with `pipx install uv` (no sudo). It also supplies the
   interpreters for `make test-all`.
 - `gitleaks` — on `PATH`; needed by `make secrets` and the pre-commit hook.
-- `curl` and `gunzip` — only for `make gharchive`.
+- `curl` and `gunzip` — only for `make gharchive` and `make profile`.
 - `bobp` — team tooling (`bobp make`, `bobp chat`, `bobp tldr`); wraps this Makefile but adds
   no targets to it. `via` — behind `make via_index`. Neither is a project dependency.
 
@@ -64,6 +64,7 @@ targets as `bobp make <target>`.
 | `check` | `python -m compileall -q` over `src`, `tests`, `smoke` | syntax check only |
 | `run` | `.venv/bin/sketchtastic $(ARGS)` | the CLI |
 | `gharchive` | downloads one GH Archive hour (`GH_HOUR`) into `data/` once, then merges it with `examples/gharchive.yaml` into `data/gharchive/` | example at scale; needs network and `curl` |
+| `profile` | same hour, merged into a fresh sketch in `build/profile/`: wall time without the profiler, a short hash of the sketch, then a cProfile run with the top 25 functions by own and cumulative time in `build/profile/profile.txt` | the only way to measure speed (owner, Sprint 3); the hash shows output is unchanged on the same day |
 | `clean` | removes `__pycache__`, `.ruff_cache`, `dist`, `data` | keeps `.venv` |
 | `distclean` | `clean` + removes `.venv/` | |
 | `help` | lists targets | default goal |
