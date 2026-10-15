@@ -60,6 +60,12 @@ example:
 
 The SKETCH file is updated in place (atomically) unless --output is given.
 
+parallel:
+  -j N folds batches of 5000 lines in N worker processes (default: all cores)
+  and merges their sketches. Everything is exact except FIRST/LAST samples
+  (and each skit's first and last record): with N > 1 they come from matching
+  events, not necessarily the very first or last ones.
+
 history:
   Each run gets an id, YYMMDD-SEQ (UTC date, then a number that only goes up
   for this sketch), e.g. 261015-0003. Skits record the first and last run

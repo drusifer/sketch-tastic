@@ -519,6 +519,8 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn("updated in place", result.stdout)
         self.assertIn("--force-profile", result.stdout)
         self.assertIn("exit status:", result.stdout)
+        self.assertIn("-j, --jobs N", result.stdout)
+        self.assertIn("not necessarily the very first or last ones", result.stdout)
 
     def test_pipeline_end_to_end_via_stdin(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -121,3 +121,14 @@ List reduced from 2207 to 25 due to restriction <25>
 ---
 [<small>2026-10-14 23:55:23</small>] [**Neo**]->[**User**] *swe status*:
  libyaml everywhere (sketchtastic/_yaml.py: sketches, run files, profiles, built-ins). make profile: parallel 13.54 s (was 16.46), -j 1 29.55 s (was 31.99). Sketch bytes change, content identical (round-trip test); new -j 1 hash bd657fe6fd331918. test 238 OK, lint clean.
+
+---
+[<small>2026-10-14 23:55:57</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make smoke | /home/drusifer/Projects/sketch-tastic/build/build.out
+sketch_tastic-0.2.0-py3-none-any.whl
+...
+----------------------------------------------------------------------
+sketch_tastic-0.2.0.tar.gz
+Ran 3 tests in 1.491s
+
+OK
