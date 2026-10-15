@@ -1,27 +1,28 @@
 # Task Board
 
-**Sprint in flight:** 3 (below). fingerling already depends on this repository (its Sprint 18, pinned to 6c4606f).
+**No sprint in flight.** Last sprint: 3 (below). fingerling depends on this repository (pin at 849b4ec, merged locally in fingerling, not yet pushed).
 
 ## Sprint 3: Faster Merge
 
-**Status:** In progress
-**Branch:** `sprint-3`
+**Status:** Complete — launched 2026-10-14 (5/5 pts); merged to `main`; no release (mainline)
+**Branch:** `sprint-3` (merged and deleted)
+**Record:** `agents/chat_archive/CHAT_SPRINT_3.diagram.md`
 **Source:** `docs/sprints/USER_STORIES_SPRINT3.md` (STORY-SKT-04..05 + architecture D1-D5) · **Points:** 5 · **Tier:** 2
-**Baseline:** `make profile` 109.5 s wall, 180,387 events
+**Result:** `make profile` 106.35 s → 40.83 s (2.6x), 180,387 events, byte-identical sketch
 
 ### Phase 0: make profile (STORY-SKT-04, D1) — Tank
-- [ ] **0.1** `profile` target (timed run, sketch hash, cProfile top 25); shared download rule; `clean` removes `build/profile`; SDLC targets table; `build:` commit. [Tank]
+- [x] **0.1** `profile` target (timed run, sketch hash, cProfile top 25); shared download rule; `clean` removes `build/profile`; SDLC targets table; `build:` commit. [Tank]
 
 ### Phase 1: Plain-path fast path (STORY-SKT-05 AC3, D2) — Neo
-- [ ] **1.1** Equivalence tests vs python-jsonpath first; `_PlainPath`; `make test`; `make profile` (time + hash). [Neo]
-- [ ] **1.2** UAT + review; `perf:` commit. [Trin, Morpheus]
+- [x] **1.1** Equivalence tests vs python-jsonpath first; `_PlainPath`; `make test`; `make profile` (time + hash). [Neo]
+- [x] **1.2** UAT + review; `perf:` commit. [Trin, Morpheus]
 
 ### Phase 2: Select once, no deep copies (STORY-SKT-05 AC1-AC4, D3-D5) — Neo
-- [ ] **2.1** Alias test first; `Aggregate.select/fold`, `Sketch.select`, `upsert(selected=)`, `_fold_stream`; FIRST/LAST without deepcopy + alias-free dumper; `make profile`; D5 stop rule. [Neo]
-- [ ] **2.2** UAT + review; `perf:` commit. [Trin, Morpheus]
+- [x] **2.1** Alias test first; `Aggregate.select/fold`, `Sketch.select`, `upsert(selected=)`, `_fold_stream`; FIRST/LAST without deepcopy + alias-free dumper; `make profile`; D5 stop rule. [Neo]
+- [x] **2.2** UAT + review; `perf:` commit. [Trin, Morpheus]
 
 ### Close
-- [ ] Tank `*devops sdlc-check` · Oracle groom (DECISIONS: before/after) · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]
+- [x] Tank `*devops sdlc-check` · Oracle groom (DECISIONS: before/after) · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]
 
 ## Sprint 2: Sort the Show
 
@@ -72,3 +73,4 @@ Carried over from fingerling's `task.md`:
 - `-o`: owner may revisit (keep or drop).
 - In-run duplicate detection if a stream needs it.
 - JSON Schema for sketch files; set-to-set (sketch-to-sketch) merge; more aggregate ops (`LEN`, `ABS`).
+- Copy-free ownership mode for the CLI (skip the per-event copy when the caller owns the events) — only if merge speed matters again (Sprint 3).
