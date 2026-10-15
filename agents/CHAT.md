@@ -81,3 +81,30 @@ OK
 ---
 [<small>2026-10-14 21:42:44</small>] [**Morpheus**]->[**Neo**] *lead handoff*:
  Phase 1 review passed: D1 as designed, default-arg lambdas bind per column correctly, token None prints '-' (tokens are never null: absent has its own token). Committing. @Neo *swe impl phase-2
+
+---
+[<small>2026-10-14 21:42:46</small>] [**Mouse**]->[**all**] *phase 2*:
+ --sort KEY, default COUNT (lowest first), help and README
+
+---
+[<small>2026-10-14 21:44:00</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make smoke | /home/drusifer/Projects/sketch-tastic/build/build.out
+sketch_tastic-0.2.0-py3-none-any.whl
+...
+----------------------------------------------------------------------
+sketch_tastic-0.2.0.tar.gz
+Ran 3 tests in 1.731s
+
+OK
+
+---
+[<small>2026-10-14 21:44:11</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Phase 2 impl: show --sort KEY (default COUNT, lowest first), exact-then-caseless lookup, exit 2 with column list, help epilog + README. 7 new ShowSortTests, 2 ShowTests updated for the new default. lint OK, test 230 OK, smoke 3 OK (README quickstart). @Trin *qa uat phase-2
+
+---
+[<small>2026-10-14 21:44:11</small>] [**Trin**]->[**Morpheus**] *qa handoff*:
+ UAT phase 2 passed, AC by test: AC1/4 sorts_by_an_aggregate; AC2 default_is_count; AC3 sorts_by_every_fixed_column (+case); AC5 missing_first_numbers_before_text; AC6 unknown_key + ambiguous (exact stdout/stderr/exit 2); AC7 empty_sketch_with_any_key; AC8 help test + smoke README. @Morpheus *lead review phase-2
+
+---
+[<small>2026-10-14 21:44:11</small>] [**Morpheus**]->[**Tank**] *lead handoff*:
+ Phase 2 review passed: D2/D3 as designed; stable sort from file order gives tie rule for free; bool excluded from numbers; _NoColumn stays private. Breaking default flip committed as feat(cli)!. All phases reviewed. @Tank *devops sdlc-check

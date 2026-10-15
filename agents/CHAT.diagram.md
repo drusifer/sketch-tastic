@@ -14,7 +14,8 @@ sequenceDiagram
     participant Morpheus
     participant Neo
     participant Trin
-    Note over User,Trin: 📅 2026-10-14
+    participant Tank
+    Note over User,Tank: 📅 2026-10-14
     User->>All: "request"
     Note right of User: "/bob-protocol init"
     Mouse->>User: "sm init"
@@ -41,4 +42,12 @@ sequenceDiagram
     Note right of Trin: "UAT phase 1 passed: make<br/>test 223 OK, ShowTests<br/>untouched (git diff<br/>tests empty), lint<br/>clean, output byte-<br/>identical per existing<br/>exact-line…"
     Morpheus->>Neo: "lead handoff"
     Note right of Morpheus: "Phase 1 review passed:<br/>D1 as designed, default-<br/>arg lambdas bind per<br/>column correctly, token<br/>None prints '-' (tokens<br/>are never null: absent…"
+    Mouse->>All: "phase 2"
+    Note right of Mouse: "--sort KEY, default<br/>COUNT (lowest first),<br/>help and README"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 2 impl: show<br/>--sort KEY (default<br/>COUNT, lowest first),<br/>exact-then-caseless<br/>lookup, exit 2 with<br/>column list, help epilog<br/>+ README. 7 n…"
+    Trin->>Morpheus: "qa handoff"
+    Note right of Trin: "UAT phase 2 passed, AC<br/>by test: AC1/4<br/>sorts_by_an_aggregate,<br/>AC2 default_is_count,<br/>AC3 sorts_by_every_fixed<br/>_column (+case), AC5<br/>missing_fir…"
+    Morpheus->>Tank: "lead handoff"
+    Note right of Morpheus: "Phase 2 review passed:<br/>D2/D3 as designed,<br/>stable sort from file<br/>order gives tie rule for<br/>free, bool excluded from<br/>numbers, _NoColumn<br/>stays…"
 ```
