@@ -17,7 +17,7 @@ import re
 import sys
 from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, date, datetime
-from typing import IO, Any, Iterable
+from typing import IO, Any, Callable, Iterable, NamedTuple
 
 from sketchtastic import __version__
 from sketchtastic.aggregators import as_number
@@ -244,35 +244,58 @@ def _shared_columns(records: Iterable[Skit]) -> list[tuple[str, str | None]]:
     return list(columns)
 
 
-def _show_row(
-    fid: str, record: Skit, shared: list[tuple[str, str | None]], keys: list[str]
-) -> list[str]:
-    """One `show` row: ID, count and share, first/last run, each shared value and share, tokens."""
-    meta, shares = record.meta, record.share.get("aggregates", {})
-    values = []
-    for key, function in shared:
-        values.append(_cell(_lookup(record.aggregates, key, function)))
-        values.append(_percent(_lookup(shares, key, function)))
-    return [
-        fid[:8],
-        _cell(meta.get("count")),
-        _percent(record.share.get("meta", {}).get("count")),
-        _cell(meta.get("first_seen")),
-        _cell(meta.get("last_seen")),
-        *values,
-        *(str(record.tokens.get(key, "-")) for key in keys),
+class _Column(NamedTuple):
+    """One `show` column: its header, its raw value for a skit, and how that value prints."""
+
+    header: str
+    value: Callable[[str, Skit], Any]
+    cell: Callable[[Any], str]
+
+
+def _show_columns(records: list[tuple[str, Skit]]) -> list[_Column]:
+    """ID, count and share, first/last run, each shared value and share, then each token key."""
+    columns = [
+        _Column("ID", lambda fid, record: fid, lambda fid: fid[:8]),
+        _Column("COUNT", lambda fid, record: record.meta.get("count"), _cell),
+        _Column(
+            "COUNT %",
+            lambda fid, record: record.share.get("meta", {}).get("count"),
+            _percent,
+        ),
+        _Column("FIRST RUN", lambda fid, record: record.meta.get("first_seen"), _cell),
+        _Column("LAST RUN", lambda fid, record: record.meta.get("last_seen"), _cell),
     ]
+    for key, function in _shared_columns(record for _, record in records):
+        name = key if function is None else f"{key}.{function}"
+        columns.append(
+            _Column(
+                name,
+                lambda fid, record, k=key, f=function: _lookup(record.aggregates, k, f),
+                _cell,
+            )
+        )
+        columns.append(
+            _Column(
+                f"{name} %",
+                lambda fid, record, k=key, f=function: _lookup(
+                    record.share.get("aggregates", {}), k, f
+                ),
+                _percent,
+            )
+        )
+    for key in sorted({key for _, record in records for key in record.tokens}):
+        columns.append(_Column(key, lambda fid, record, k=key: record.tokens.get(k), _cell))
+    return columns
 
 
 def _show_table(records: list[tuple[str, Skit]]) -> str:
     """The `show` table: a header, then one row per skit, most frequent first."""
     records = sorted(records, key=lambda item: -item[1].meta.get("count", 0))  # ties: file order
-    keys = sorted({key for _, record in records for key in record.tokens})
-    shared = _shared_columns(record for _, record in records)
-    names = [key if function is None else f"{key}.{function}" for key, function in shared]
-    header = ["ID", "COUNT", "COUNT %", "FIRST RUN", "LAST RUN"]
-    header += [column for name in names for column in (name, f"{name} %")] + keys
-    return _table([header] + [_show_row(fid, record, shared, keys) for fid, record in records])
+    columns = _show_columns(records)
+    rows = [
+        [column.cell(column.value(fid, record)) for column in columns] for fid, record in records
+    ]
+    return _table([[column.header for column in columns]] + rows)
 
 
 def _cmd_show(args: argparse.Namespace) -> int:
