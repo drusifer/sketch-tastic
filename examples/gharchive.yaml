@@ -4,6 +4,9 @@
 # Try it (repository root):  make gharchive            (GH_HOUR=2024-01-01-15 by default)
 version: 0
 
+# sequence: GH Archive event ids only grow, so a re-run over the same hour adds nothing twice.
+sequence: $.id
+
 # fields: the shape of an event — what kind, what happened, who did it.
 fields:
   - key: type                      # PushEvent, PullRequestEvent, IssuesEvent, ...

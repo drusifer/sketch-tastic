@@ -89,6 +89,8 @@ class FingerprintSet:
         """Running count of present values the profile's aggregates could not use."""
         self.last_run: str | None = None
         """Id of the latest run merged into this set (`YYMMDD-SEQ`); saved and loaded."""
+        self.sequence: dict[str, Any] | None = None
+        """Duplicate-protection mark (STORY-FING-50): {path, max}; saved and loaded."""
         self.run: dict[str, Any] | None = None
         """Header of a run file (STORY-FING-48): what one run read. Saved if set; never loaded."""
 
@@ -153,6 +155,8 @@ class FingerprintSet:
         data = {"version": SET_VERSION, "profile_id": self.profile_id}
         if self.last_run is not None:
             data["last_run"] = self.last_run
+        if self.sequence is not None:
+            data["sequence"] = self.sequence
         if self.run is not None:
             data["run"] = self.run
         data["fingerprints"] = {fid: asdict(rec) for fid, rec in self._records.items()}
@@ -181,6 +185,7 @@ class FingerprintSet:
         if not force and None not in (stored, self.profile_id) and stored != self.profile_id:
             raise ProfileMismatchError(path, stored, self.profile_id)
         self.last_run = data.get("last_run")
+        self.sequence = data.get("sequence")
         try:
             self._records = {
                 fid: Fingerprint(**rec) for fid, rec in (data["fingerprints"] or {}).items()

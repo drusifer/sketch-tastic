@@ -399,3 +399,29 @@ class LastRunTests(unittest.TestCase):
             FingerprintSet().save(path)
             with open(path) as f:
                 self.assertNotIn("last_run", yaml.safe_load(f))
+
+
+class SequenceMarkTests(unittest.TestCase):
+    """The set keeps its duplicate-protection mark (FING-50)."""
+
+    def test_mark_is_saved_after_last_run_and_loaded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "set.yaml")
+            fingerprints = FingerprintSet()
+            fingerprints.last_run = "261015-0001"
+            fingerprints.sequence = {"path": "$.id", "max": 8}
+            fingerprints.save(path)
+            with open(path) as f:
+                text = f.read()
+            self.assertLess(text.index("last_run:"), text.index("sequence:"))
+            self.assertLess(text.index("sequence:"), text.index("fingerprints:"))
+            loaded = FingerprintSet()
+            loaded.load(path)
+            self.assertEqual(loaded.sequence, {"path": "$.id", "max": 8})
+
+    def test_no_mark_unless_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "set.yaml")
+            FingerprintSet().save(path)
+            with open(path) as f:
+                self.assertNotIn("sequence", yaml.safe_load(f))

@@ -13,6 +13,10 @@
       "const": 0,
       "description": "Profile format version: 0 until 1.0 (formats may change without notice before then)."
     },
+    "sequence": {
+      "$ref": "#/$defs/text",
+      "description": "JSONPath to a number in each event that only grows (e.g. $.id). Events at or below the highest number already merged into the set are dropped, so re-running over the same or overlapping input adds nothing twice."
+    },
     "fields": {
       "type": "array",
       "minItems": 1,

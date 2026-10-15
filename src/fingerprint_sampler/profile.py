@@ -20,7 +20,7 @@ from typing import Any
 import yaml
 
 from fingerprint_sampler.aggregators import Aggregate
-from fingerprint_sampler.model import Field, tokens
+from fingerprint_sampler.model import Field, Path, tokens
 from fingerprint_sampler.schema import schema_errors
 
 _SECTIONS = {"fields": Field, "aggregates": Aggregate}
@@ -44,6 +44,8 @@ def profile_id(fields: tuple[Field, ...] | list[Field]) -> str:
 class Profile:
     fields: tuple[Field, ...]
     aggregates: tuple[Aggregate, ...] = ()
+    sequence: Path | None = None
+    """Where each event's sequence number is (STORY-FING-49): drops events already merged."""
 
     @property
     def profile_id(self) -> str:
@@ -100,9 +102,15 @@ def check_profile(data: Any, source: str = "<profile>") -> tuple[Profile | None,
         return None, problems
 
     built = {section: _build(data, section, source, problems) for section in _SECTIONS}
+    sequence = None
+    if "sequence" in data:
+        try:
+            sequence = Path(data["sequence"])
+        except ValueError as exc:
+            problems.append(f"{source}: sequence: {exc}")
     if problems:
         return None, problems
-    return Profile(tuple(built["fields"]), tuple(built["aggregates"])), []
+    return Profile(tuple(built["fields"]), tuple(built["aggregates"]), sequence), []
 
 
 def parse_profile(data: Any, source: str = "<profile>") -> Profile:

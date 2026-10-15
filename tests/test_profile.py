@@ -140,6 +140,11 @@ class ValidationTests(unittest.TestCase):
             ],
         )
 
+    def test_sequence_is_an_optional_jsonpath(self):
+        self.assertIsNone(parse_profile(VALID).sequence)
+        self.assertEqual(parse_profile(variant(sequence="$.id")).sequence.text, "$.id")
+        self.assert_invalid(variant(sequence="$.id["), "p.yaml: sequence: Invalid JSONPath")
+
     def test_invalid_regex_names_the_entry(self):
         fields = [{"key": "bin", "path": "$.b", "modifier": {"name": "REGEX", "pattern": "[a-"}}]
         self.assert_invalid(variant(fields=fields), "fields[0]", "'bin'", "Invalid regex")
@@ -277,6 +282,11 @@ class ProfileIdTests(unittest.TestCase):
     def test_unaffected_by_aggregates(self):
         self.assertEqual(
             parse_profile(variant(aggregates=[])).profile_id, parse_profile(VALID).profile_id
+        )
+
+    def test_unaffected_by_sequence(self):
+        self.assertEqual(
+            parse_profile(variant(sequence="$.id")).profile_id, parse_profile(VALID).profile_id
         )
 
     def test_unaffected_by_an_aggregate_op(self):
