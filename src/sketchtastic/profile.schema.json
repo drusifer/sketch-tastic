@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/drusifer/sketch-tastic/main/src/sketchtastic/profile.schema.json",
   "title": "sketch-tastic profile",
-  "description": "How to fingerprint one kind of JSONL event: fields define a fingerprint's identity, aggregates are tracked per fingerprint.",
+  "description": "How to fingerprint one kind of JSONL event: fields define a skit's identity, aggregates are tracked per skit.",
   "type": "object",
   "required": [
     "fields"
@@ -47,7 +47,7 @@
       "properties": {
         "key": {
           "$ref": "#/$defs/text",
-          "description": "Token name in the fingerprint."
+          "description": "Token name in the skit."
         },
         "path": {
           "$ref": "#/$defs/text",

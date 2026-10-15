@@ -64,18 +64,18 @@ class TypedStatePersistenceTests(unittest.TestCase):
         import os
         import tempfile
 
-        from sketchtastic.fingerprint_set import FingerprintSet, fingerprint_id
+        from sketchtastic.sketch import Sketch, skit_id
 
         aggregate = Aggregate("t", "$.t", "MAX", type="DATETIME")
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "set.yaml")
-            first = FingerprintSet([aggregate])
+            first = Sketch([aggregate])
             first.upsert({"k": "v"}, {"t": "2024-01-01T15:00:00Z"})
             first.save(path)
-            second = FingerprintSet([aggregate])
+            second = Sketch([aggregate])
             second.load(path)
             second.upsert({"k": "v"}, {"t": "2024-01-01T16:00:00+02:00"})
-        state = second.get(fingerprint_id({"k": "v"})).aggregates["t"]
+        state = second.get(skit_id({"k": "v"})).aggregates["t"]
         self.assertEqual(state, datetime(2024, 1, 1, 15, tzinfo=UTC))
 
 

@@ -101,7 +101,7 @@ gharchive: ## Merge one hour of GitHub events from GH Archive (GH_HOUR=YYYY-MM-D
 	$(need_venv)
 	@mkdir -p $(GH_DIR)
 	@test -s $(GH_DIR)/$(GH_HOUR).json.gz || curl -sSfL -o $(GH_DIR)/$(GH_HOUR).json.gz https://data.gharchive.org/$(GH_HOUR).json.gz
-	@gunzip -c $(GH_DIR)/$(GH_HOUR).json.gz | $(CLI) merge -p examples/gharchive.yaml -s $(GH_DIR)/gh.fingerprints.yaml -
+	@gunzip -c $(GH_DIR)/$(GH_HOUR).json.gz | $(CLI) merge -p examples/gharchive.yaml -s $(GH_DIR)/gh.sketch.yaml -
 
 clean: ## Remove caches, build output and downloaded test data in data/ (keeps .venv)
 	@find . -name __pycache__ -type d -not -path './.venv/*' -prune -exec rm -rf {} +

@@ -1,4 +1,4 @@
-# Built-in metadata, kept for every fingerprint under `meta`.
+# Built-in metadata, kept for every skit under `meta`.
 # These aggregates read an envelope, not the bare record:
 #   {meta: {run: <id of the run that read it, e.g. 261015-0003>}, record: <the record, parsed from its JSONL line>}
 # so injected fields can never clash with the record's own. Run ids sort in run order.

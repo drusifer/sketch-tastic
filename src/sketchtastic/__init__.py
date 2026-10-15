@@ -1,20 +1,13 @@
 """sketch-tastic: mergeable sketches of JSONL event streams.
 
-Reduce each event to a stable fingerprint, and keep one entry per distinct
-fingerprint — with counts, statistics and samples you choose — in a set that
+Reduce each event to a skit — a stable ID for one shape of event — and keep one
+entry per skit, with counts, statistics and samples you choose, in a sketch that
 grows across runs.
 """
 
 from importlib.metadata import PackageNotFoundError, version
 
 from sketchtastic.aggregators import Aggregate, Aggregator, Op
-from sketchtastic.fingerprint_set import (
-    Fingerprint,
-    FingerprintSet,
-    FingerprintSetError,
-    ProfileMismatchError,
-    fingerprint_id,
-)
 from sketchtastic.model import Field, Modifier, Path, Rule
 from sketchtastic.profile import (
     Profile,
@@ -22,6 +15,13 @@ from sketchtastic.profile import (
     check_profile,
     load_profile,
     parse_profile,
+)
+from sketchtastic.sketch import (
+    ProfileMismatchError,
+    Sketch,
+    SketchError,
+    Skit,
+    skit_id,
 )
 
 try:
@@ -34,18 +34,18 @@ __all__ = [
     "Aggregator",
     "Op",
     "Field",
-    "Fingerprint",
-    "FingerprintSetError",
+    "Skit",
+    "SketchError",
     "Modifier",
     "Profile",
     "ProfileError",
     "ProfileMismatchError",
     "Path",
     "Rule",
-    "FingerprintSet",
+    "Sketch",
     "__version__",
     "check_profile",
-    "fingerprint_id",
+    "skit_id",
     "load_profile",
     "parse_profile",
 ]

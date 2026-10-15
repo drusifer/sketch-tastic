@@ -322,7 +322,7 @@ def typed_values(values: list[Any], value_type: ValueType | None) -> list[Any]:
 
 @dataclass(frozen=True)
 class Field:
-    """One part of a fingerprint's identity: the token `modifier` makes of what `path` selects.
+    """One part of a skit's identity: the token `modifier` makes of what `path` selects.
 
     `path` and `modifier` may be given as text and a bare name or mapping; they are built and
     checked on creation (ValueError if wrong).

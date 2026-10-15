@@ -17,8 +17,8 @@
 - [x] **1.2** UAT + review. [Trin, Morpheus]
 
 ### Phase 2: Sketch and skit (STORY-SKT-02, D2) — Neo
-- [ ] **2.1** Module/class/key/flag/message renames; README and help. [Neo]
-- [ ] **2.2** UAT + review. [Trin, Morpheus]
+- [x] **2.1** Module/class/key/flag/message renames; README and help. [Neo]
+- [x] **2.2** UAT + review. [Trin, Morpheus]
 
 ### Close
 - [ ] Tank `*devops sdlc-check` · Oracle groom · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]

@@ -1,8 +1,8 @@
-"""Fingerprint profiles (STORY-FING-24, -37).
+"""Skit profiles (STORY-FING-24, -37).
 
 A profile is a YAML file saying how to fingerprint an event stream:
-`fields` define a fingerprint's identity, `aggregates` are the statistics
-and samples tracked per fingerprint.
+`fields` define a skit's identity, `aggregates` are the statistics
+and samples tracked per skit.
 
 Checking happens in two layers that report together. The shape is checked
 against the published JSON Schema (`profile.schema.json`) by a standard
@@ -49,7 +49,7 @@ class Profile:
 
     @property
     def profile_id(self) -> str:
-        """Depends on `fields` only: editing aggregates never invalidates an existing set."""
+        """Depends on `fields` only: editing aggregates never invalidates an existing sketch."""
         return profile_id(self.fields)
 
     def tokens(self, event: Any) -> dict[str, str]:

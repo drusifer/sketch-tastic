@@ -35,4 +35,12 @@ sequenceDiagram
     Note right of Trin: "UAT phase 1 pass: AC1<br/>wheel<br/>sketch_tastic-0.2.0, skt<br/>+ sketchtastic installed<br/>(smoke), python -m<br/>works, AC2 version text,<br/>help shows invoke…"
     Morpheus->>Neo: "lead handoff"
     Note right of Morpheus: "Phase 1 approved: D1 as<br/>designed, git mv keeps<br/>blame. @Neo *swe impl<br/>phase-2"
+    Mouse->>All: "phase 2"
+    Note right of Mouse: "Phase 2: sketch and skit<br/>vocabulary (SKT-02)"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 2 done, tests<br/>first: sketch.py/Sketch/<br/>Skit/SketchError/skit_id<br/>/SKETCH_VERSION, file<br/>key skits, run header<br/>sketch, -s/--sketch<br/>SKETCH,…"
+    Trin->>Morpheus: "qa handoff"
+    Note right of Trin: "UAT phase 2 pass: AC1<br/>--sketch (no --set),<br/>history<br/><sketch>.history, AC2<br/>summary 'skits: ...<br/>total in sketch',<br/>'cannot use sketch<br/>file', 'n…"
+    Morpheus->>Tank: "lead handoff"
+    Note right of Morpheus: "Phase 2 approved: D2<br/>complete, grep shows<br/>'fingerprint' only as a<br/>verb. All phases<br/>reviewed. @Tank *devops<br/>sdlc-check"
 ```

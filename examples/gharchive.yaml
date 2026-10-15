@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=../src/sketchtastic/profile.schema.json
-# Fingerprint profile for GitHub public events from GH Archive (https://www.gharchive.org).
+# Profile for GitHub public events from GH Archive (https://www.gharchive.org).
 # Each hourly file is JSONL: one event per line, ~100-250k events.
 # Try it (repository root):  make gharchive            (GH_HOUR=2024-01-01-15 by default)
 version: 0
@@ -27,12 +27,12 @@ fields:
     path: $.org
     modifier: IS_PRESENT
 
-# aggregates: statistics per fingerprint (count and first/last events are built in).
+# aggregates: statistics per skit (count and first/last events are built in).
 aggregates:
   - key: commits                   # PushEvent commit counts
     path: $.payload.size
     fn: [SUM, AVG, MAX]
-  - key: payload_bytes             # data volume per fingerprint: SUM(SIZE(payload)), ...
+  - key: payload_bytes             # data volume per skit: SUM(SIZE(payload)), ...
     path: $.payload
     op: SIZE
     fn: [SUM, AVG, MAX]

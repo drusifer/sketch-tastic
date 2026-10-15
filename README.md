@@ -3,12 +3,13 @@
 Mergeable sketches of JSONL event streams for regression testing and flow analysis.
 
 `sketchtastic` reads events — logs, traces, audit records, anything with one JSON object per
-line — and reduces each to a **fingerprint**: a stable ID for "this shape of event". It keeps a
-**fingerprint set** with one entry per distinct fingerprint: how often it was seen, statistics you
-ask for, and a few recent samples. The set is a file that grows across runs:
+line — and reduces each to a **skit**: a stable ID for "this shape of event". It keeps a
+**sketch** (the data-sketch term for a compact, mergeable summary of a stream) with one entry per
+skit: how often it was seen, statistics you ask for, and a sample. The sketch is a file that
+grows across runs:
 
 ```
-existing set  +  stream of events  ->  updated set
+existing sketch  +  stream of events  ->  updated sketch
 ```
 
 A million near-identical log lines become a handful of entries you can actually read.
@@ -28,7 +29,7 @@ without a migration path.
 
 ## Quickstart
 
-Paste this into a shell. It writes a profile and a few events, then fingerprints them:
+Paste this into a shell. It writes a profile and a few events, then sketches them:
 
 ```sh
 cat > profile.yaml <<'YAML'
@@ -49,28 +50,28 @@ cat > events.jsonl <<'JSONL'
 {"level": "INFO", "logger": "http", "msg": "GET /health", "took_ms": 0.4}
 JSONL
 
-sketchtastic merge -p profile.yaml -s app.fingerprints.yaml events.jsonl
+sketchtastic merge -p profile.yaml -s app.sketch.yaml events.jsonl
 ```
 
 ```
 sketchtastic: 4 events read from events.jsonl
-  fingerprints: 3 new, 0 updated, 3 total in set
+  skits: 3 new, 0 updated, 3 total in sketch
   skipped: 0 malformed lines, 0 unusable aggregate values
-  wrote app.fingerprints.yaml (profile f50d7a5f85ddf9f7f4c72370f454ae2e)
-  history: app.fingerprints.history/261014-0001.yaml
+  wrote app.sketch.yaml (profile f50d7a5f85ddf9f7f4c72370f454ae2e)
+  history: app.sketch.history/261014-0001.yaml
 ```
 
-Four events, three fingerprints: the two successful `db` queries share one. Run the same command
+Four events, three skits: the two successful `db` queries share one. Run the same command
 again and the counts add up instead of new entries appearing — that is the merge. Each run also
-leaves a file with just its own fingerprints in `app.fingerprints.history/` (see History below).
+leaves a file with just its own skits in `app.sketch.history/` (see History below).
 
-`app.fingerprints.yaml` now starts like this (the other two fingerprints follow):
+`app.sketch.yaml` now starts like this (the other two skits follow):
 
 ```yaml
 version: 0
 profile_id: f50d7a5f85ddf9f7f4c72370f454ae2e
 last_run: 261014-0001
-fingerprints:
+skits:
   b738d17a6a5f7265cb4cef73937afd4f:
     tokens:
       level: INFO
@@ -102,7 +103,7 @@ fingerprints:
         count: 50.0
 ```
 
-To read a set without the YAML, print it as a table with `sketchtastic show app.fingerprints.yaml`:
+To read a sketch without the YAML, print it as a table with `sketchtastic show app.sketch.yaml`:
 
 ```
 ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
@@ -114,50 +115,50 @@ b738d17a  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
 ## Usage
 
 ```
-sketchtastic merge -p PROFILE -s SET [EVENTS|-] [-o OUTPUT] [--force-profile]
+sketchtastic merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [--force-profile]
 ```
 
 | Option | Meaning |
 |---|---|
 | `-p`, `--profile PROFILE` | YAML profile (below). Required. |
-| `-s`, `--set SET` | Fingerprint set to merge into. Created if missing, **updated in place**. Required. |
+| `-s`, `--sketch SKETCH` | Sketch to merge into. Created if missing, **updated in place**. Required. |
 | `EVENTS` | JSONL file; `-` or omitted reads stdin. |
-| `-o`, `--output OUTPUT` | Write the merged set here instead; `SET` is left unchanged. |
-| `--force-profile` | Merge even though `SET` was built with a different profile. |
+| `-o`, `--output OUTPUT` | Write the merged sketch here instead; `SKETCH` is left unchanged. |
+| `--force-profile` | Merge even though `SKETCH` was built with a different profile. |
 
 ```sh
 # read from a pipe
-tail -n 1000 app.jsonl | sketchtastic merge -p profile.yaml -s app.fingerprints.yaml -
+tail -n 1000 app.jsonl | sketchtastic merge -p profile.yaml -s app.sketch.yaml -
 
-# trial run: see the result without touching the set
-sketchtastic merge -p profile.yaml -s app.fingerprints.yaml -o /tmp/preview.yaml new.jsonl
+# trial run: see the result without touching the sketch
+sketchtastic merge -p profile.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.jsonl
 ```
 
-The summary goes to stderr and stdout stays empty. Exit status: `0` set written and every line
-used · `1` set written but some lines were skipped (listed by line number) · `2` nothing written
-· `3` set written but its history file was not (takes precedence over `1`).
+The summary goes to stderr and stdout stays empty. Exit status: `0` sketch written and every line
+used · `1` sketch written but some lines were skipped (listed by line number) · `2` nothing written
+· `3` sketch written but its history file was not (takes precedence over `1`).
 
 ### History
 
 Each run gets a **run id**, `YYMMDD-SEQ`: the UTC date, then a number that only goes up for this
-set (`261015-0003`). The set keeps the latest as `last_run`, and every fingerprint's
+sketch (`261015-0003`). The sketch keeps the latest as `last_run`, and every skit's
 `first_seen` / `last_seen` name the first and last run that saw it.
 
-Every run that updates `SET` also writes just that run's fingerprints to a file named by its run
-id in `<SET without extension>.history/`:
+Every run that updates `SKETCH` also writes just that run's skits to a file named by its run
+id in `<SKETCH without extension>.history/`:
 
 ```
-web.fingerprints.yaml                  # last_run: 261015-0003
-web.fingerprints.history/
+web.sketch.yaml                  # last_run: 261015-0003
+web.sketch.history/
   261014-0001.yaml
   261014-0002.yaml
   261015-0003.yaml
 ```
 
-So `last_seen: 261014-0002` points straight at the file for that run. A run file is a fingerprint
-set (counts, aggregates and shares from that run only), so `sketchtastic show` reads it. It starts
+So `last_seen: 261014-0002` points straight at the file for that run. A run file is a sketch
+(counts, aggregates and shares from that run only), so `sketchtastic show` reads it. It starts
 with a `run:` header: `id`, `started`, `finished` (UTC), `source`, `events`, `skipped_lines` and
-`set`. A new run's number is one past the highest in the set and its history, so a rebuilt set
+`sketch`. A new run's number is one past the highest in the sketch and its history, so a rebuilt sketch
 never overwrites an old run file. History is always on; a run with `-o`, or one that writes
 nothing, leaves no run file and uses up no run id. Nothing is pruned.
 
@@ -169,7 +170,7 @@ If your events carry a number that only grows (an event id, an offset), name it 
 sequence: $.id
 ```
 
-The set then keeps the highest sequence merged so far (`sequence: {path: $.id, max: 34541893465}`)
+The sketch then keeps the highest sequence merged so far (`sequence: {path: $.id, max: 34541893465}`)
 and every later run drops events at or below it, so running twice over the same file, or over
 files that overlap, adds nothing twice:
 
@@ -181,7 +182,7 @@ Events are compared with the mark as it stood when the run started, so events sl
 order within one run are all kept (and duplicates within one run are not caught). Numbers and
 numeric strings work. Duplicate detection has to be exact, so an event whose sequence is
 missing, not a number, or selected more than once is an **error**: the run stops at that line,
-nothing is written (no set update, no run file) and the exit status is `2`. The run file's header records the range
+nothing is written (no sketch update, no run file) and the exit status is `2`. The run file's header records the range
 merged, `sequence: {min, max}`. Changing the profile's `sequence` path makes the next run ignore
 the old mark and say so.
 
@@ -213,26 +214,26 @@ completes modifier names:
 # yaml-language-server: $schema=https://raw.githubusercontent.com/drusifer/sketch-tastic/main/src/sketchtastic/profile.schema.json
 ```
 
-### Show a set
+### Show a sketch
 
 ```
-sketchtastic show SET
+sketchtastic show SKETCH
 ```
 
-Prints one row per fingerprint, most frequent first: the first 8 characters of its ID, its count
+Prints one row per skit, most frequent first: the first 8 characters of its ID, its count
 and `COUNT %` (its share of all events), the first and last run that saw it, then a value and
 a `%` column for each `SUM` or `COUNT` aggregate (`payload_bytes.SUM`, `payload_bytes.SUM %`), and
-one column per token. Shares come from the set file's `share` section; a set written before
-shares existed shows `-` until its next merge. A set with no fingerprints prints
-`SET: no fingerprints`. Long values are not cut; pipe to `less -S` to scroll sideways. Exit
-status: `0` printed · `2` the set file could not be read (the message says why).
+one column per token. Shares come from the sketch file's `share` section; a sketch written before
+shares existed shows `-` until its next merge. A sketch with no skits prints
+`SKETCH: no skits`. Long values are not cut; pipe to `less -S` to scroll sideways. Exit
+status: `0` printed · `2` the sketch file could not be read (the message says why).
 
 ## Profiles
 
 ```yaml
 version: 0
 
-# fields define identity: events with the same tokens share one fingerprint
+# fields define identity: events with the same tokens share one skit
 fields:
   - key: method
     path: "$.request.method"                 # modifier defaults to DEFAULT
@@ -242,7 +243,7 @@ fields:
   - key: slow_upstreams
     path: "$.upstreams[?(@.ms > 500)].name"  # full JSONPath, including filters
 
-# aggregates are tracked per fingerprint and never affect identity
+# aggregates are tracked per skit and never affect identity
 aggregates:
   - key: latency_ms
     path: "$.response.ms"
@@ -254,10 +255,10 @@ aggregates:
 
 **Paths** are full JSONPath: dot and bracket access, `[*]`, slices, negative indexes, unions,
 recursive descent (`..`) and filters. If a path selects several values, each is tokenized and the
-results are de-duplicated, sorted and joined, so array order never changes a fingerprint.
+results are de-duplicated, sorted and joined, so array order never changes a skit.
 
 **Modifiers** turn the selected value into a token. Pick ones that collapse high-cardinality
-values (IDs, timestamps, sizes) so similar events share a fingerprint:
+values (IDs, timestamps, sizes) so similar events share a skit:
 
 | Modifier | Arguments | Token |
 |---|---|---|
@@ -303,7 +304,7 @@ profile's identity, like any other change to `fields`.
 
 **Dates and times.** Add `type: DATETIME` (or `type: DATE`) to a field or aggregate whose path
 holds ISO-8601 text. Values are compared as real times in UTC, so `MIN`/`MAX` are right across
-time zones, and the set stores them as YAML timestamps. A value that isn't valid ISO-8601 counts as
+time zones, and the sketch stores them as YAML timestamps. A value that isn't valid ISO-8601 counts as
 missing (and is skipped by aggregates). For fields, `TRUNC` buckets a time so events group
 together:
 
@@ -314,7 +315,7 @@ together:
     modifier: {name: TRUNC, unit: hour}     # year, month, day, hour, minute or second
 ```
 
-**Aggregates** are computed across every event that lands on the same fingerprint, over all runs:
+**Aggregates** are computed across every event that lands on the same skit, over all runs:
 
 | Function | Keeps |
 |---|---|
@@ -326,7 +327,7 @@ together:
 | `{name: LAST, n: N}` | the `N` most recent values of the path |
 
 `fn` is one function or a list, written like modifiers: a bare name, or a mapping for `FIRST`
-and `LAST`. With one function the set stores its value directly (`count: 12`); with several, a
+and `LAST`. With one function the sketch stores its value directly (`count: 12`); with several, a
 map by function name (`{MIN: 1, MAX: 3}`). Numbers and numeric strings count as numbers. A value
 a function can't use (text for `SUM`, text after numbers for `MIN`) is skipped and counted in the
 summary as an unusable aggregate value. A record where the path matches nothing is simply not
@@ -342,48 +343,48 @@ aggregates:
 ```
 
 `op` and `type` cannot be combined on one aggregate. Like any aggregate change, adding an `op`
-keeps the profile id, so existing sets keep merging.
+keeps the profile id, so existing sketches keep merging.
 
 `merge` checks the profile before reading any event; run `sketchtastic check` (above) to see
 every problem at once.
 
-## The fingerprint set
+## The sketch
 
 - `tokens` shows what each ID stands for.
-- `aggregates` holds what your profile asked for. `meta` holds what every fingerprint gets for
+- `aggregates` holds what your profile asked for. `meta` holds what every skit gets for
   free: `count`, `first_seen` / `last_seen` (the first and last run id that saw it, see History
   above), and the first and last record (one each, to keep
-  sets and run files small; add `FIRST`/`LAST` aggregates to your profile for more samples).
+  sketches and run files small; add `FIRST`/`LAST` aggregates to your profile for more samples).
 - `meta` comes from a small built-in profile shipped with the package (`builtin.yaml`), which
   uses the same aggregate functions you can. It reads each record wrapped in an envelope,
   `{meta: {run: <run id>}, record: <the parsed record>}`, so the fields the tool adds can never
   clash with the record's own, and the stored first/last records carry the run they came from.
-- `share` gives each fingerprint's percentage of the whole set for every value that adds up:
+- `share` gives each skit's percentage of the whole sketch for every value that adds up:
   `share.meta.count` is its share of all events, and `share.aggregates` holds the share of each
   `SUM` and `COUNT`, laid out like `aggregates` (`payload_bytes: {SUM: 31.25}`, or `requests: 25.0`
   for a single-function aggregate). It is recomputed on every write; a value whose total is 0 has
   no share.
-- The tool records runs, not times, per fingerprint; a run's start and finish times are in its run
+- The tool records runs, not times, per skit; a run's start and finish times are in its run
   file. To track a time field inside your records, add it to your profile's `aggregates`.
-- A set records the profile that built it (`profile_id`, derived from `fields`). Merging under a
-  profile with different `fields` is refused, because the fingerprints would not be comparable.
+- A sketch records the profile that built it (`profile_id`, derived from `fields`). Merging under a
+  profile with different `fields` is refused, because the skits would not be comparable.
   Changing `aggregates` is always fine.
-- Splitting a stream across several runs gives the same set as one run over all of it.
-- The file is replaced atomically; a failed or interrupted run leaves the previous set intact.
+- Splitting a stream across several runs gives the same sketch as one run over all of it.
+- The file is replaced atomically; a failed or interrupted run leaves the previous sketch intact.
 
 ## As a library
 
 ```python
-from sketchtastic import FingerprintSet, load_profile
+from sketchtastic import Sketch, load_profile
 
 profile = load_profile("profile.yaml")
-fingerprints = FingerprintSet(profile.aggregates, profile.profile_id)
+sketch = Sketch(profile.aggregates, profile.profile_id)
 
 event = {"level": "INFO", "logger": "db", "msg": "query ok", "took_ms": 3}
-fingerprint_id = fingerprints.upsert(profile.tokens(event), event)
+skit_id = sketch.upsert(profile.tokens(event), event, run="261015-0001")
 
-fingerprints.get(fingerprint_id).meta["count"]   # {"COUNT": 1}
-fingerprints.save("app.fingerprints.yaml")
+sketch.get(skit_id).meta["count"]   # 1
+sketch.save("app.sketch.yaml")
 ```
 
 `load_profile` and `parse_profile` raise `ProfileError`; its `problems` attribute lists every

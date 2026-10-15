@@ -75,3 +75,27 @@ OK
 ---
 [<small>2026-10-14 21:16:22</small>] [**Morpheus**]->[**Neo**] *lead handoff*:
  Phase 1 approved: D1 as designed; git mv keeps blame. @Neo *swe impl phase-2
+
+---
+[<small>2026-10-14 21:16:23</small>] [**Mouse**]->[**all**] *phase 2*:
+ Phase 2: sketch and skit vocabulary (SKT-02)
+
+---
+[<small>2026-10-14 21:19:04</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make test | /home/drusifer/Projects/sketch-tastic/build/build.out
+----------------------------------------------------------------------
+Ran 223 tests in 2.448s
+
+OK
+
+---
+[<small>2026-10-14 21:19:17</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Phase 2 done, tests first: sketch.py/Sketch/Skit/SketchError/skit_id/SKETCH_VERSION, file key skits, run header sketch, -s/--sketch SKETCH, every message and help in sketch/skit terms, README (intro defines both), examples, Makefile gh.sketch.yaml. 223 tests, lint, quality, smoke OK. @Trin *qa uat phase-2
+
+---
+[<small>2026-10-14 21:19:17</small>] [**Trin**]->[**Morpheus**] *qa handoff*:
+ UAT phase 2 pass: AC1 --sketch (no --set), history <sketch>.history; AC2 summary 'skits: ... total in sketch', 'cannot use sketch file', 'no skits'; AC3 skits key, show reads it; AC4 exports, old names gone; AC5 skit_id = pre-move b738d17a; AC6 README defines sketch/skit up top. @Morpheus *lead review phase-2
+
+---
+[<small>2026-10-14 21:19:17</small>] [**Morpheus**]->[**Tank**] *lead handoff*:
+ Phase 2 approved: D2 complete; grep shows 'fingerprint' only as a verb. All phases reviewed. @Tank *devops sdlc-check

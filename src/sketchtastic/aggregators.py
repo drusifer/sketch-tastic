@@ -1,9 +1,9 @@
-"""Per-fingerprint aggregate functions (STORY-FING-25, -39).
+"""Per-skit aggregate functions (STORY-FING-25, -39).
 
 An aggregate folds the values one JSONPath selects, across every event that
-hashes to the same fingerprint, into a small piece of state. That state is
-plain data (numbers, lists, dicts) so it round-trips through the fingerprint
-set file, and folding continues from stored state — which is what makes a set
+hashes to the same skit, into a small piece of state. That state is
+plain data (numbers, lists, dicts) so it round-trips through the sketch
+file, and folding continues from stored state — which is what makes a sketch
 built over many runs equal to one built in a single pass. State is keyed by
 function name, so changing LAST's `n` keeps the samples already collected.
 """
