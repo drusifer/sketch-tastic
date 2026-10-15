@@ -795,19 +795,22 @@ class SequenceTests(CliTestCase):
         run = self.load_set(os.path.join(history, sorted(os.listdir(history))[-1]))
         self.assertNotIn("sequence", run["run"])  # nothing merged in this run
 
-    def test_event_without_a_usable_sequence_is_a_line_error(self):
-        lines = [
-            {"kind": "a"},
-            {"id": "abc", "kind": "a"},
-            {"id": True, "kind": "a"},
-            {"id": 7, "kind": "a"},
-        ]
-        code, _, err = self.fingerprint(self.write_events("bad.jsonl", lines))
-        self.assertEqual(code, 1)
-        for lineno in (1, 2, 3):
-            self.assertIn(f"fingerprint: line {lineno}: no usable sequence at $.id - skipped", err)
-        self.assertIn("skipped: 3 malformed lines", err)
-        self.assertEqual(self.total_count(self.load_set()), 1)
+    def test_event_without_a_usable_sequence_fails_the_whole_run(self):
+        self.fingerprint(self.events("one.jsonl", [1, 2]))
+        with open(self.set_path) as f:
+            before = f.read()
+        history = os.path.join(self.dir, "set.history")
+        runs_before = os.listdir(history)
+        for bad in ({"kind": "a"}, {"id": "abc", "kind": "a"}, {"id": True, "kind": "a"}):
+            with self.subTest(bad=bad):
+                lines = [{"id": 7, "kind": "a"}, bad, {"id": 8, "kind": "a"}]
+                code, _, err = self.fingerprint(self.write_events("bad.jsonl", lines))
+                self.assertEqual(code, 2)
+                self.assertIn("fingerprint: line 2: no usable sequence at $.id", err)
+                self.assertIn("nothing written", err)
+                with open(self.set_path) as f:
+                    self.assertEqual(f.read(), before)  # set untouched, mark included
+                self.assertEqual(os.listdir(history), runs_before)  # no run file
 
     def test_changed_sequence_path_ignores_the_old_mark(self):
         self.fingerprint(self.events("one.jsonl", [1, 2, 3]))

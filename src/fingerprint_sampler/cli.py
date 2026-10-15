@@ -71,12 +71,14 @@ duplicate protection:
   event that only grows), SET keeps the highest one merged. Later runs drop
   events at or below it, so re-running over the same or overlapping input
   adds nothing twice; the summary says how many were dropped. An event without
-  a usable sequence (missing, several values, not a number) is a skipped line.
+  a usable sequence (missing, several values, not a number) is an error: the
+  run fails and nothing is written (exit status 2).
 
 exit status:
   0  set written, every line was used
   1  set written, but some input lines were skipped (see stderr)
-  2  nothing written (bad arguments, profile, set file, or profile mismatch)
+  2  nothing written (bad arguments, profile, set file, profile mismatch, or an
+     event without the sequence the profile declares)
   3  set written, but its history file was not (takes precedence over 1)
 """
 
@@ -300,7 +302,8 @@ class _Sequencer:
         self.high: int | float | None = None
 
     def check(self, event: Any) -> Any:
-        """The event's sequence number to keep it, DROP if already merged, None if unusable."""
+        """The event's sequence number to keep it, DROP if already merged, None if unusable
+        (an error: the caller fails the run)."""
         values = self.path.values(event)
         number = as_number(values[0]) if len(values) == 1 else None
         if number is None:
@@ -347,7 +350,8 @@ def _fold_stream(
     """Fingerprint each JSONL line into `fingerprints` and into `run` (this run only).
 
     Both record the run's id (`fingerprints.last_run`) as where each event was seen. With a
-    `sequencer`, events already merged are dropped. Returns run statistics.
+    `sequencer`, events already merged are dropped, and an event without a usable sequence
+    fails the run (_NotWritten). Returns run statistics.
     """
     known_before = set(fingerprints)
     seen: set[str] = set()
@@ -373,10 +377,12 @@ def _fold_stream(
             warn(lineno, f"expected a JSON object, got {type(event).__name__}")
             continue
         sequence = sequencer.check(event) if sequencer else 0
-        if sequence is None:
-            skipped_lines += 1
-            warn(lineno, f"no usable sequence at {sequencer.path.text}")
-            continue
+        if sequence is None:  # duplicate detection must be exact, so the whole run fails
+            raise _NotWritten(
+                f"fingerprint: line {lineno}: no usable sequence at {sequencer.path.text} "
+                "(missing, several values, or not a number)\n"
+                "  nothing written: the profile declares a sequence, so every event needs one"
+            )
         events += 1
         if sequence is DROP:
             continue

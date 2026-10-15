@@ -181,8 +181,9 @@ files that overlap, adds nothing twice:
 
 Events are compared with the mark as it stood when the run started, so events slightly out of
 order within one run are all kept (and duplicates within one run are not caught). Numbers and
-numeric strings work. An event whose sequence is missing, not a number, or selected more than
-once is reported as a skipped line (exit status `1`). The run file's header records the range
+numeric strings work. Duplicate detection has to be exact, so an event whose sequence is
+missing, not a number, or selected more than once is an **error**: the run stops at that line,
+nothing is written (no set update, no run file) and the exit status is `2`. The run file's header records the range
 merged, `sequence: {min, max}`. Changing the profile's `sequence` path makes the next run ignore
 the old mark and say so.
 
