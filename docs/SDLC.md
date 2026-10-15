@@ -64,7 +64,7 @@ targets as `bobp make <target>`.
 | `check` | `python -m compileall -q` over `src`, `tests`, `smoke` | syntax check only |
 | `run` | `.venv/bin/sketchtastic $(ARGS)` | the CLI |
 | `gharchive` | downloads one GH Archive hour (`GH_HOUR`) into `data/` once, then merges it with `examples/gharchive.yaml` into `data/gharchive/` | example at scale; needs network and `curl` |
-| `profile` | same hour, merged into a fresh sketch in `build/profile/`: wall time without the profiler, a short hash of the sketch, then a cProfile run with the top 25 functions by own and cumulative time in `build/profile/profile.txt` | the only way to measure speed (owner, Sprint 3); the hash shows output is unchanged on the same day |
+| `profile` | same hour, merged into fresh sketches in `build/profile/`: wall time with all cores and with `-j 1`, a short hash of the `-j 1` sketch (deterministic), then a cProfile run (`PROFILE_ARGS`, default `-j 1`; `PROFILE_ARGS=` profiles a parallel run's parent) with the top 25 functions in `build/profile/profile.txt` | the only way to measure speed (owner, Sprint 3); the hash shows output is unchanged on the same day |
 | `clean` | removes `__pycache__`, `.ruff_cache`, `dist`, `data` | keeps `.venv` |
 | `distclean` | `clean` + removes `.venv/` | |
 | `help` | lists targets | default goal |
@@ -206,7 +206,7 @@ None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`,
 `sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
 
 ---
-*Last verified: 2026-10-14 at Sprint 3 close (`*devops sdlc-check`), by Tank — from-clean
+*Last verified: 2026-10-15 at Sprint 4 close (`*devops sdlc-check`), by Tank — from-clean
 `make distclean install lint test secrets build`, `make smoke` and `make test-all` (3.14, 3.15)
-green; new target `profile` documented (owner-approved mechanism change, no dependency);
-lockfile current; hooks set; workflows call existing targets only.*
+green; `profile` target updated (all cores + `-j 1`, `PROFILE_ARGS`); no new dependency (libyaml
+ships in PyYAML's wheels); lockfile current; hooks set; workflows call existing targets only.*

@@ -19,6 +19,7 @@ from typing import Any, Iterator, Sequence
 
 import yaml
 
+from sketchtastic import _yaml
 from sketchtastic.aggregators import Aggregate
 
 SKETCH_VERSION = 0
@@ -67,7 +68,7 @@ SHARED_FUNCTIONS = ("SUM", "COUNT")
 def builtin_aggregates() -> tuple[Aggregate, ...]:
     """The aggregates every skit gets, from the `builtin.yaml` shipped with the package."""
     text = files("sketchtastic").joinpath("builtin.yaml").read_text("utf-8")
-    return tuple(Aggregate(**raw) for raw in yaml.safe_load(text)["aggregates"])
+    return tuple(Aggregate(**raw) for raw in _yaml.load(text)["aggregates"])
 
 
 def _fold(aggregates: Sequence[Aggregate], states: dict[str, Any], event: Any) -> int:
@@ -192,7 +193,7 @@ class Sketch:
             with os.fdopen(fd, "w") as f:
                 # Insertion order, not alphabetical: header first, and each record
                 # leads with the tokens that explain its ID.
-                yaml.safe_dump(data, f, sort_keys=False)
+                _yaml.dump(data, f)
             os.replace(tmp_path, path)
         except BaseException:
             if os.path.exists(tmp_path):
@@ -222,7 +223,7 @@ def _read_set_file(path: str) -> dict:
     """Read a sketch file and check its header. An empty file is an empty sketch."""
     try:
         with open(path) as f:
-            data = yaml.safe_load(f)
+            data = _yaml.load(f)
     except yaml.YAMLError as exc:
         raise SketchError(f"{path} is not valid YAML: {exc}") from exc
     if data is None:

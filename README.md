@@ -115,7 +115,7 @@ b738d17a  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
 ## Usage
 
 ```
-sketchtastic merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [--force-profile]
+sketchtastic merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [-j N] [--force-profile]
 ```
 
 | Option | Meaning |
@@ -124,6 +124,7 @@ sketchtastic merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [--force-profile]
 | `-s`, `--sketch SKETCH` | Sketch to merge into. Created if missing, **updated in place**. Required. |
 | `EVENTS` | JSONL file; `-` or omitted reads stdin. |
 | `-o`, `--output OUTPUT` | Write the merged sketch here instead; `SKETCH` is left unchanged. |
+| `-j`, `--jobs N` | Worker processes that fold the events (default: all cores). `-j 1`, or input of up to 5,000 lines, folds in-process. |
 | `--force-profile` | Merge even though `SKETCH` was built with a different profile. |
 
 ```sh
@@ -137,6 +138,13 @@ sketchtastic merge -p profile.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.j
 The summary goes to stderr and stdout stays empty. Exit status: `0` sketch written and every line
 used · `1` sketch written but some lines were skipped (listed by line number) · `2` nothing written
 · `3` sketch written but its history file was not (takes precedence over `1`).
+
+**Parallel merge.** With more than one job, the input is read in batches of 5,000 lines that
+worker processes fold into sketches of their own, merged at the end. Counts, sums, MIN/MAX, AVG,
+first and last run, the sequence mark and the summary are exactly what one process gives;
+`FIRST`/`LAST` samples (and the built-in first and last record) come from matching events, but
+with several jobs not necessarily the very first or last ones, since any of them shows the same
+shape. Skipped-line warnings still name the right lines, in line order.
 
 ### History
 
@@ -329,8 +337,8 @@ together:
 | `MIN`, `MAX` | smallest / largest — numbers, dates and times (with `type`), or text |
 | `AVG` | the average, with the sum and count that make it mergeable |
 | `COUNT` | how many values the path selected (of any type) |
-| `{name: FIRST, n: N}` | the `N` earliest values of the path |
-| `{name: LAST, n: N}` | the `N` most recent values of the path |
+| `{name: FIRST, n: N}` | the `N` earliest values of the path (with `-j` above 1: some early values) |
+| `{name: LAST, n: N}` | the `N` most recent values of the path (with `-j` above 1: some late values) |
 
 `fn` is one function or a list, written like modifiers: a bare name, or a mapping for `FIRST`
 and `LAST`. With one function the sketch stores its value directly (`count: 12`); with several, a

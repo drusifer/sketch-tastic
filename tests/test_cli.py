@@ -15,6 +15,7 @@ from unittest import mock
 
 import yaml
 
+from sketchtastic import cli
 from sketchtastic.aggregators import Aggregate
 from sketchtastic.cli import _history_dir, _next_run_id, main
 from sketchtastic.profile import load_profile
@@ -518,6 +519,8 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn("updated in place", result.stdout)
         self.assertIn("--force-profile", result.stdout)
         self.assertIn("exit status:", result.stdout)
+        self.assertIn("-j, --jobs N", result.stdout)
+        self.assertIn("not necessarily the very first or last ones", result.stdout)
 
     def test_pipeline_end_to_end_via_stdin(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -940,3 +943,92 @@ class SequenceTests(CliTestCase):
         self.assertNotIn("dropped:", err)
         merged = self.load_set()
         self.assertEqual((self.total_count(merged), merged["sequence"]["max"]), (4, 3))
+
+
+class ParallelMergeTests(CliTestCase):
+    """`merge -j N`: batches fed to worker processes, folds merged on arrival (STORY-SKT-06)."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(cli, "_BATCH_LINES", 3)  # several batches from a few lines
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        kinds = "aabcabcaabbcacbabcab"
+        self.events = [
+            {"id": i, "kind": kind, "size": i * 10} for i, kind in enumerate(kinds, start=1)
+        ]
+
+    def merge(self, jobs, events_text, name):
+        path = os.path.join(self.dir, f"{name}.yaml")
+        events = self.write(f"{name}.jsonl", events_text)
+        code, _, err = self.run_cli(
+            "merge", "-p", self.profile, "-s", path, events, "-j", str(jobs)
+        )
+        return code, err, (self.load_set(path) if os.path.exists(path) else None)
+
+    def lines(self, events):
+        return "".join(json.dumps(event) + "\n" for event in events)
+
+    @staticmethod
+    def without_samples(data):
+        """Sketch contents minus FIRST/LAST samples, which may differ between job counts."""
+        skits = {}
+        for fid, skit in data["skits"].items():
+            meta = {k: v for k, v in skit["meta"].items() if k not in ("first", "last")}
+            aggregates = {k: v for k, v in skit["aggregates"].items() if k != "recent"}
+            skits[fid] = {**skit, "meta": meta, "aggregates": aggregates}
+        return {**data, "skits": skits}
+
+    @staticmethod
+    def summary(err):
+        return [line for line in err.splitlines() if line.lstrip().startswith(("skits:", "skip"))]
+
+    def test_same_sketch_as_one_job_except_samples(self):
+        text = self.lines(self.events)
+        one = self.merge(1, text, "one")
+        many = self.merge(3, text, "many")
+        self.assertEqual((one[0], many[0]), (0, 0))
+        self.assertEqual(self.without_samples(many[2]), self.without_samples(one[2]))
+        self.assertEqual(self.summary(many[1]), self.summary(one[1]))
+        self.assertIn("20 events read", many[1])
+
+    def test_samples_come_from_matching_events(self):
+        _, _, data = self.merge(3, self.lines(self.events), "many")
+        ids = {kind: {e["id"] for e in self.events if e["kind"] == kind} for kind in "abc"}
+        for skit in data["skits"].values():
+            kind = skit["tokens"]["kind"]
+            self.assertLessEqual(set(skit["aggregates"]["recent"]), ids[kind])
+            self.assertEqual(len(skit["aggregates"]["recent"]), 2)
+            for key in ("first", "last"):
+                self.assertEqual(skit["meta"][key][0]["record"]["kind"], kind)
+
+    def test_warnings_name_the_right_lines_in_order(self):
+        lines = self.lines(self.events).splitlines(keepends=True)
+        for lineno in (2, 8, 14):  # one bad line in each of three batches; top down
+            lines.insert(lineno - 1, "not json\n")
+        code, err, _ = self.merge(3, "".join(lines), "many")
+        self.assertEqual(code, 1)
+        warned = re.findall(r"line (\d+): invalid JSON", err)
+        self.assertEqual(warned, ["2", "8", "14"])
+        self.assertIn("skipped: 3 malformed lines", err)
+
+    def test_sequence_range_is_exact_and_a_missing_one_fails_the_run(self):
+        self.profile = self.write("seq.yaml", PROFILE + "sequence: $.id\n")
+        shuffled = self.events[10:] + self.events[:10]
+        one = self.merge(1, self.lines(shuffled), "one")
+        many = self.merge(3, self.lines(shuffled), "many")
+        self.assertEqual(many[2]["sequence"], one[2]["sequence"])
+        self.assertEqual(many[2]["sequence"]["max"], 20)
+        broken = [*self.events[:15], {"kind": "a"}, *self.events[15:]]
+        code, err, data = self.merge(3, self.lines(broken), "broken")
+        self.assertEqual((code, data), (2, None))
+        self.assertIn("line 16: no usable sequence at $.id", err)
+
+    def test_jobs_must_be_at_least_one(self):
+        for jobs in ("0", "-2", "two"):
+            with self.subTest(jobs=jobs):
+                code, _, err = self.fingerprint(
+                    self.write_events("e.jsonl", self.events), "-j", jobs
+                )
+                self.assertEqual(code, 2)
+                self.assertIn("must be a whole number of at least 1", err)
