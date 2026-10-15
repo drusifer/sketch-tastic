@@ -57,7 +57,7 @@ sketchtastic merge -p profile.yaml -s app.sketch.yaml events.jsonl
 sketchtastic: 4 events read from events.jsonl
   skits: 3 new, 0 updated, 3 total in sketch
   skipped: 0 malformed lines, 0 unusable aggregate values
-  wrote app.sketch.yaml (profile f50d7a5f85ddf9f7f4c72370f454ae2e)
+  wrote app.sketch.yaml (profile 3f0dd0d9f280ba32064a891dcd3b17cb)
   history: app.sketch.history/261014-0001.yaml
 ```
 
@@ -69,10 +69,10 @@ leaves a file with just its own skits in `app.sketch.history/` (see History belo
 
 ```yaml
 version: 0
-profile_id: f50d7a5f85ddf9f7f4c72370f454ae2e
+profile_id: 3f0dd0d9f280ba32064a891dcd3b17cb
 last_run: 261014-0001
 skits:
-  b738d17a6a5f7265cb4cef73937afd4f:
+  9312137ea290aa8d196e7036cd687af8:
     tokens:
       level: INFO
       component: db
@@ -107,9 +107,9 @@ To read a sketch without the YAML, print it as a table with `sketchtastic show a
 
 ```
 ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
-5c56a234  1      25.0     261014-0001  261014-0001  db         TRUE    ERROR
-0a13defd  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
-b738d17a  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
+d7d629a1  1      25.0     261014-0001  261014-0001  db         TRUE    ERROR
+f5189272  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
+9312137e  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
 ```
 
 ## Usage

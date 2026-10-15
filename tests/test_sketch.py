@@ -22,11 +22,13 @@ SAMPLE_AGGREGATES = (
 
 
 class FingerprintIdTests(unittest.TestCase):
-    def test_sorts_keys_before_hashing_serialization_drift_prevention(self):
-        # AC1: alphabetical sort by key before flattening - insertion order must not matter.
-        tokens_a = {"b_key": "1", "a_key": "2"}
-        tokens_b = {"a_key": "2", "b_key": "1"}
-        self.assertEqual(skit_id(tokens_a), skit_id(tokens_b))
+    def test_hashes_the_values_in_profile_order_not_the_keys(self):
+        self.assertEqual(skit_id({"a": "1", "b": "2"}), skit_id({"x": "1", "y": "2"}))
+        self.assertNotEqual(skit_id({"a": "1", "b": "2"}), skit_id({"b": "2", "a": "1"}))
+
+    def test_values_containing_separators_do_not_collide(self):
+        self.assertNotEqual(skit_id({"a": "x|y", "b": "z"}), skit_id({"a": "x", "b": "y|z"}))
+        self.assertNotEqual(skit_id({"a": 'x","y'}), skit_id({"a": "x", "b": "y"}))
 
     def test_returns_32_char_hex_md5(self):
         fid = skit_id({"a": "1"})
@@ -432,10 +434,10 @@ class SequenceMarkTests(unittest.TestCase):
 class VocabularyTests(unittest.TestCase):
     """STORY-SKT-02: sketches hold skits; ids are unchanged by the rename."""
 
-    def test_skit_id_is_the_old_fingerprint_id(self):
-        # README quickstart value from before the move (fingerprint-sampler 0.2.0)
+    def test_skit_id_of_the_readme_quickstart(self):
+        # token values in profile order (level, component, failed), as the README shows
         tokens = {"level": "INFO", "component": "db", "failed": "FALSE"}
-        self.assertTrue(skit_id(tokens).startswith("b738d17a"))
+        self.assertEqual(skit_id(tokens), "9312137ea290aa8d196e7036cd687af8")
 
     def test_library_names(self):
         import sketchtastic
