@@ -515,3 +515,63 @@ class MergeTests(unittest.TestCase):
         sketch = Sketch(self.AGGREGATES, profile_id="p")
         with self.assertRaises(SketchError):
             sketch.merge(Sketch(self.AGGREGATES[:1], profile_id="p"))
+
+
+class ProfileOrderTests(unittest.TestCase):
+    """Every skit holds every aggregate from the start, in the order the profile lists them."""
+
+    AGGREGATES = (
+        Aggregate("commits", "$.size", "SUM"),
+        Aggregate("bytes", "$.bytes", ["SUM", "MIN", "AVG"]),
+        Aggregate("seen", "$.at", ["MAX", {"name": "LAST", "n": 2}]),
+    )
+
+    def test_new_skits_start_with_every_aggregate_at_its_initial_state(self):
+        sketch = Sketch(self.AGGREGATES)
+        sketch.upsert({"k": "a"}, {"other": 1}, run="r1")
+        skit = sketch.get(skit_id({"k": "a"}))
+        self.assertEqual(
+            skit.aggregates,
+            {
+                "commits": 0,
+                "bytes": {"SUM": 0, "MIN": None, "AVG": {"avg": None, "sum": 0, "count": 0}},
+                "seen": {"MAX": None, "LAST": []},
+            },
+        )
+        self.assertEqual(list(skit.meta), ["count", "first_seen", "last_seen", "first", "last"])
+
+    def test_key_order_is_the_profiles_whatever_the_event_order(self):
+        sketch = Sketch(self.AGGREGATES)
+        for record in ({"at": "x"}, {"bytes": 5}, {"size": 2}):  # last aggregate's value first
+            sketch.upsert({"k": "a"}, record, run="r1")
+        skit = sketch.get(skit_id({"k": "a"}))
+        self.assertEqual(list(skit.aggregates), ["commits", "bytes", "seen"])
+        self.assertEqual(list(skit.aggregates["bytes"]), ["SUM", "MIN", "AVG"])
+
+    def test_a_loaded_file_is_rebuilt_in_profile_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "s.yaml")
+            fid = skit_id({"k": "a"})
+            with open(path, "w") as f:
+                yaml.safe_dump(
+                    {
+                        "version": 0,
+                        "profile_id": None,
+                        "skits": {
+                            fid: {
+                                "tokens": {"k": "a"},
+                                "aggregates": {"seen": {"LAST": ["x"], "MAX": "x"}, "commits": 2},
+                                "meta": {"count": 1},
+                            }
+                        },
+                    },
+                    f,
+                    sort_keys=False,
+                )
+            sketch = Sketch(self.AGGREGATES)
+            sketch.load(path)
+        skit = sketch.get(fid)
+        self.assertEqual(list(skit.aggregates), ["commits", "bytes", "seen"])
+        self.assertEqual(skit.aggregates["seen"], {"MAX": "x", "LAST": ["x"]})
+        self.assertEqual(skit.aggregates["commits"], 2)
+        self.assertEqual(skit.meta["count"], 1)

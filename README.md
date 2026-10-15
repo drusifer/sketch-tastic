@@ -342,7 +342,11 @@ together:
 
 `fn` is one function or a list, written like modifiers: a bare name, or a mapping for `FIRST`
 and `LAST`. With one function the sketch stores its value directly (`count: 12`); with several, a
-map by function name (`{MIN: 1, MAX: 3}`). Numbers and numeric strings count as numbers. A value
+map by function name (`{MIN: 1, MAX: 3}`). Every skit holds every aggregate, in the order the
+profile lists them (functions too), from its first event on: before any value, `SUM` and `COUNT`
+are `0`, `FIRST`/`LAST` are `[]`, `AVG` is `{avg: null, sum: 0, count: 0}`, and `MIN`/`MAX` are
+`null` (`-` in `show`). So the profile alone decides the order of keys in the file and of
+columns in `show`. Numbers and numeric strings count as numbers. A value
 a function can't use (text for `SUM`, text after numbers for `MIN`) is skipped and counted in the
 summary as an unusable aggregate value. A record where the path matches nothing is simply not
 aggregated and is not counted.

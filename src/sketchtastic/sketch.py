@@ -107,7 +107,9 @@ class Sketch:
         it) as given, so the caller must not modify `record` afterwards.
         """
         fid = skit_id(tokens)
-        skit = self._records.setdefault(fid, Skit(dict(tokens)))
+        skit = self._records.get(fid)
+        if skit is None:
+            skit = self._records[fid] = self._new_skit(tokens)
         envelope = {"meta": {"run": run}, "record": record}
         self.skipped_values += _fold(self._aggregates, skit.aggregates, record)
         _fold(builtin_aggregates(), skit.meta, envelope)
@@ -134,6 +136,21 @@ class Sketch:
             for aggregate in builtin_aggregates():
                 aggregate.merge(mine.meta, skit.meta)
         self.skipped_values += later.skipped_values
+
+    def _new_skit(self, tokens: dict[str, str], stored: Skit | None = None) -> Skit:
+        """A skit with every aggregate and built-in, in profile order: from `stored` (a loaded
+        file) where it has them, else initial. Keys `stored` has beyond the profile follow."""
+        skit = Skit(dict(tokens))
+        for states, aggregates, old in (
+            (skit.aggregates, self._aggregates, stored.aggregates if stored else {}),
+            (skit.meta, builtin_aggregates(), stored.meta if stored else {}),
+        ):
+            for aggregate in aggregates:
+                aggregate.init(states, old)
+            states.update((key, value) for key, value in old.items() if key not in states)
+        if stored:
+            skit.share = stored.share
+        return skit
 
     def get(self, skit_id_: str) -> Skit | None:
         return self._records.get(skit_id_)
@@ -214,7 +231,8 @@ class Sketch:
         self.last_run = data.get("last_run")
         self.sequence = data.get("sequence")
         try:
-            self._records = {fid: Skit(**rec) for fid, rec in (data["skits"] or {}).items()}
+            stored = {fid: Skit(**rec) for fid, rec in (data["skits"] or {}).items()}
+            self._records = {fid: self._new_skit(rec.tokens, rec) for fid, rec in stored.items()}
         except TypeError as exc:
             raise SketchError(f"{path} has a malformed skit entry: {exc}") from exc
 
