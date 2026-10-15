@@ -72,19 +72,6 @@ class UpsertReconciliationTests(unittest.TestCase):
         self.assertEqual(record.meta["count"], 1)
         self.assertEqual(record.meta["first"][0]["record"], {"count": 10, "meta": "x"})
 
-    def test_samples_are_copies_and_saved_without_yaml_aliases(self):
-        event = {"n": 1}
-        fingerprints = Sketch()
-        fingerprints.upsert({"k": "v"}, event, run="t")
-        event["n"] = 99
-        meta = fingerprints.get(skit_id({"k": "v"})).meta
-        self.assertEqual(meta["first"][0]["record"], {"n": 1})
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "set.yaml")
-            fingerprints.save(path)
-            with open(path) as f:
-                self.assertNotIn("&id", f.read())
-
     def test_built_in_profile_does_not_count_toward_skipped_values(self):
         fingerprints = Sketch()
         fingerprints.upsert({"k": "v"}, {})

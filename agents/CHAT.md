@@ -54,3 +54,16 @@ ncalls  tottime  percall  cumtime  percall filename:lineno(function)
 ---
 [<small>2026-10-14 22:52:11</small>] [**Neo**]->[**User**] *swe fix*:
  fix/fold-once: Sprint 3 select-once reverted; merge now folds each event into the run only and merges the run into the sketch once (Aggregator.merge per function, Aggregate.merge, Sketch.merge). 4 MergeTests incl. split-anywhere equivalence. make profile 39.36 s (was 46.25), hash cb5533be1554ba98 unchanged. test 234 OK, lint clean.
+
+---
+[<small>2026-10-14 22:58:17</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+Ordered by: cumulative time
+List reduced from 2267 to 25 due to restriction <25>
+
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+
+---
+[<small>2026-10-14 22:58:26</small>] [**Neo**]->[**User**] *swe fix*:
+ fix/fold-once: deepcopy dropped from FIRST/LAST; upsert docstring says the sketch keeps references (caller must not modify the record); two copy-guarantee tests removed (owner). make profile 32.88 s (was 39.36), hash unchanged; test 232 OK, lint clean.

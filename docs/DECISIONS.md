@@ -49,3 +49,9 @@ exact for SUM, COUNT, MIN, MAX, AVG (from stored sum and count), FIRST and LAST;
 different summation order can change the last digits. A MIN/MAX value of another kind than the
 sketch's keeps the sketch's value and is not counted as skipped. `Sketch.merge` is also the base
 for sketch-to-sketch merge (backlog).
+
+**Decision (owner, 2026-10-14, after Sprint 3):** FIRST and LAST store values without copying;
+`Sketch.upsert` documents that the sketch keeps references, so the caller must not modify a
+record after passing it. The two tests that pinned the old copy guarantee are removed.
+**Consequences:** `make profile` 39.36 s → 32.88 s, same sketch (LAST deep-copied every event to
+keep one per skit). `Sketch.merge` still copies, so a sketch and its run never share state.

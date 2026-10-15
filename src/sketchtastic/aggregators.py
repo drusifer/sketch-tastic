@@ -10,7 +10,6 @@ function name, so changing LAST's `n` keeps the samples already collected.
 
 from __future__ import annotations
 
-import copy
 import json
 import math
 from dataclasses import dataclass
@@ -156,7 +155,7 @@ class First(Aggregator):
 
     def fold(self, state: Any, value: Any) -> Any:
         samples = [] if state is EMPTY else state
-        return samples if len(samples) >= self.n else [*samples, copy.deepcopy(value)]
+        return samples if len(samples) >= self.n else [*samples, value]
 
     def merge(self, state: Any, later: Any) -> Any:
         return [*state, *later][: self.n]
@@ -171,7 +170,7 @@ class Last(Aggregator):
 
     def fold(self, state: Any, value: Any) -> Any:
         samples = [] if state is EMPTY else state
-        return [*samples, copy.deepcopy(value)][-self.n :]
+        return [*samples, value][-self.n :]
 
     def merge(self, state: Any, later: Any) -> Any:
         return [*state, *later][-self.n :]

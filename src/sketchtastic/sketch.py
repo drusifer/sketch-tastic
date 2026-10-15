@@ -101,6 +101,9 @@ class Sketch:
         The profile's aggregates read the record. The built-in ones read an envelope,
         {"meta": {"run": run}, "record": record}, so injected fields never clash with the
         record's own; `run` is the id of the run reading it.
+
+        The sketch keeps references, not copies: FIRST and LAST store `record` (or parts of
+        it) as given, so the caller must not modify `record` afterwards.
         """
         fid = skit_id(tokens)
         skit = self._records.setdefault(fid, Skit(dict(tokens)))

@@ -16,4 +16,6 @@ sequenceDiagram
     Note right of Neo: "Done on fix/jsonpath-<br/>rfc9535: plain-path<br/>shortcut removed,<br/>python-jsonpath replaced<br/>by jsonpath-rfc9535<br/>2.0.2 (basic resolver,<br/>no locations…"
     Neo->>User: "swe fix"
     Note right of Neo: "fix/fold-once: Sprint 3<br/>select-once reverted,<br/>merge now folds each<br/>event into the run only<br/>and merges the run into<br/>the sketch once<br/>(Aggrega…"
+    Neo->>User: "swe fix"
+    Note right of Neo: "fix/fold-once: deepcopy<br/>dropped from FIRST/LAST,<br/>upsert docstring says<br/>the sketch keeps<br/>references (caller must<br/>not modify the record),<br/>two…"
 ```
