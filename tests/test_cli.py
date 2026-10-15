@@ -442,9 +442,9 @@ aggregates:
         code, _, _ = self.run_cli("merge", "-p", profile, "-s", self.sketch_path, events)
         self.assertEqual(code, 0)
         data = self.load_set()
-        self.assertEqual(data["profile_id"], "f50d7a5f85ddf9f7f4c72370f454ae2e")
+        self.assertEqual(data["profile_id"], "3f0dd0d9f280ba32064a891dcd3b17cb")
         self.assertEqual(len(data["skits"]), 3)
-        db_ok = data["skits"]["b738d17a6a5f7265cb4cef73937afd4f"]
+        db_ok = data["skits"]["9312137ea290aa8d196e7036cd687af8"]
         self.assertEqual(db_ok["tokens"], {"level": "INFO", "component": "db", "failed": "FALSE"})
         self.assertEqual(db_ok["meta"]["count"], 2)
         self.assertEqual(db_ok["aggregates"]["example"], ["query ok", "query ok (cached)"])

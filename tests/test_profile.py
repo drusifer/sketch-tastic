@@ -275,9 +275,10 @@ class ProfileIdTests(unittest.TestCase):
         int(pid, 16)
         self.assertEqual(pid, parse_profile(VALID).profile_id)
 
-    def test_independent_of_field_order(self):
+    def test_field_order_is_part_of_it(self):
+        # skit ids hash token values in field order, so reordering fields is another profile
         reordered = variant(fields=list(reversed(VALID["fields"])))
-        self.assertEqual(parse_profile(reordered).profile_id, parse_profile(VALID).profile_id)
+        self.assertNotEqual(parse_profile(reordered).profile_id, parse_profile(VALID).profile_id)
 
     def test_unaffected_by_aggregates(self):
         self.assertEqual(

@@ -18,4 +18,8 @@ sequenceDiagram
     Note over User,Neo: 📅 2026-10-15
     Neo->>User: "swe fix"
     Note right of Neo: "Profile is the only<br/>source of key order:<br/>every skit starts with<br/>every aggregate in<br/>profile order at its<br/>initial state (0, [],<br/>AVG {null,0,0…"
+    User->>All: "request"
+    Note right of User: "Skit ids from token<br/>values in profile order<br/>(no keys), profile_id<br/>from field specs in<br/>profile order (v0: no<br/>compatibility)."
+    Neo->>User: "swe fix"
+    Note right of Neo: "Skit id = MD5 of JSON<br/>token values in profile<br/>order (no keys),<br/>profile_id = field specs<br/>in profile order. Golden<br/>ids, README quickstart<br/>(sm…"
 ```

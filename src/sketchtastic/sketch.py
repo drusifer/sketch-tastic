@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
 import tempfile
 from dataclasses import asdict, dataclass, field
@@ -43,9 +44,13 @@ class ProfileMismatchError(SketchError):
 
 
 def skit_id(tokens: dict[str, str]) -> str:
-    """Alphabetically sort tokens by key, flatten, and MD5-fold into a stable ID."""
-    flattened = "|".join(f"{key}:{tokens[key]}" for key in sorted(tokens))
-    return hashlib.md5(flattened.encode("utf-8")).hexdigest()
+    """MD5 of the token values in profile order (`tokens` as the profile makes them).
+
+    The keys add nothing: the profile fixes them and their order, and the sketch's profile id
+    covers both. The values are JSON-encoded so none can be mistaken for a separator.
+    """
+    values = json.dumps(list(tokens.values()), ensure_ascii=False, separators=(",", ":"))
+    return hashlib.md5(values.encode("utf-8")).hexdigest()
 
 
 @dataclass

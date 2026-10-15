@@ -88,3 +88,4 @@ Carried over from fingerling's `task.md`:
 - `-o`: owner may revisit (keep or drop).
 - In-run duplicate detection if a stream needs it.
 - JSON Schema for sketch files; set-to-set (sketch-to-sketch) merge; more aggregate ops (`LEN`, `ABS`).
+- **Profile evolution (future sprint, owner 2026-10-15):** updating a sketch's profile, and what adding or removing fields does to existing skits. Revisit the two ids then: the skit id (token values) vs the profile id (a hash of the field specs that guards `merge`); e.g. store the fields in the sketch header instead of a hash, or drop the check.

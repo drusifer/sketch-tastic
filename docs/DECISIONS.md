@@ -73,3 +73,11 @@ columns depend on which worker finished first.
 **Consequences:** `show` columns are in profile order for any `-j`; aggregates without values
 show `0` (SUM/COUNT) or `-` (MIN/MAX). Sketch files change (all keys present; new hash
 86d122f56e81d95c). No speed change.
+
+**Decision (owner, 2026-10-15):** A skit id is the MD5 of its token values in profile order,
+JSON-encoded (`["INFO","db","FALSE"]`); token keys are no longer hashed or sorted. The profile id
+now hashes the field specs in profile order, so reordering fields is a different profile (merge
+refuses it without `--force-profile`) and can never silently re-key skits.
+**Consequences:** every skit id and profile id changes (v0: sketches are rebuilt, no
+migration); README quickstart ids updated (9312137e…, profile 3f0dd0d9…). The two-id design
+itself (skit id vs profile id) is backlogged with profile evolution.
