@@ -7,9 +7,11 @@ from sketchtastic.aggregators import Aggregate
 
 def fold(entry, records, state=None):
     """Fold records into one aggregate. Returns (its state, values skipped)."""
-    states = {} if state is None else {entry.key: state}
+    states = {entry.key: state} if state is not None else {}
+    if state is None:
+        entry.init(states)
     skipped = sum(entry.update(states, record) for record in records)
-    return states.get(entry.key, {}), skipped
+    return states[entry.key], skipped
 
 
 class BuildTests(unittest.TestCase):
@@ -70,7 +72,7 @@ class NumericAggregatorTests(unittest.TestCase):
     def test_event_without_a_match_is_not_a_skip_and_leaves_state_alone(self):
         entry = Aggregate("d", "$.d", ["MIN", {"name": "LAST", "n": 2}])
         state, skipped = fold(entry, [{"other": 1}])
-        self.assertEqual(state, {})
+        self.assertEqual(state, {"MIN": None, "LAST": []})  # still the initial state
         self.assertEqual(skipped, 0)
 
     def test_all_matches_in_one_event_feed_the_aggregator(self):

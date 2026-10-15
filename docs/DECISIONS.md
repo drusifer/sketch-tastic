@@ -63,3 +63,13 @@ for sketches, run files, profiles and the built-ins alike.
 sketch and run file was the largest serial cost of a parallel merge). The bytes of a sketch file
 change (libyaml formats differently; new hash bd657fe6fd331918), its content does not (tested
 by a round trip of strings that look like other YAML types, unicode, multi-line and long text).
+
+**Decision (owner, 2026-10-15):** The profile is the only source of key order. Every skit is
+created with every aggregate (and built-in) in profile order, each at its initial state: `0` for
+SUM and COUNT, `[]` for FIRST/LAST, `{avg: null, sum: 0, count: 0}` for AVG, `null` for MIN/MAX
+(where 0 would be wrong). Loading rebuilds skits in profile order. Replaces "a key appears when
+its first value arrives", which made key order follow event order and, with `-j`, made `show`'s
+columns depend on which worker finished first.
+**Consequences:** `show` columns are in profile order for any `-j`; aggregates without values
+show `0` (SUM/COUNT) or `-` (MIN/MAX). Sketch files change (all keys present; new hash
+86d122f56e81d95c). No speed change.

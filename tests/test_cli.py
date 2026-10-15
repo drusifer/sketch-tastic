@@ -125,7 +125,13 @@ class CreateAndMergeTests(CliTestCase):
         self.assertEqual(by_kind["a"]["aggregates"]["size"]["SUM"], 40.5)
         self.assertEqual(by_kind["a"]["aggregates"]["size"]["AVG"]["avg"], 13.5)  # AC12: readable
         self.assertEqual(by_kind["a"]["aggregates"]["recent"], [3, 4])
-        self.assertNotIn("size", by_kind["c"]["aggregates"])
+        empty_size = {
+            "SUM": 0,
+            "AVG": {"avg": None, "sum": 0, "count": 0},
+            "MIN": None,
+            "MAX": None,
+        }
+        self.assertEqual(by_kind["c"]["aggregates"]["size"], empty_size)  # every key, initial
 
     def test_second_run_merges_into_existing_fingerprints(self):
         self.fingerprint(self.write_events("run1.jsonl", EVENTS[:3]))
@@ -623,6 +629,16 @@ class ShowTests(CliTestCase):
                 ["2", "66.7", run, run, "40", "40.0", "2", "66.7", "a"],
             ],
         )
+
+    def test_columns_follow_the_profile_whichever_skit_comes_first(self):
+        sketch = Sketch([Aggregate("commits", "$.size", "SUM"), Aggregate("bytes", "$.b", "SUM")])
+        sketch.upsert({"k": "issue"}, {"b": 7}, run="261014-0001")  # first skit: no commits
+        sketch.upsert({"k": "push"}, {"size": 3, "b": 9}, run="261014-0001")
+        sketch.save(self.sketch_path)
+        code, out, _ = self.run_cli("show", self.sketch_path)
+        self.assertEqual(code, 0)
+        header = re.split(r"\s{2,}", out.splitlines()[0])
+        self.assertEqual(header[5:9], ["commits", "commits %", "bytes", "bytes %"])
 
     def test_set_without_shares_shows_dashes(self):
         fid = skit_id({"k": "a"})

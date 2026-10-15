@@ -26,3 +26,26 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_4.md` (2026-10-14 23:57:27) — Sprint 4, Parallel Merge (Tier 2, 5 pts). Preceded by the owner's review of Sprint 3: JSONPath via jsonpath-rfc9535, fold once then merge, no FIRST/LAST copies (32.88 s). Owner design: processes, -j N default all cores, any matching FIRST/LAST sample. Pool with per-batch merges (17-19 s) and per-line shared-memory ring (25.7 s) measured and dropped; final: long-lived workers, bounded task queue of byte batches, output queue (16.46 s). libyaml everywhere: 13.54 s on 4 cores, 29.55 s -j 1. No release.
 
 ---
+
+---
+[<small>2026-10-14 23:58:11</small>] [**User**]->[**all**] *request*:
+ push sketch
+
+---
+[<small>2026-10-14 23:58:11</small>] [**Tank**]->[**all**] *devops push*:
+ Pushed sketch-tastic main to origin (through bcabf73: post-Sprint 3 fixes + Sprint 4). fingerling not touched (its pin bump to 849b4ec is still local).
+
+---
+[<small>2026-10-15 00:20:51</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make smoke | /home/drusifer/Projects/sketch-tastic/build/build.out
+sketch_tastic-0.2.0-py3-none-any.whl
+...
+----------------------------------------------------------------------
+sketch_tastic-0.2.0.tar.gz
+Ran 3 tests in 1.545s
+
+OK
+
+---
+[<small>2026-10-15 00:20:51</small>] [**Neo**]->[**User**] *swe fix*:
+ Profile is the only source of key order: every skit starts with every aggregate in profile order at its initial state (0, [], AVG {null,0,0}, MIN/MAX null); load rebuilds in profile order. show columns now identical for -j 1 and parallel. 4 new tests; test 242 OK, smoke OK. make profile 14.32 s / 29.05 s, new hash 86d122f56e81d95c.

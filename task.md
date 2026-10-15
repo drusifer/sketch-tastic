@@ -88,4 +88,3 @@ Carried over from fingerling's `task.md`:
 - `-o`: owner may revisit (keep or drop).
 - In-run duplicate detection if a stream needs it.
 - JSON Schema for sketch files; set-to-set (sketch-to-sketch) merge; more aggregate ops (`LEN`, `ABS`).
-- `show` column order follows skit order in the file, which with `-j` > 1 follows worker completion; make it stable (Sprint 4).

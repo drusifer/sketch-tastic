@@ -33,9 +33,6 @@ __all__ = [
 ]
 
 
-EMPTY = object()
-"""The state of an aggregate function that has not seen a value yet."""
-
 SKIP = object()
 """Returned by `Aggregator.accept` for a value the function cannot use."""
 
@@ -45,18 +42,22 @@ class Aggregator(Rule):
 
     family = "aggregator"
 
+    def initial(self) -> Any:
+        """The state before any value: 0 or empty where that means "nothing yet", else None."""
+        return None
+
     def accept(self, _state: Any, value: Any) -> Any:
         """The value to fold, or SKIP if this function cannot use it. Any value by default."""
         return value
 
     def fold(self, state: Any, value: Any) -> Any:
-        """Return the new state after `value`; `state` is EMPTY before the first value."""
+        """Return the new state after `value`; `state` is `initial()` before the first value."""
         raise NotImplementedError
 
     def merge(self, state: Any, later: Any) -> Any:
         """The state after folding everything `state` saw, then everything `later` saw.
 
-        Neither is EMPTY. Folding a stream in parts and merging equals folding it whole.
+        Either may be `initial()`. Folding a stream in parts and merging equals folding it whole.
         """
         raise NotImplementedError
 
@@ -84,11 +85,13 @@ class _Ordered(Aggregator):
             value = number
         elif not isinstance(value, (str, date)):
             return SKIP
-        if state is not EMPTY and _kind(state) != _kind(value):
+        if state is not None and _kind(state) != _kind(value):
             return SKIP
         return value
 
     def merge(self, state: Any, later: Any) -> Any:
+        if state is None or later is None:
+            return later if state is None else state
         if _kind(state) != _kind(later):  # one kind, not a mix: the first kind seen stays
             return state
         return self.fold(state, later)
@@ -98,8 +101,11 @@ class _Ordered(Aggregator):
 class Sum(_Numeric):
     name = "SUM"
 
+    def initial(self) -> Any:
+        return 0
+
     def fold(self, state: Any, value: Any) -> Any:
-        return value if state is EMPTY else state + value
+        return state + value
 
     def merge(self, state: Any, later: Any) -> Any:
         return state + later
@@ -110,7 +116,7 @@ class Min(_Ordered):
     name = "MIN"
 
     def fold(self, state: Any, value: Any) -> Any:
-        return value if state is EMPTY else min(state, value)
+        return value if state is None else min(state, value)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -118,29 +124,34 @@ class Max(_Ordered):
     name = "MAX"
 
     def fold(self, state: Any, value: Any) -> Any:
-        return value if state is EMPTY else max(state, value)
+        return value if state is None else max(state, value)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Avg(_Numeric):
     name = "AVG"
 
+    def initial(self) -> Any:
+        return {"avg": None, "sum": 0, "count": 0}
+
     def fold(self, state: Any, value: Any) -> Any:
-        total, count = (0, 0) if state is EMPTY else (state["sum"], state["count"])
-        total, count = total + value, count + 1
+        total, count = state["sum"] + value, state["count"] + 1
         return {"avg": total / count, "sum": total, "count": count}
 
     def merge(self, state: Any, later: Any) -> Any:
         total, count = state["sum"] + later["sum"], state["count"] + later["count"]
-        return {"avg": total / count, "sum": total, "count": count}
+        return {"avg": total / count if count else None, "sum": total, "count": count}
 
 
 @dataclass(frozen=True, kw_only=True)
 class Count(Aggregator):
     name = "COUNT"
 
+    def initial(self) -> Any:
+        return 0
+
     def fold(self, state: Any, _value: Any) -> Any:
-        return 1 if state is EMPTY else state + 1
+        return state + 1
 
     def merge(self, state: Any, later: Any) -> Any:
         return state + later
@@ -153,9 +164,11 @@ class First(Aggregator):
     name = "FIRST"
     n: int
 
+    def initial(self) -> Any:
+        return []
+
     def fold(self, state: Any, value: Any) -> Any:
-        samples = [] if state is EMPTY else state
-        return samples if len(samples) >= self.n else [*samples, value]
+        return state if len(state) >= self.n else [*state, value]
 
     def merge(self, state: Any, later: Any) -> Any:
         return [*state, *later][: self.n]
@@ -168,9 +181,11 @@ class Last(Aggregator):
     name = "LAST"
     n: int
 
+    def initial(self) -> Any:
+        return []
+
     def fold(self, state: Any, value: Any) -> Any:
-        samples = [] if state is EMPTY else state
-        return [*samples, value][-self.n :]
+        return [*state, value][-self.n :]
 
     def merge(self, state: Any, later: Any) -> Any:
         return [*state, *later][-self.n :]
@@ -250,6 +265,8 @@ class Aggregate:
         map by function name (`{SUM: .., MAX: ..}`). A path that selects nothing is not a skip:
         one is counted per selected value that one of its functions could not use.
         """
+        if self.key not in states:
+            self.init(states)
         values = self.path.values(event)
         skipped = 0
         values = [self.op.apply(v) for v in values] if self.op else typed_values(values, self.type)
@@ -268,31 +285,31 @@ class Aggregate:
             skipped += unusable
         return skipped
 
+    def init(self, states: dict, stored: dict | None = None) -> None:
+        """Add `states[self.key]`: each function's value from `stored` (a loaded file), else
+        its initial state; several functions in the order the profile lists them."""
+        stored = stored or {}
+        if len(self.fn) == 1:
+            states[self.key] = stored.get(self.key, self.fn[0].initial())
+        else:
+            old = stored.get(self.key)
+            old = old if isinstance(old, dict) else {}
+            states[self.key] = {f.name: old.get(f.name, f.initial()) for f in self.fn}
+
     def merge(self, states: dict, later: dict) -> None:
         """Merge `later[self.key]` (folded after `states`) into `states[self.key]`."""
-        if self.key not in later:
-            return
-        if self.key not in states:
-            states[self.key] = later[self.key]
-            return
         for function in self.fn:
-            after = self._state(later, function)
-            if after is EMPTY:
-                continue
-            before = self._state(states, function)
-            self.store(
-                states, function, after if before is EMPTY else function.merge(before, after)
-            )
+            before, after = self._state(states, function), self._state(later, function)
+            self.store(states, function, function.merge(before, after))
 
     def _state(self, states: dict, function: Aggregator) -> Any:
         if len(self.fn) == 1:
-            return states.get(self.key, EMPTY)
-        return states.get(self.key, {}).get(function.name, EMPTY)
+            return states[self.key]
+        return states[self.key][function.name]
 
     def value(self, states: dict, function: Aggregator) -> Any:
-        """`function`'s current value in `states`, or None if it has none yet."""
-        state = self._state(states, function)
-        return None if state is EMPTY else state
+        """`function`'s current value in `states` (its initial state before any value)."""
+        return self._state(states, function)
 
     def store(self, states: dict, function: Aggregator, state: Any) -> None:
         """Put `function`'s value in `states`: directly for one function, by name for several."""
