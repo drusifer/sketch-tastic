@@ -76,7 +76,7 @@ is a Mechanism-class change. `agents/` (BobProtocol tooling) and Markdown are ex
 ## 4. Dependencies
 
 - **Add a runtime dependency:** `uv add <package>`. Every runtime dependency becomes an install
-  requirement for PyPI users — keep them minimal (today: PyYAML, python-jsonpath, jsonschema).
+  requirement for PyPI users — keep them minimal (today: PyYAML, jsonpath-rfc9535, jsonschema).
 - **Add a dev tool:** `uv add --dev <package>` (the `dev` dependency group).
 - **Upgrade / remove:** `uv lock --upgrade-package <package>` / `uv remove <package>`, then
   `make install`.
@@ -189,7 +189,7 @@ Run by Tank at sprint close (`*devops sdlc-check`):
 1. `make distclean && make install && make lint && make test && make secrets && make build`
    passes, and `make test-all` passes on every supported Python.
 2. Every third-party import is declared in `pyproject.toml` (the package imports only PyYAML,
-   python-jsonpath and jsonschema), and `uv lock --check` reports the lockfile is up to date.
+   jsonpath-rfc9535 and jsonschema), and `uv lock --check` reports the lockfile is up to date.
 3. `.venv/pyvenv.cfg` still says `include-system-site-packages = false`.
 4. Every target in section 3 exists and still does what the table says; there is still only one
    Makefile, with no team-tooling targets.

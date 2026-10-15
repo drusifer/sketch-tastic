@@ -93,12 +93,6 @@ class LastAggregatorTests(unittest.TestCase):
         self.assertEqual(state, ["a", None, {"x": 1}])
         self.assertEqual(skipped, 0)
 
-    def test_stored_samples_do_not_alias_the_input_record(self):
-        record = {"seq": 1}
-        state, _ = fold(Aggregate("s", "$", {"name": "LAST", "n": 2}), [record])
-        record["seq"] = 99
-        self.assertEqual(state, [{"seq": 1}])
-
 
 class CountAndFirstTests(unittest.TestCase):
     def test_count_counts_every_selected_value_of_any_type(self):

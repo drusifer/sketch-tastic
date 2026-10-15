@@ -258,7 +258,8 @@ aggregates:
     fn: {name: LAST, n: 3}
 ```
 
-**Paths** are full JSONPath: dot and bracket access, `[*]`, slices, negative indexes, unions,
+**Paths** are standard JSONPath ([RFC 9535](https://www.rfc-editor.org/rfc/rfc9535), evaluated by
+[jsonpath-rfc9535](https://github.com/jg-rp/python-jsonpath-rfc9535)), with no extensions: dot and bracket access, `[*]`, slices, negative indexes, unions,
 recursive descent (`..`) and filters. If a path selects several values, each is tokenized and the
 results are de-duplicated, sorted and joined, so array order never changes a skit.
 

@@ -28,3 +28,30 @@ samples copied once per event with a JSON-specific copy). 2.6x overall.
 (dropping the copy was tried and rejected for that reason). What remains is spread thin: one copy
 of each event (~16% profiled), folding, JSON parsing, and SIZE's JSON encoding. Further gains need
 bigger changes (e.g. a copy-free ownership mode for the CLI, a faster JSON parser), not taken.
+
+**Decision (owner, 2026-10-14, after Sprint 3):** JSONPath is evaluated by `jsonpath-rfc9535` 2.x
+(strict RFC 9535, no extensions) instead of `python-jsonpath`, and the Sprint 3 plain-path
+shortcut is removed. The point of JSONPath is a standard; a hand-written evaluator for some paths
+adds complexity without fixing the cause. The cause was python-jsonpath building a match node and
+a path string for every step (compilation was already cached); jsonpath-rfc9535's `findall` uses
+a resolver that tracks no locations.
+**Consequences:** `make profile` 40.83 s with the shortcut → 46.25 s without it, same sketch; path
+evaluation ~19 s of profiled time (146 s with python-jsonpath). Profiles must use RFC 9535 syntax
+only. New transitive runtime dependencies: `regex` and `iregexp-check` (for I-Regexp in
+`match()`/`search()`).
+
+**Decision (owner, 2026-10-14, after Sprint 3):** `merge` folds each event once, into the run, and
+then merges the run into the sketch once (`Sketch.merge`; each aggregate function has a `merge`
+of two states). This replaces Sprint 3's select-once/`upsert(selected=)` change and its
+JSON-specific copy, which are removed; FIRST/LAST keep `copy.deepcopy`.
+**Consequences:** `make profile` 39.36 s, same sketch (46.25 s with select-once). Merging is
+exact for SUM, COUNT, MIN, MAX, AVG (from stored sum and count), FIRST and LAST; with floats a
+different summation order can change the last digits. A MIN/MAX value of another kind than the
+sketch's keeps the sketch's value and is not counted as skipped. `Sketch.merge` is also the base
+for sketch-to-sketch merge (backlog).
+
+**Decision (owner, 2026-10-14, after Sprint 3):** FIRST and LAST store values without copying;
+`Sketch.upsert` documents that the sketch keeps references, so the caller must not modify a
+record after passing it. The two tests that pinned the old copy guarantee are removed.
+**Consequences:** `make profile` 39.36 s → 32.88 s, same sketch (LAST deep-copied every event to
+keep one per skit). `Sketch.merge` still copies, so a sketch and its run never share state.

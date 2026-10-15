@@ -22,3 +22,48 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_3.md` (2026-10-14 22:22:49) — Sprint 3, Faster Merge (Tier 2, 5 pts). Owner: tune merge on the GH Archive hour with a profiler via make, stdlib cProfile, best effort KISS. Phase 0 (Tank): make profile (wall time, sketch hash, cProfile top 25); baseline 106.35 s. Phase 1: plain JSONPaths walk dicts (tested against python-jsonpath): 54.48 s. Phase 2: select once per event for sketch and run file; dropping deepcopy broke the copy contract, revised to one JSON-specific copy per event: 40.83 s. Hash unchanged throughout. Lesson on defensive copies. No release.
 
 ---
+
+---
+[<small>2026-10-14 22:38:48</small>] [**User**]->[**all**] *request*:
+ Revert the plain-path shortcut; replace python-jsonpath with jsonpath-rfc9535 2.0 (basic strategy). Standard RFC 9535 only, no special syntax.
+
+---
+[<small>2026-10-14 22:42:55</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make smoke | /home/drusifer/Projects/sketch-tastic/build/build.out
+sketch_tastic-0.2.0-py3-none-any.whl
+...
+----------------------------------------------------------------------
+sketch_tastic-0.2.0.tar.gz
+Ran 3 tests in 1.487s
+
+OK
+
+---
+[<small>2026-10-14 22:43:02</small>] [**Neo**]->[**User**] *swe fix*:
+ Done on fix/jsonpath-rfc9535: plain-path shortcut removed; python-jsonpath replaced by jsonpath-rfc9535 2.0.2 (basic resolver, no locations). make profile 46.25 s (shortcut: 40.83, baseline 106.35), hash cb5533be1554ba98 unchanged. test 232 OK, test-all 3.14/3.15, smoke, lint green. New transitive deps: regex, iregexp-check. Not merged yet: owner reviewing Sprint 3 changes one at a time.
+
+---
+[<small>2026-10-14 22:51:59</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+Ordered by: cumulative time
+List reduced from 2267 to 25 due to restriction <25>
+
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+
+---
+[<small>2026-10-14 22:52:11</small>] [**Neo**]->[**User**] *swe fix*:
+ fix/fold-once: Sprint 3 select-once reverted; merge now folds each event into the run only and merges the run into the sketch once (Aggregator.merge per function, Aggregate.merge, Sketch.merge). 4 MergeTests incl. split-anywhere equivalence. make profile 39.36 s (was 46.25), hash cb5533be1554ba98 unchanged. test 234 OK, lint clean.
+
+---
+[<small>2026-10-14 22:58:17</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+Ordered by: cumulative time
+List reduced from 2267 to 25 due to restriction <25>
+
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+
+---
+[<small>2026-10-14 22:58:26</small>] [**Neo**]->[**User**] *swe fix*:
+ fix/fold-once: deepcopy dropped from FIRST/LAST; upsert docstring says the sketch keeps references (caller must not modify the record); two copy-guarantee tests removed (owner). make profile 32.88 s (was 39.36), hash unchanged; test 232 OK, lint clean.
