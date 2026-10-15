@@ -16,9 +16,10 @@ import json
 import os
 import re
 import sys
-from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, as_completed, wait
 from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, date, datetime
+from multiprocessing import Process, Queue
+from queue import Empty
 from typing import IO, Any, Callable, Iterable, Iterator, NamedTuple
 
 from sketchtastic import __version__
@@ -444,7 +445,7 @@ Folded = tuple[Sketch, dict, list[tuple[int, str]], "_Sequencer | None"]
 
 
 def _fold_lines(
-    numbered_lines: Iterable[tuple[int, str]],
+    numbered_lines: Iterable[tuple[int, bytes | str]],
     profile: Profile,
     run_id: str,
     sequencer: _Sequencer | None,
@@ -467,6 +468,8 @@ def _fold_lines(
     for lineno, line in numbered_lines:
         if not line.strip():
             continue
+        if isinstance(line, bytes):
+            line = line.decode("utf-8", errors="replace")
         try:
             event = json.loads(line)
         except json.JSONDecodeError as exc:
@@ -490,60 +493,82 @@ def _fold_lines(
 
 
 _BATCH_LINES = 5000
-"""Lines per batch handed to a worker process."""
-
-_worker: tuple[Profile, str, Path | None, int | float | None] | None = None
-"""In a worker process: the profile, run id, sequence path and mark (`_init_worker`)."""
+"""Lines per task for a worker; input of at most one batch folds in-process."""
 
 
-def _init_worker(
-    profile: Profile, run_id: str, sequence: Path | None, mark: int | float | None
+def _fold_worker(
+    tasks: Queue,
+    results: Queue,
+    profile: Profile,
+    run_id: str,
+    sequence: Path | None,
+    mark: int | float | None,
 ) -> None:
-    global _worker
-    _worker = (profile, run_id, sequence, mark)
-
-
-def _fold_batch(start: int, lines: list[str]) -> Folded:
-    """In a worker: fold one batch of lines, the first being line `start`."""
-    assert _worker is not None
-    profile, run_id, sequence, mark = _worker
+    """A worker process: fold each (first line number, lines) task until a None, then put
+    its fold on `results`."""
     sequencer = None if sequence is None else _Sequencer(sequence, mark)
-    return _fold_lines(enumerate(lines, start), profile, run_id, sequencer)
+
+    def lines() -> Iterator[tuple[int, bytes]]:
+        while (task := tasks.get()) is not None:
+            start, batch = task
+            yield from enumerate(batch, start)
+
+    try:
+        results.put(_fold_lines(lines(), profile, run_id, sequencer))
+    except Exception as exc:  # e.g. _NotWritten: report it, then drain so the parent never blocks
+        results.put(exc)
+        for _ in lines():
+            pass
 
 
-def _batches(stream: Iterable[str]) -> Iterator[tuple[int, list[str]]]:
-    """`(first line number, lines)` for each `_BATCH_LINES` lines of `stream`."""
-    start = 1
-    for lines in itertools.batched(stream, _BATCH_LINES):
-        yield start, list(lines)
-        start += len(lines)
+def _get(queue: Queue, stalled: Callable[[], bool]) -> Any:
+    """`queue.get()`, failing the run instead of waiting forever if workers have died."""
+    while True:
+        try:
+            return queue.get(timeout=1)
+        except Empty:
+            if stalled():
+                raise _NotWritten(
+                    "sketchtastic: a worker process stopped unexpectedly; nothing written"
+                ) from None
 
 
 def _fold_parallel(
-    batches: Iterable[tuple[int, list[str]]],
+    numbered_lines: Iterable[tuple[int, bytes | str]],
     profile: Profile,
     run_id: str,
     sequencer: _Sequencer | None,
     jobs: int,
 ) -> Iterator[Folded]:
-    """Fold batches in `jobs` worker processes; yield each result as it completes.
+    """Fold lines in `jobs` worker processes, each into its own run sketch; yield each
+    worker's fold as it arrives on the output queue.
 
-    At most two batches per worker are in flight, so memory stays bounded. A worker's error
-    (e.g. _NotWritten) is raised here and the remaining batches are cancelled.
+    Lines go out in batches of `_BATCH_LINES`; the task queue holds at most 3 per worker, so
+    the reader waits when the workers fall behind.
     """
-    initargs = (profile, run_id, sequencer and sequencer.path, sequencer and sequencer.mark)
-    pool = ProcessPoolExecutor(jobs, initializer=_init_worker, initargs=initargs)
+    tasks, results = Queue(3 * jobs), Queue()
+    args = (tasks, results, profile, run_id, sequencer and sequencer.path)
+    args += (sequencer and sequencer.mark,)
+    workers = [Process(target=_fold_worker, args=args, daemon=True) for _ in range(jobs)]
     try:
-        pending: set[Future[Folded]] = set()
-        for start, lines in batches:
-            pending.add(pool.submit(_fold_batch, start, lines))
-            if len(pending) >= 2 * jobs:
-                done, pending = wait(pending, return_when=FIRST_COMPLETED)
-                yield from (future.result() for future in done)
-        for future in as_completed(pending):
-            yield future.result()
+        for worker in workers:
+            worker.start()
+        for batch in itertools.batched(numbered_lines, _BATCH_LINES):
+            tasks.put((batch[0][0], [line for _, line in batch]))
+        for _ in workers:
+            tasks.put(None)
+        all_dead = lambda: not any(worker.is_alive() for worker in workers)  # noqa: E731
+        for _ in workers:
+            part = _get(results, all_dead)
+            if isinstance(part, Exception):
+                raise part
+            yield part
+        for worker in workers:
+            worker.join()
     finally:
-        pool.shutdown(cancel_futures=True)
+        for worker in workers:
+            if worker.is_alive():
+                worker.terminate()
 
 
 def _fold_stream(
@@ -559,21 +584,21 @@ def _fold_stream(
     range are exact; FIRST/LAST samples come from matching events, not necessarily the first
     or last. Warnings are printed in line order. Returns the run sketch and run statistics.
     """
-    batches = _batches(stream)
-    head = list(itertools.islice(batches, 2))
-    if jobs == 1 or len(head) < 2:  # one batch: a pool would only add start-up time
-        numbered = ((n, line) for start, lines in head for n, line in enumerate(lines, start))
-        rest = ((n, line) for start, lines in batches for n, line in enumerate(lines, start))
-        parts: Iterable[Folded] = [
-            _fold_lines(itertools.chain(numbered, rest), profile, run_id, sequencer)
-        ]
+    numbered = enumerate(stream, start=1)
+    head = list(itertools.islice(numbered, _BATCH_LINES + 1))
+    lines = itertools.chain(head, numbered)
+    if jobs == 1 or len(head) <= _BATCH_LINES:
+        parts = [_fold_lines(lines, profile, run_id, sequencer)]
     else:
-        parts = _fold_parallel(itertools.chain(head, batches), profile, run_id, sequencer, jobs)
-    run = Sketch(profile.aggregates, profile.profile_id)
+        parts = _fold_parallel(lines, profile, run_id, sequencer, jobs)
+    run: Sketch | None = None
     stats = {"events": 0, "skipped_lines": 0}
     warnings: list[tuple[int, str]] = []
     for part, counts, part_warnings, part_sequencer in parts:
-        run.merge(part)
+        if run is None:
+            run = part  # the first fold is the run; later ones merge into it
+        else:
+            run.merge(part)
         stats = {key: stats[key] + counts[key] for key in stats}
         warnings += part_warnings
         if sequencer and part_sequencer is not sequencer:
@@ -582,6 +607,7 @@ def _fold_stream(
         _say(f"sketchtastic: line {lineno}: {reason} - skipped")
     if stats["skipped_lines"] > _MAX_LINE_WARNINGS:
         _say("sketchtastic: further skipped lines are counted but not listed")
+    assert run is not None  # every path yields at least one fold
     return run, {**stats, **(sequencer.stats() if sequencer else {})}
 
 
@@ -615,10 +641,10 @@ def _open_sketch(args: argparse.Namespace, profile: Profile) -> Sketch:
     return sketch
 
 
-def _open_events(args: argparse.Namespace) -> AbstractContextManager[IO[str]]:
+def _open_events(args: argparse.Namespace) -> AbstractContextManager[IO[bytes] | IO[str]]:
     if args.events != "-":
         try:
-            return open(args.events, encoding="utf-8", errors="replace")  # noqa: SIM115
+            return open(args.events, "rb")  # noqa: SIM115 - decoded per line, errors replaced
         except OSError as exc:
             reason = exc.strerror or exc
             raise _NotWritten(
@@ -630,7 +656,7 @@ def _open_events(args: argparse.Namespace) -> AbstractContextManager[IO[str]]:
             f"  sketchtastic merge -p {args.profile} -s {args.sketch_path} events.jsonl\n"
             f"  some-command | sketchtastic merge -p {args.profile} -s {args.sketch_path} -"
         )
-    return nullcontext(sys.stdin)
+    return nullcontext(getattr(sys.stdin, "buffer", sys.stdin))
 
 
 def _source(args: argparse.Namespace) -> str:

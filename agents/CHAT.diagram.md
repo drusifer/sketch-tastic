@@ -29,4 +29,6 @@ sequenceDiagram
     Note right of Mouse: "rubric PLAN: SIZE=A<br/>GATE=S VERIF=S ALIGN=S<br/>OWNER=S. Phase 1 (Neo):<br/>D1 _fold_lines refactor,<br/>-j 1 unchanged, tests<br/>green. Phase 2 (Neo):<br/>D2-…"
     Neo->>User: "swe status"
     Note right of Neo: "Phase 1-2 impl: merge -j<br/>N (ProcessPoolExecutor,<br/>batches of 5000 lines,<br/><=2 per worker in<br/>flight, merged as they<br/>finish, warnings in line<br/>o…"
+    Neo->>User: "swe status"
+    Note right of Neo: "Parallel merge reworked<br/>with the owner: long-<br/>lived workers, task<br/>queue (3 per worker) of<br/>5000-line byte batches,<br/>output queue with one<br/>fold…"
 ```

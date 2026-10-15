@@ -944,11 +944,11 @@ class SequenceTests(CliTestCase):
 
 
 class ParallelMergeTests(CliTestCase):
-    """`merge -j N`: batches folded by worker processes, merged as they finish (STORY-SKT-06)."""
+    """`merge -j N`: batches fed to worker processes, folds merged on arrival (STORY-SKT-06)."""
 
     def setUp(self):
         super().setUp()
-        patcher = mock.patch.object(cli, "_BATCH_LINES", 3)  # many batches from a few lines
+        patcher = mock.patch.object(cli, "_BATCH_LINES", 3)  # several batches from a few lines
         patcher.start()
         self.addCleanup(patcher.stop)
         kinds = "aabcabcaabbcacbabcab"

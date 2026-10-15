@@ -30,8 +30,8 @@
    from matching events but not necessarily the first/last ones.
 3. Skipped-line warnings name the right line numbers and are listed in line order, at most
    10, as today. An event without the declared sequence still fails the run and writes nothing.
-4. Input that fits in one batch is folded in-process (no pool start-up cost).
-5. Memory stays bounded: at most 2 batches per worker are in flight.
+4. Input that fits in one batch is folded in-process (no worker start-up cost).
+5. Memory stays bounded: at most 3 batches per worker are queued; the reader waits.
 6. `merge --help` and the README document `-j` and the FIRST/LAST caveat.
 
 ## STORY-SKT-07: Measure parallel merge
@@ -49,16 +49,19 @@
 
 ## Architecture (Morpheus)
 
-**D1 — One fold, two drivers.** `_fold_lines(numbered_lines, profile, run_id, mark_path, mark)`
-folds `(lineno, line)` pairs into a fresh run `Sketch` and returns it with its stats, its
-sequencer counts (dropped, low, high) and up to 11 `(lineno, reason)` warnings. `-j 1` (or one
-batch) calls it directly; the pool calls it per batch.
+**D1 — One fold, two drivers.** `_fold_lines(numbered_lines, profile, run_id, sequencer)` is the
+only fold: it parses (bytes decoded with errors replaced), checks the sequence, upserts into a
+new run sketch, and returns it with counts, its first warnings and its sequencer. `-j 1` (or
+input of one batch) calls it in-process; each worker calls it once.
 
-**D2 — Pool.** `concurrent.futures.ProcessPoolExecutor(max_workers=N)`; the parent reads the
-stream in batches of `_BATCH_LINES` (5,000) and keeps at most `2 * N` futures in flight; as each
-completes (`wait(..., FIRST_COMPLETED)`) its run sketch is merged into the run with
-`Sketch.merge`, stats are summed, sequencer counts combined, warnings collected. A worker's
-`_NotWritten` re-raises in the parent; remaining futures are cancelled.
+**D2 — Queues and workers (revised with the owner).** N long-lived `Process` workers. A task
+queue of at most `3 * N` items carries `(first line number, [line bytes])` batches of
+`_BATCH_LINES` (5,000); the reader waits when it is full. On a `None` each worker puts its one
+fold on an output queue; the parent merges each fold as it arrives (the first fold becomes the
+run, so nothing is copied for nothing), sums counts, absorbs sequence ranges. A worker's error
+re-raises in the parent; a dead worker fails the run instead of hanging. Tried and dropped:
+`ProcessPoolExecutor` with a partial sketch per batch (17-19 s: 37 merges with deep copies) and a
+shared-memory ring with one message per line (25.7 s: two queue operations per line).
 
 **D3 — Warnings** are printed after folding, sorted by line, first 10, then the "further
 skipped lines" note, so the output does not depend on completion order.
