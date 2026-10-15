@@ -2,6 +2,8 @@
 
 import unittest
 
+import jsonpath
+
 from sketchtastic.model import MISSING, AnyOf, Default, Field, Glob, Modifier, Path, tokens
 
 MaskEntry = Field
@@ -107,6 +109,64 @@ class FullJsonPathSyntaxTests(unittest.TestCase):
         ]
         # 6379 -> FALSE, 443 -> TRUE, 80 -> TRUE; deduplicated + sorted.
         self.assertEqual(tokenize(MULTI_ARG_RECORD, profile), {"sock_ports": "FALSE,TRUE"})
+
+
+class PlainPathTests(unittest.TestCase):
+    """Plain paths ($, $.a.b) take a fast path that must select what python-jsonpath does
+    (STORY-SKT-05 AC3)."""
+
+    DOCUMENTS = [
+        {},
+        {"a": 1},
+        {"a": None},
+        {"a": {"b": 2}},
+        {"a": {"b": None}},
+        {"a": {"b": {"c": [1, {"d": 3}]}}},
+        {"a": [1, 2]},
+        {"a": [{"b": 1}, {"b": 2}]},
+        {"a": "text"},
+        {"a": {"b": "text"}},
+        {"a": 0, "b": False},
+        {"true": 1, "null": 2, "length": 3, "keys": 4, "_x9": 5, "A_b": {"c": 6}},
+        [1, 2],
+        [{"a": 1}],
+        "text",
+        None,
+        7,
+    ]
+    PATHS = [
+        "$",
+        "$.a",
+        "$.a.b",
+        "$.a.b.c",
+        "$.a.b.c.d",
+        "$.b",
+        "$.true",
+        "$.null",
+        "$.length",
+        "$.keys",
+        "$._x9",
+        "$.A_b.c",
+        "$.missing.b",
+    ]
+
+    def test_selects_what_python_jsonpath_selects(self):
+        for path in self.PATHS:
+            for document in self.DOCUMENTS:
+                with self.subTest(path=path, document=document):
+                    expected = jsonpath.compile(path).findall(document)
+                    self.assertEqual(Path(path).values(document), expected)
+
+    def test_selected_values_are_the_documents_own_objects(self):
+        document = {"a": {"b": [1]}}
+        self.assertIs(Path("$.a").values(document)[0], document["a"])
+        self.assertIs(Path("$").values(document)[0], document)
+
+    def test_other_paths_still_use_full_jsonpath(self):
+        document = {"a": [{"b": 1}, {"b": 2}], "c d": 3}
+        for path in ("$.a[*].b", "$.a[0].b", "$['c d']", "$..b", "$.a[?@.b > 1].b"):
+            with self.subTest(path=path):
+                self.assertEqual(Path(path).values(document), jsonpath.findall(path, document))
 
 
 class InvalidPathTests(unittest.TestCase):

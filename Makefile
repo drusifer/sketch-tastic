@@ -19,7 +19,7 @@ define need_uv
 	@command -v uv >/dev/null || { echo "uv is not installed - run 'pipx install uv' (see docs/SDLC.md)"; exit 1; }
 endef
 
-.PHONY: help install install-hooks check test test-all smoke lint quality format secrets build release-check run gharchive clean distclean via_index
+.PHONY: help install install-hooks check test test-all smoke lint quality format secrets build release-check run gharchive profile clean distclean via_index
 
 help: ## Show available make targets
 	@echo ""
@@ -97,15 +97,31 @@ run: ## Run the CLI (ARGS="merge --help")
 GH_HOUR ?= 2024-01-01-15
 GH_DIR := data/gharchive
 
-gharchive: ## Merge one hour of GitHub events from GH Archive (GH_HOUR=YYYY-MM-DD-H); downloads it once into data/
-	$(need_venv)
+GH_DATA := $(GH_DIR)/$(GH_HOUR).json.gz
+PROFILE_DIR := build/profile
+
+$(GH_DATA):
 	@mkdir -p $(GH_DIR)
-	@test -s $(GH_DIR)/$(GH_HOUR).json.gz || curl -sSfL -o $(GH_DIR)/$(GH_HOUR).json.gz https://data.gharchive.org/$(GH_HOUR).json.gz
-	@gunzip -c $(GH_DIR)/$(GH_HOUR).json.gz | $(CLI) merge -p examples/gharchive.yaml -s $(GH_DIR)/gh.sketch.yaml -
+	@curl -sSfL -o $@ https://data.gharchive.org/$(GH_HOUR).json.gz
+
+gharchive: $(GH_DATA) ## Merge one hour of GitHub events from GH Archive (GH_HOUR=YYYY-MM-DD-H); downloads it once into data/
+	$(need_venv)
+	@gunzip -c $(GH_DATA) | $(CLI) merge -p examples/gharchive.yaml -s $(GH_DIR)/gh.sketch.yaml -
+
+profile: $(GH_DATA) ## Time, then cProfile, the GH Archive merge into a fresh sketch; top functions in build/profile/profile.txt
+	$(need_venv)
+	@rm -rf $(PROFILE_DIR) && mkdir -p $(PROFILE_DIR)
+	@start=$$(date +%s.%N); \
+	gunzip -c $(GH_DATA) | $(CLI) merge -p examples/gharchive.yaml -s $(PROFILE_DIR)/timed.sketch.yaml - >/dev/null || exit $$?; \
+	end=$$(date +%s.%N); awk -v s=$$start -v e=$$end 'BEGIN { printf "wall time (no profiler): %.2f s\n", e - s }' | tee $(PROFILE_DIR)/profile.txt; \
+	echo "sketch sha256: $$(sha256sum < $(PROFILE_DIR)/timed.sketch.yaml | cut -c1-16) (same day, same code -> same hash)" | tee -a $(PROFILE_DIR)/profile.txt
+	@gunzip -c $(GH_DATA) | $(PYTHON) -m cProfile -o $(PROFILE_DIR)/profile.out -m sketchtastic merge -p examples/gharchive.yaml -s $(PROFILE_DIR)/profiled.sketch.yaml - >/dev/null
+	@$(PYTHON) -c "import pstats, sys; pstats.Stats('$(PROFILE_DIR)/profile.out', stream=sys.stdout).strip_dirs().sort_stats('tottime').print_stats(25); pstats.Stats('$(PROFILE_DIR)/profile.out', stream=sys.stdout).strip_dirs().sort_stats('cumulative').print_stats(25)" >> $(PROFILE_DIR)/profile.txt
+	@sed -n '1,45p' $(PROFILE_DIR)/profile.txt
 
 clean: ## Remove caches, build output and downloaded test data in data/ (keeps .venv)
 	@find . -name __pycache__ -type d -not -path './.venv/*' -prune -exec rm -rf {} +
-	@rm -rf .ruff_cache dist data
+	@rm -rf .ruff_cache dist data $(PROFILE_DIR)
 
 distclean: clean ## Also remove the virtualenv
 	@rm -rf .venv

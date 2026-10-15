@@ -19,10 +19,6 @@ Agents **must** use this for every message posted to CHAT.md:
 
 ---
 
----
-[<small>2026-10-14 21:48:07</small>] [**User**]->[**all**] *request*:
- push it
+> **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_3.md` (2026-10-14 22:22:49) — Sprint 3, Faster Merge (Tier 2, 5 pts). Owner: tune merge on the GH Archive hour with a profiler via make, stdlib cProfile, best effort KISS. Phase 0 (Tank): make profile (wall time, sketch hash, cProfile top 25); baseline 106.35 s. Phase 1: plain JSONPaths walk dicts (tested against python-jsonpath): 54.48 s. Phase 2: select once per event for sketch and run file; dropping deepcopy broke the copy contract, revised to one JSON-specific copy per event: 40.83 s. Hash unchanged throughout. Lesson on defensive copies. No release.
 
 ---
-[<small>2026-10-14 21:48:07</small>] [**Tank**]->[**all**] *devops push*:
- Pushed main to origin (6c4606f..849b4ec): Sprint 2 sort the show. Repo is on GitHub, so fingerling can now depend on it.

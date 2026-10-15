@@ -453,3 +453,45 @@ class VocabularyTests(unittest.TestCase):
                 data = yaml.safe_load(f)
             self.assertIn("skits", data)
             self.assertNotIn("fingerprints", data)
+
+
+class SelectOnceTests(unittest.TestCase):
+    """One selection per event feeds several sketches (STORY-SKT-05, D3-D4)."""
+
+    AGGREGATES = (
+        Aggregate("size", "$.size", ["SUM", "MAX"]),
+        Aggregate("when", "$.at", "MIN", type="DATETIME"),
+        Aggregate("samples", "$", {"name": "LAST", "n": 2}),
+    )
+    EVENTS = (
+        {"k": "a", "size": 3, "at": "2026-10-14T10:00:00Z"},
+        {"k": "a", "size": "x", "at": "nope"},
+        {"k": "b", "size": 5},
+    )
+
+    def test_upsert_with_a_selection_equals_upsert_with_the_record(self):
+        direct, selected = Sketch(self.AGGREGATES), Sketch(self.AGGREGATES)
+        for event in self.EVENTS:
+            tokens = {"k": event["k"]}
+            direct.upsert(tokens, event, run="261014-0001")
+            selection = selected.select(event, "261014-0001")
+            selected.upsert(tokens, event, run="261014-0001", selected=selection)
+        self.assertEqual(list(direct), list(selected))
+        for fid in direct:
+            self.assertEqual(direct.get(fid), selected.get(fid))
+        self.assertEqual(direct.skipped_values, selected.skipped_values)
+        self.assertEqual(direct.skipped_values, 2)  # size "x" (not a number), at "nope" (no date)
+
+    def test_saved_sketch_has_no_yaml_aliases(self):
+        sketch, run = Sketch(self.AGGREGATES), Sketch(self.AGGREGATES)
+        event = {"k": "a", "size": 1, "nested": {"deep": [1, 2]}}
+        selection = sketch.select(event, "261014-0001")
+        for target in (sketch, run):
+            target.upsert({"k": "a"}, event, run="261014-0001", selected=selection)
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "s.yaml")
+            sketch.save(path)
+            with open(path) as f:
+                text = f.read()
+        self.assertNotIn("&id", text)
+        self.assertNotIn("*id", text)

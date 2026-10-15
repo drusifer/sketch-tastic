@@ -69,9 +69,9 @@ def builtin_aggregates() -> tuple[Aggregate, ...]:
     return tuple(Aggregate(**raw) for raw in yaml.safe_load(text)["aggregates"])
 
 
-def _fold(aggregates: Sequence[Aggregate], states: dict[str, Any], event: Any) -> int:
-    """Fold `event` into each aggregate's state. Returns how many values were skipped."""
-    return sum(aggregate.update(states, event) for aggregate in aggregates)
+def _fold(aggregates: Sequence[Aggregate], states: dict[str, Any], selected: list[list]) -> int:
+    """Fold each aggregate's selected values into its state. Returns how many were skipped."""
+    return sum(a.fold_values(states, values) for a, values in zip(aggregates, selected))
 
 
 class Sketch:
@@ -94,18 +94,37 @@ class Sketch:
         self.run: dict[str, Any] | None = None
         """Header of a run file (STORY-FING-48): what one run read. Saved if set; never loaded."""
 
-    def upsert(self, tokens: dict[str, str], record: Any, run: str | None = None) -> str:
-        """Fold one record into the sketch. Returns its skit_id.
+    def select(self, record: Any, run: str | None = None) -> tuple[list[list], list[list]]:
+        """What the aggregates read from `record`, for `upsert(selected=...)`.
 
         The profile's aggregates read the record. The built-in ones read an envelope,
         {"meta": {"run": run}, "record": record}, so injected fields never clash with the
         record's own; `run` is the id of the run reading it.
         """
+        envelope = {"meta": {"run": run}, "record": record}
+        copies: dict[int, Any] = {}  # FIRST and LAST both select the whole envelope
+        return (
+            [aggregate.select(record, copies) for aggregate in self._aggregates],
+            [aggregate.select(envelope, copies) for aggregate in builtin_aggregates()],
+        )
+
+    def upsert(
+        self,
+        tokens: dict[str, str],
+        record: Any,
+        run: str | None = None,
+        selected: tuple[list[list], list[list]] | None = None,
+    ) -> str:
+        """Fold one record into the sketch. Returns its skit_id.
+
+        `selected` is `select(record, run)` from a sketch with the same aggregates, so one
+        selection can feed several sketches (the sketch and its run file); computed if omitted.
+        """
         fid = skit_id(tokens)
         skit = self._records.setdefault(fid, Skit(dict(tokens)))
-        envelope = {"meta": {"run": run}, "record": record}
-        self.skipped_values += _fold(self._aggregates, skit.aggregates, record)
-        _fold(builtin_aggregates(), skit.meta, envelope)
+        profile_values, builtin_values = selected or self.select(record, run)
+        self.skipped_values += _fold(self._aggregates, skit.aggregates, profile_values)
+        _fold(builtin_aggregates(), skit.meta, builtin_values)
         return fid
 
     def get(self, skit_id_: str) -> Skit | None:

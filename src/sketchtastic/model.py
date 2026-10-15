@@ -46,8 +46,30 @@ MISSING = object()
 """Handed to a modifier when a path selects nothing."""
 
 
+_PLAIN_PATH = re.compile(r"\$(\.[A-Za-z_][A-Za-z0-9_]*)*")
+
+
+@dataclass(frozen=True)
+class _PlainPath:
+    """`$` or `$.name.name...`: selects what python-jsonpath would, by walking dicts directly.
+
+    Most profile paths are plain, and the general matcher dominated merge time (STORY-SKT-05).
+    """
+
+    names: tuple[str, ...]
+
+    def findall(self, value: Any) -> list[Any]:
+        for name in self.names:
+            if not isinstance(value, dict) or name not in value:
+                return []
+            value = value[name]
+        return [value]
+
+
 @cache
-def _compile_path(text: str) -> jsonpath.JSONPath:
+def _compile_path(text: str) -> jsonpath.JSONPath | _PlainPath:
+    if _PLAIN_PATH.fullmatch(text):
+        return _PlainPath(tuple(text.split(".")[1:]))
     try:
         return jsonpath.compile(text)
     except jsonpath.JSONPathError as exc:

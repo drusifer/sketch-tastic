@@ -134,7 +134,7 @@ class First(Aggregator):
 
     def fold(self, state: Any, value: Any) -> Any:
         samples = [] if state is EMPTY else state
-        return samples if len(samples) >= self.n else [*samples, copy.deepcopy(value)]
+        return samples if len(samples) >= self.n else [*samples, value]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -146,7 +146,7 @@ class Last(Aggregator):
 
     def fold(self, state: Any, value: Any) -> Any:
         samples = [] if state is EMPTY else state
-        return [*samples, copy.deepcopy(value)][-self.n :]
+        return [*samples, value][-self.n :]
 
 
 class Op(Rule):
@@ -188,6 +188,17 @@ def as_number(value: Any) -> int | float | None:
     return value if math.isfinite(value) else None
 
 
+def _copy(value: Any) -> Any:
+    """A deep copy, fast for parsed JSON (dicts, lists, scalars); deepcopy for anything else."""
+    if isinstance(value, dict):
+        return {key: _copy(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_copy(item) for item in value]
+    if value is None or value is MISSING or isinstance(value, (str, int, float, date)):
+        return value  # immutable (datetime is a date)
+    return copy.deepcopy(value)
+
+
 @dataclass(frozen=True)
 class Aggregate:
     """Track `fn` over the values `path` selects (or what `op` makes of them), stored under `key`.
@@ -217,15 +228,32 @@ class Aggregate:
         object.__setattr__(self, "fn", functions)
 
     def update(self, states: dict, event: Any) -> int:
-        """Fold one event into `states[self.key]`. Returns how many values were skipped.
+        """Fold one event into `states[self.key]`. Returns how many values were skipped."""
+        return self.fold_values(states, self.select(event))
+
+    def select(self, event: Any, copies: dict[int, Any] | None = None) -> list[Any]:
+        """What this aggregate folds from `event`: a copy of each selected value after `op` or
+        `type`, so stored samples never alias the caller's event. Pass the same `copies` to
+        every aggregate reading one event, and a value two of them select is copied once.
+        """
+        values = self.path.values(event)
+        values = [self.op.apply(v) for v in values] if self.op else typed_values(values, self.type)
+        copies = {} if copies is None else copies
+        result = []
+        for value in values:
+            if id(value) not in copies:
+                copies[id(value)] = (_copy(value), value)  # keep value alive: ids stay unique
+            result.append(copies[id(value)][0])
+        return result
+
+    def fold_values(self, states: dict, values: list[Any]) -> int:
+        """Fold `select`'s values into `states[self.key]`. Returns how many were skipped.
 
         With one function the state is stored directly (`count: 12`); with several it is a
         map by function name (`{SUM: .., MAX: ..}`). A path that selects nothing is not a skip:
         one is counted per selected value that one of its functions could not use.
         """
-        values = self.path.values(event)
         skipped = 0
-        values = [self.op.apply(v) for v in values] if self.op else typed_values(values, self.type)
         for value in values:
             if value is MISSING:  # did not convert to the declared type
                 skipped += 1
