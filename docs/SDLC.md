@@ -205,7 +205,7 @@ None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`,
 `sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
 
 ---
-*Last verified: 2026-10-14 at Sprint 1 close (`*devops sdlc-check`), by Tank — from-clean
+*Last verified: 2026-10-14 at Sprint 2 close (`*devops sdlc-check`), by Tank — from-clean
 `make distclean install lint test secrets build`, `make test-all` (3.14, 3.15) and `make smoke`
-(both commands from the built `sketch_tastic` wheel) green; lockfile current; venv isolated;
-hooks set; workflows call existing targets only.*
+green; no mechanism change (one module, no dependency); lockfile current; hooks set; workflows
+call existing targets only.*
