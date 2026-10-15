@@ -95,11 +95,7 @@ fingerprints:
       first:
       - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
         record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
-      - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
-        record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
       last:
-      - meta: {seen: '2026-10-14T03:59:19.796868+00:00'}
-        record: {level: INFO, logger: db, msg: query ok, took_ms: 3}
       - meta: {seen: '2026-10-14T03:59:19.796991+00:00'}
         record: {level: INFO, logger: db, msg: query ok (cached), took_ms: 1}
     share:
@@ -326,7 +322,8 @@ every problem at once.
 
 - `tokens` shows what each ID stands for.
 - `aggregates` holds what your profile asked for. `meta` holds what every fingerprint gets for
-  free: `count`, `first_seen` / `last_seen`, and the first and last 3 records.
+  free: `count`, `first_seen` / `last_seen`, and the first and last record (one each, to keep
+  sets and run files small; add `FIRST`/`LAST` aggregates to your profile for more samples).
 - `meta` comes from a small built-in profile shipped with the package (`builtin.yaml`), which
   uses the same aggregate functions you can. It reads each record wrapped in an envelope,
   `{meta: {seen: <time read>}, record: <the parsed record>}`, so the fields the tool adds can never

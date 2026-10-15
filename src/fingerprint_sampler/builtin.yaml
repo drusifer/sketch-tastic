@@ -6,5 +6,5 @@ aggregates:
   - {key: count,      path: $.meta.seen, fn: COUNT}
   - {key: first_seen, path: $.meta.seen, type: DATETIME, fn: MIN}
   - {key: last_seen,  path: $.meta.seen, type: DATETIME, fn: MAX}
-  - {key: first,      path: $,           fn: {name: FIRST, n: 3}}
-  - {key: last,       path: $,           fn: {name: LAST, n: 3}}
+  - {key: first,      path: $,           fn: {name: FIRST, n: 1}}
+  - {key: last,       path: $,           fn: {name: LAST, n: 1}}

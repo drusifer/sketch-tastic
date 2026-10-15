@@ -66,8 +66,8 @@ class UpsertReconciliationTests(unittest.TestCase):
         def envelopes(*ns):
             return [{"meta": {"seen": f"t{i}"}, "record": {"n": i}} for i in ns]
 
-        self.assertEqual(meta["first"], envelopes(0, 1, 2))
-        self.assertEqual(meta["last"], envelopes(2, 3, 4))
+        self.assertEqual(meta["first"], envelopes(0))  # one each keeps sets and run files small
+        self.assertEqual(meta["last"], envelopes(4))
 
     def test_record_fields_named_like_built_ins_do_not_clash(self):
         fingerprints = FingerprintSet(aggregates=[Aggregate("count", "$.count", "SUM")])
