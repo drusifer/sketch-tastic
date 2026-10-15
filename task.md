@@ -1,6 +1,25 @@
 # Task Board
 
-**No sprint in flight.** Last sprint: 1 (below). Next: fingerling depends on this repository (after it is pushed).
+**No sprint in flight.** Last sprint: 2 (below). Next: fingerling depends on this repository (after it is pushed).
+
+## Sprint 2: Sort the Show
+
+**Status:** Complete — launched 2026-10-14 (2/2 pts); merged to `main`; no release (mainline)
+**Branch:** `sprint-2` (merged and deleted)
+**Record:** `agents/chat_archive/CHAT_SPRINT_2.diagram.md`
+**Source:** `docs/sprints/USER_STORIES_SPRINT2.md` (STORY-SKT-03 + architecture D1-D3) · **Points:** 2 · **Tier:** 2
+
+### Phase 1: Columns as data (D1) — Neo
+- [x] **1.1** Refactor `show` to one column list `(header, value, cell)`; table unchanged, `ShowTests` green unmodified; `refactor(cli)` commit. [Neo]
+- [x] **1.2** Trin: `make test` + `make lint` green, no test edits · Morpheus review. [Trin, Morpheus]
+
+### Phase 2: --sort KEY, default COUNT (D2, D3) — Neo
+- [x] **2.1** Tests first for AC1-AC8; `--sort` (default `COUNT`), key lookup and exit 2, stable sort; help epilog + README; `feat(cli)!` commit with `BREAKING CHANGE:` footer. [Neo]
+- [x] **2.2** Trin UAT against AC1-AC8 · Morpheus review. [Trin, Morpheus]
+
+### Close
+- [x] Tank `*devops sdlc-check` · Oracle groom · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]
+
 
 ## Sprint 1: Move and Rename
 
@@ -29,7 +48,6 @@
 ## Backlog (unscheduled)
 Carried over from fingerling's `task.md`:
 - Test-internal names still say fingerprint (`wh`, `fingerprints` variables, test class names) — rename (Sprint 1 retro).
-- `show --sort KEY` (any column, including `%` columns) and `--top N` — top priority.
 - History weight: merge ~1.7x slower since history (second fold); fold once and derive the run.
 - `-o`: owner may revisit (keep or drop).
 - In-run duplicate detection if a stream needs it.

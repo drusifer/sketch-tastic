@@ -568,7 +568,7 @@ class ShowTests(CliTestCase):
             fingerprints.upsert(tokens, {}, run=run)
         fingerprints.save(self.sketch_path)
 
-    def test_prints_one_row_per_fingerprint_most_frequent_first(self):
+    def test_prints_one_row_per_skit_least_frequent_first(self):
         a, b, c = {"kind": "a"}, {"kind": "b", "route": "/x"}, {"kind": "c"}
         self.save_set(
             [
@@ -585,9 +585,9 @@ class ShowTests(CliTestCase):
             out.splitlines(),
             [
                 "ID        COUNT  COUNT %  FIRST RUN    LAST RUN     kind  route",
-                f"{idb}  2      50.0     261014-0001  261014-0002  b     /x",
                 f"{ida}  1      25.0     261014-0001  261014-0001  a     -",
                 f"{idc}  1      25.0     261015-0003  261015-0003  c     -",
+                f"{idb}  2      50.0     261014-0001  261014-0002  b     /x",
             ],
         )
 
@@ -616,8 +616,8 @@ class ShowTests(CliTestCase):
                     "n %",
                     "k",
                 ],
-                ["2", "66.7", run, run, "40", "40.0", "2", "66.7", "a"],
                 ["1", "33.3", run, run, "60", "60.0", "1", "33.3", "b"],
+                ["2", "66.7", run, run, "40", "40.0", "2", "66.7", "a"],
             ],
         )
 
@@ -661,8 +661,96 @@ class ShowTests(CliTestCase):
         code, out, _ = self.run_cli("show", "--help")
         self.assertEqual(code, 0)
         self.assertIn("sketchtastic show web.sketch.yaml", out)
+        self.assertIn("--sort KEY", out)
+        self.assertIn("sketchtastic show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail", out)
+        self.assertIn("KEY is not one of its columns", out)
         _, out, _ = self.run_cli("--help")
         self.assertIn("show", out)
+
+
+class ShowSortTests(CliTestCase):
+    """`show --sort KEY`: lowest first, default COUNT (STORY-SKT-03)."""
+
+    def save_sizes(self, sizes):
+        """One skit per (kind, size) with a SUM aggregate on size, saved in that order."""
+        sketch = Sketch([Aggregate("size", "$.size", "SUM")])
+        for kind, size in sizes:
+            sketch.upsert({"kind": kind}, {"size": size}, run="261014-0001")
+        sketch.save(self.sketch_path)
+
+    def kinds(self, *args):
+        """The `kind` column of `show` with ARGS, top to bottom; asserts success."""
+        code, out, err = self.run_cli("show", *args, self.sketch_path)
+        self.assertEqual((code, err), (0, ""))
+        header, *rows = (re.split(r"\s{2,}", line) for line in out.splitlines())
+        return [row[header.index("kind")] for row in rows]
+
+    def test_sorts_by_an_aggregate_and_its_share_lowest_first(self):
+        self.save_sizes([("a", 40), ("b", 60), ("c", 5)])
+        for key in ("size", "size %", "SIZE %"):
+            with self.subTest(key=key):
+                self.assertEqual(self.kinds("--sort", key), ["c", "a", "b"])
+
+    def test_sorts_by_every_fixed_column(self):
+        a, b, c = {"kind": "a"}, {"kind": "b"}, {"kind": "c"}
+        sketch = Sketch()
+        for tokens, run in ((b, "261014-0002"), (c, "261014-0001"), (c, "261014-0003")):
+            sketch.upsert(tokens, {}, run=run)
+        sketch.upsert(a, {}, run="261014-0004")
+        sketch.save(self.sketch_path)
+        by_id = [t["kind"] for t in sorted((a, b, c), key=skit_id)]
+        self.assertEqual(self.kinds("--sort", "id"), by_id)
+        self.assertEqual(self.kinds("--sort", "count"), ["b", "a", "c"])
+        self.assertEqual(self.kinds("--sort", "Count %"), ["b", "a", "c"])
+        self.assertEqual(self.kinds("--sort", "first run"), ["c", "b", "a"])
+        self.assertEqual(self.kinds("--sort", "LAST RUN"), ["b", "c", "a"])
+        self.assertEqual(self.kinds("--sort", "kind"), ["a", "b", "c"])
+
+    def test_default_is_count_with_ties_in_file_order(self):
+        sketch = Sketch()
+        for kind in ("x", "y", "y", "z"):
+            sketch.upsert({"kind": kind}, {}, run="261014-0001")
+        sketch.save(self.sketch_path)
+        self.assertEqual(self.kinds(), ["x", "z", "y"])
+        self.assertEqual(self.kinds(), self.kinds("--sort", "COUNT"))
+
+    def test_missing_values_sort_first_and_numbers_before_text(self):
+        sketch = Sketch()
+        for tokens in ({"kind": "t", "v": "a"}, {"kind": "n10", "v": 10}, {"kind": "none"}):
+            sketch.upsert(tokens, {}, run="261014-0001")
+        sketch.upsert({"kind": "n9", "v": 9}, {}, run="261014-0001")
+        sketch.save(self.sketch_path)
+        self.assertEqual(self.kinds("--sort", "v"), ["none", "n9", "n10", "t"])
+
+    def test_exact_header_wins_and_a_caseless_tie_is_ambiguous(self):
+        sketch = Sketch()
+        sketch.upsert({"kind": "a", "count": "2"}, {}, run="261014-0001")
+        sketch.upsert({"kind": "b", "count": "1"}, {}, run="261014-0001")
+        sketch.upsert({"kind": "b", "count": "1"}, {}, run="261014-0001")
+        sketch.save(self.sketch_path)
+        self.assertEqual(self.kinds("--sort", "count"), ["b", "a"])
+        self.assertEqual(self.kinds("--sort", "COUNT"), ["a", "b"])
+        code, out, err = self.run_cli("show", "--sort", "Count", self.sketch_path)
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(
+            err,
+            f"sketchtastic: column 'Count' is ambiguous in {self.sketch_path}: COUNT, count\n",
+        )
+
+    def test_unknown_key_lists_the_columns(self):
+        self.save_sizes([("a", 1)])
+        code, out, err = self.run_cli("show", "--sort", "bytes", self.sketch_path)
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(
+            err,
+            f"sketchtastic: no column 'bytes' in {self.sketch_path}; columns: "
+            "ID, COUNT, COUNT %, FIRST RUN, LAST RUN, size, size %, kind\n",
+        )
+
+    def test_empty_sketch_says_so_with_any_key(self):
+        Sketch().save(self.sketch_path)
+        code, out, err = self.run_cli("show", "--sort", "nothing", self.sketch_path)
+        self.assertEqual((code, out, err), (0, f"{self.sketch_path}: no skits\n", ""))
 
 
 class HistoryTests(CliTestCase):

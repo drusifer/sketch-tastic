@@ -107,9 +107,9 @@ To read a sketch without the YAML, print it as a table with `sketchtastic show a
 
 ```
 ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
-b738d17a  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
 5c56a234  1      25.0     261014-0001  261014-0001  db         TRUE    ERROR
 0a13defd  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
+b738d17a  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
 ```
 
 ## Usage
@@ -217,16 +217,21 @@ completes modifier names:
 ### Show a sketch
 
 ```
-sketchtastic show SKETCH
+sketchtastic show [--sort KEY] SKETCH
 ```
 
-Prints one row per skit, most frequent first: the first 8 characters of its ID, its count
+Prints one row per skit, least frequent first: the first 8 characters of its ID, its count
 and `COUNT %` (its share of all events), the first and last run that saw it, then a value and
 a `%` column for each `SUM` or `COUNT` aggregate (`payload_bytes.SUM`, `payload_bytes.SUM %`), and
 one column per token. Shares come from the sketch file's `share` section; a sketch written before
 shares existed shows `-` until its next merge. A sketch with no skits prints
-`SKETCH: no skits`. Long values are not cut; pipe to `less -S` to scroll sideways. Exit
-status: `0` printed · `2` the sketch file could not be read (the message says why).
+`SKETCH: no skits`. Long values are not cut; pipe to `less -S` to scroll sideways.
+
+`--sort KEY` orders the rows by the column headed KEY, in any case, lowest first (default
+`COUNT`), so the largest are at the end: `sketchtastic show --sort 'payload_bytes.SUM %'
+gh.sketch.yaml | tail` shows the heaviest skits. `-` sorts first, numbers before text, and
+equal values keep file order. Exit status: `0` printed · `2` the sketch file could not be read,
+or KEY is not one of its columns (the message says why, and lists the columns).
 
 ## Profiles
 

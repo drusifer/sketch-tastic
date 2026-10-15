@@ -2,7 +2,7 @@
 
     sketchtastic merge --profile P --sketch S [EVENTS|-]
     sketchtastic check PROFILE [PROFILE ...]
-    sketchtastic show SKETCH
+    sketchtastic show [--sort KEY] SKETCH
 
 Folds a stream of JSONL events into a sketch that grows across runs.
 Knows nothing about where the events came from.
@@ -17,7 +17,7 @@ import re
 import sys
 from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, date, datetime
-from typing import IO, Any, Iterable
+from typing import IO, Any, Callable, Iterable, NamedTuple
 
 from sketchtastic import __version__
 from sketchtastic.aggregators import as_number
@@ -95,9 +95,10 @@ exit status:
 
 
 _SHOW_EPILOG = """\
-example:
+examples:
   sketchtastic show web.sketch.yaml
   sketchtastic show web.sketch.yaml | less -S    # long values: scroll sideways
+  sketchtastic show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail
 
 ID is the start of the skit ID; FIRST RUN and LAST RUN are the ids of
 the first and last run that saw it (see 'sketchtastic merge --help'); '-' means
@@ -105,10 +106,12 @@ no value.
 Each % column is the skit's share of the sketch total: COUNT % of all
 events, and one value and % column per SUM or COUNT aggregate (key.FN when
 the aggregate has several functions).
+Rows are sorted by KEY, lowest first, so the largest are at the end; '-'
+sorts first, numbers before text, and equal values keep file order.
 
 exit status:
   0  table printed
-  2  SKETCH could not be read
+  2  SKETCH could not be read, or KEY is not one of its columns
 """
 
 
@@ -185,11 +188,17 @@ def build_parser() -> argparse.ArgumentParser:
     show = commands.add_parser(
         "show",
         help="print a sketch as a table",
-        description="Print one row per skit in SKETCH, most frequent first: "
+        description="Print one row per skit in SKETCH, least frequent first: "
         "its count and share of all events, the first and last run that saw it, "
         "its summed and counted aggregates with their shares, and its tokens.",
         epilog=_SHOW_EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    show.add_argument(
+        "--sort",
+        metavar="KEY",
+        default="COUNT",
+        help="sort by the column with this header, in any case (default: COUNT)",
     )
     show.add_argument("sketch_path", metavar="SKETCH", help="sketch file to show")
     show.set_defaults(func=_cmd_show)
@@ -244,35 +253,87 @@ def _shared_columns(records: Iterable[Skit]) -> list[tuple[str, str | None]]:
     return list(columns)
 
 
-def _show_row(
-    fid: str, record: Skit, shared: list[tuple[str, str | None]], keys: list[str]
-) -> list[str]:
-    """One `show` row: ID, count and share, first/last run, each shared value and share, tokens."""
-    meta, shares = record.meta, record.share.get("aggregates", {})
-    values = []
-    for key, function in shared:
-        values.append(_cell(_lookup(record.aggregates, key, function)))
-        values.append(_percent(_lookup(shares, key, function)))
-    return [
-        fid[:8],
-        _cell(meta.get("count")),
-        _percent(record.share.get("meta", {}).get("count")),
-        _cell(meta.get("first_seen")),
-        _cell(meta.get("last_seen")),
-        *values,
-        *(str(record.tokens.get(key, "-")) for key in keys),
+class _Column(NamedTuple):
+    """One `show` column: its header, its raw value for a skit, and how that value prints."""
+
+    header: str
+    value: Callable[[str, Skit], Any]
+    cell: Callable[[Any], str]
+
+
+def _show_columns(records: list[tuple[str, Skit]]) -> list[_Column]:
+    """ID, count and share, first/last run, each shared value and share, then each token key."""
+    columns = [
+        _Column("ID", lambda fid, record: fid, lambda fid: fid[:8]),
+        _Column("COUNT", lambda fid, record: record.meta.get("count"), _cell),
+        _Column(
+            "COUNT %",
+            lambda fid, record: record.share.get("meta", {}).get("count"),
+            _percent,
+        ),
+        _Column("FIRST RUN", lambda fid, record: record.meta.get("first_seen"), _cell),
+        _Column("LAST RUN", lambda fid, record: record.meta.get("last_seen"), _cell),
     ]
+    for key, function in _shared_columns(record for _, record in records):
+        name = key if function is None else f"{key}.{function}"
+        columns.append(
+            _Column(
+                name,
+                lambda fid, record, k=key, f=function: _lookup(record.aggregates, k, f),
+                _cell,
+            )
+        )
+        columns.append(
+            _Column(
+                f"{name} %",
+                lambda fid, record, k=key, f=function: _lookup(
+                    record.share.get("aggregates", {}), k, f
+                ),
+                _percent,
+            )
+        )
+    for key in sorted({key for _, record in records for key in record.tokens}):
+        columns.append(_Column(key, lambda fid, record, k=key: record.tokens.get(k), _cell))
+    return columns
 
 
-def _show_table(records: list[tuple[str, Skit]]) -> str:
-    """The `show` table: a header, then one row per skit, most frequent first."""
-    records = sorted(records, key=lambda item: -item[1].meta.get("count", 0))  # ties: file order
-    keys = sorted({key for _, record in records for key in record.tokens})
-    shared = _shared_columns(record for _, record in records)
-    names = [key if function is None else f"{key}.{function}" for key, function in shared]
-    header = ["ID", "COUNT", "COUNT %", "FIRST RUN", "LAST RUN"]
-    header += [column for name in names for column in (name, f"{name} %")] + keys
-    return _table([header] + [_show_row(fid, record, shared, keys) for fid, record in records])
+class _NoColumn(Exception):
+    """`--sort` KEY names no column, or more than one; the message says which."""
+
+
+def _find_column(columns: list[_Column], key: str, sketch_path: str) -> _Column:
+    """The column headed KEY exactly, else the only one headed KEY in another case."""
+    for column in columns:
+        if column.header == key:
+            return column
+    matches = [column for column in columns if column.header.casefold() == key.casefold()]
+    if len(matches) == 1:
+        return matches[0]
+    if matches:
+        headers = ", ".join(column.header for column in matches)
+        raise _NoColumn(f"column {key!r} is ambiguous in {sketch_path}: {headers}")
+    headers = ", ".join(column.header for column in columns)
+    raise _NoColumn(f"no column {key!r} in {sketch_path}; columns: {headers}")
+
+
+def _sort_key(value: Any) -> tuple:
+    """Missing values first, then numbers by value, then everything else as text."""
+    if value is None:
+        return (0, 0)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return (1, value)
+    return (2, str(value))
+
+
+def _show_table(records: list[tuple[str, Skit]], key: str, sketch_path: str) -> str:
+    """The `show` table: a header, then one row per skit, sorted by column KEY, lowest first."""
+    columns = _show_columns(records)
+    column = _find_column(columns, key, sketch_path)
+    records = sorted(records, key=lambda item: _sort_key(column.value(*item)))  # ties: file order
+    rows = [
+        [column.cell(column.value(fid, record)) for column in columns] for fid, record in records
+    ]
+    return _table([[column.header for column in columns]] + rows)
 
 
 def _cmd_show(args: argparse.Namespace) -> int:
@@ -286,7 +347,12 @@ def _cmd_show(args: argparse.Namespace) -> int:
     if not records:
         print(f"{args.sketch_path}: no skits")
         return EXIT_OK
-    print(_show_table(records))
+    try:
+        table = _show_table(records, args.sort, args.sketch_path)
+    except _NoColumn as exc:
+        _say(f"sketchtastic: {exc}")
+        return EXIT_NOT_WRITTEN
+    print(table)
     return EXIT_OK
 
 

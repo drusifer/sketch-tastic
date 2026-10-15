@@ -2,13 +2,13 @@
 
 ## Context
 ### Recent Decisions
-None yet
+- 2026-10-14 Sprint 2 (Sort the Show) STORY-SKT-03 launched: `show --sort KEY`, lowest first, default COUNT; owner dropped `--top N` and any reverse option.
 
 ### Key Findings
 None yet
 
 ### Important Notes
-None yet
+- Next story id STORY-SKT-04. Ask the owner design questions before writing stories (it cut scope again in Sprint 2).
 
 ## Current Task
 **Status:** Not started
