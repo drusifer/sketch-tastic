@@ -20,12 +20,14 @@ from datetime import UTC, date, datetime
 from typing import IO, Any, Iterable
 
 from fingerprint_sampler import __version__
+from fingerprint_sampler.aggregators import as_number
 from fingerprint_sampler.fingerprint_set import (
     Fingerprint,
     FingerprintSet,
     FingerprintSetError,
     ProfileMismatchError,
 )
+from fingerprint_sampler.model import Path
 from fingerprint_sampler.profile import Profile, ProfileError, load_profile
 
 EXIT_OK = 0
@@ -63,6 +65,13 @@ history:
   <SET without extension>.history/<run id>.yaml, e.g.
   web.fingerprints.history/261015-0003.yaml; 'fingerprint show' reads it.
   A run with --output writes no history and uses up no run id.
+
+duplicate protection:
+  If the profile names a sequence (e.g. 'sequence: $.id', a number in each
+  event that only grows), SET keeps the highest one merged. Later runs drop
+  events at or below it, so re-running over the same or overlapping input
+  adds nothing twice; the summary says how many were dropped. An event without
+  a usable sequence (missing, several values, not a number) is a skipped line.
 
 exit status:
   0  set written, every line was used
@@ -273,13 +282,72 @@ def _cmd_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+DROP = object()
+"""`_Sequencer.check` result for an event at or below the mark: already merged."""
+
+
+class _Sequencer:
+    """Duplicate protection (STORY-FING-50): drops events at or below the set's mark.
+
+    The mark is the highest sequence merged before this run, so events slightly out of order
+    within one run are all kept.
+    """
+
+    def __init__(self, path: Path, mark: int | float | None) -> None:
+        self.path, self.mark = path, mark
+        self.dropped = 0
+        self.low: int | float | None = None
+        self.high: int | float | None = None
+
+    def check(self, event: Any) -> Any:
+        """The event's sequence number to keep it, DROP if already merged, None if unusable."""
+        values = self.path.values(event)
+        number = as_number(values[0]) if len(values) == 1 else None
+        if number is None:
+            return None
+        if self.mark is not None and number <= self.mark:
+            self.dropped += 1
+            return DROP
+        self.low = number if self.low is None else min(self.low, number)
+        self.high = number if self.high is None else max(self.high, number)
+        return number
+
+    def stats(self) -> dict:
+        merged = None if self.high is None else {"min": self.low, "max": self.high}
+        return {"dropped": self.dropped, "mark": self.mark, "sequence": merged}
+
+    def new_mark(self) -> dict | None:
+        """The set's mark after this run: {path, max}, or None if there is none."""
+        highest = max((n for n in (self.mark, self.high) if n is not None), default=None)
+        return None if highest is None else {"path": self.path.text, "max": highest}
+
+
+def _sequencer(profile: Profile, fingerprints: FingerprintSet) -> _Sequencer | None:
+    """The run's duplicate protection, if the profile declares a sequence."""
+    if profile.sequence is None:
+        return None
+    stored = fingerprints.sequence or {}
+    mark = stored.get("max")
+    if stored and stored.get("path") != profile.sequence.text:
+        _say(
+            f"fingerprint: sequence path changed ({stored.get('path')} -> "
+            f"{profile.sequence.text}); previous mark ignored"
+        )
+        mark = None
+    return _Sequencer(profile.sequence, mark)
+
+
 def _fold_stream(
-    lines: Iterable[str], profile: Profile, fingerprints: FingerprintSet, run: FingerprintSet
+    lines: Iterable[str],
+    profile: Profile,
+    fingerprints: FingerprintSet,
+    run: FingerprintSet,
+    sequencer: _Sequencer | None = None,
 ) -> dict:
     """Fingerprint each JSONL line into `fingerprints` and into `run` (this run only).
 
-    Both record the run's id (`fingerprints.last_run`) as where each event was seen.
-    Returns run statistics.
+    Both record the run's id (`fingerprints.last_run`) as where each event was seen. With a
+    `sequencer`, events already merged are dropped. Returns run statistics.
     """
     known_before = set(fingerprints)
     seen: set[str] = set()
@@ -304,16 +372,24 @@ def _fold_stream(
             skipped_lines += 1
             warn(lineno, f"expected a JSON object, got {type(event).__name__}")
             continue
+        sequence = sequencer.check(event) if sequencer else 0
+        if sequence is None:
+            skipped_lines += 1
+            warn(lineno, f"no usable sequence at {sequencer.path.text}")
+            continue
+        events += 1
+        if sequence is DROP:
+            continue
         tokens = profile.tokens(event)
         run.upsert(tokens, event, fingerprints.last_run)
         seen.add(fingerprints.upsert(tokens, event, fingerprints.last_run))
-        events += 1
 
     return {
         "events": events,
         "skipped_lines": skipped_lines,
         "new": len(seen - known_before),
         "updated": len(seen & known_before),
+        **(sequencer.stats() if sequencer else {}),
     }
 
 
@@ -403,6 +479,8 @@ def _write_history(
         "skipped_lines": stats["skipped_lines"],
         "set": args.set_path,
     }
+    if stats.get("sequence"):
+        run.run["sequence"] = stats["sequence"]
     directory = _history_dir(args.set_path)
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, f"{run_id}.yaml")
@@ -430,9 +508,27 @@ def _report(
         f"  skipped: {stats['skipped_lines']} malformed lines, "
         f"{fingerprints.skipped_values} unusable aggregate values"
     )
+    if "dropped" in stats:
+        mark = stats["mark"]
+        since = "no earlier mark" if mark is None else f"sequence ≤ {mark}"
+        _say(f"  dropped: {stats['dropped']} events already merged ({since})")
     _say(f"  {verb} {destination} (profile {profile.profile_id})")
     if args.output:
         _say(f"  {args.set_path} left unchanged")
+
+
+def _record_history(
+    args: argparse.Namespace, run: FingerprintSet, run_id: str, stats: dict, started: datetime
+) -> int:
+    """Write the run file and say where. Returns EXIT_HISTORY_NOT_WRITTEN if it failed, else 0."""
+    try:
+        _say(f"  history: {_write_history(args, run, run_id, stats, started)}")
+    except OSError as exc:
+        _say(
+            f"fingerprint: {args.set_path} updated, but history not written: {exc.strerror or exc}"
+        )
+        return EXIT_HISTORY_NOT_WRITTEN
+    return EXIT_OK
 
 
 def _cmd_merge(args: argparse.Namespace) -> int:
@@ -445,8 +541,11 @@ def _cmd_merge(args: argparse.Namespace) -> int:
         run_id = _next_run_id(fingerprints.last_run, _history_dir(args.set_path), started.date())
         fingerprints.last_run = run_id
         run = FingerprintSet(profile.aggregates, profile.profile_id)
+        sequencer = _sequencer(profile, fingerprints)
         with _open_events(args) as stream:
-            stats = _fold_stream(stream, profile, fingerprints, run)
+            stats = _fold_stream(stream, profile, fingerprints, run, sequencer)
+        if sequencer:
+            fingerprints.sequence = sequencer.new_mark()
         try:
             fingerprints.save(destination)
         except OSError as exc:
@@ -463,14 +562,7 @@ def _cmd_merge(args: argparse.Namespace) -> int:
     status = EXIT_LINES_SKIPPED if stats["skipped_lines"] else EXIT_OK
     if args.output:
         return status
-    try:
-        _say(f"  history: {_write_history(args, run, run_id, stats, started)}")
-    except OSError as exc:
-        _say(
-            f"fingerprint: {args.set_path} updated, but history not written: {exc.strerror or exc}"
-        )
-        return EXIT_HISTORY_NOT_WRITTEN
-    return status
+    return _record_history(args, run, run_id, stats, started) or status
 
 
 def main(argv: list[str] | None = None) -> int:

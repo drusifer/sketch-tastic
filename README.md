@@ -163,6 +163,29 @@ with a `run:` header: `id`, `started`, `finished` (UTC), `source`, `events`, `sk
 never overwrites an old run file. History is always on; a run with `-o`, or one that writes
 nothing, leaves no run file and uses up no run id. Nothing is pruned.
 
+### Duplicate protection
+
+If your events carry a number that only grows (an event id, an offset), name it in the profile:
+
+```yaml
+sequence: $.id
+```
+
+The set then keeps the highest sequence merged so far (`sequence: {path: $.id, max: 34541893465}`)
+and every later run drops events at or below it, so running twice over the same file, or over
+files that overlap, adds nothing twice:
+
+```
+  dropped: 180387 events already merged (sequence ≤ 34541893465)
+```
+
+Events are compared with the mark as it stood when the run started, so events slightly out of
+order within one run are all kept (and duplicates within one run are not caught). Numbers and
+numeric strings work. An event whose sequence is missing, not a number, or selected more than
+once is reported as a skipped line (exit status `1`). The run file's header records the range
+merged, `sequence: {min, max}`. Changing the profile's `sequence` path makes the next run ignore
+the old mark and say so.
+
 ### Check a profile
 
 ```

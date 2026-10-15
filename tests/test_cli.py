@@ -748,3 +748,85 @@ class HistoryTests(CliTestCase):
         self.fingerprint(events)
         today = datetime.now(UTC).strftime("%y%m%d")
         self.assertEqual(self.load_set()["last_run"], f"{today}-0002")
+
+
+class SequenceTests(CliTestCase):
+    """Events at or below the set's sequence mark are dropped (FING-50)."""
+
+    def setUp(self):
+        super().setUp()
+        self.profile = self.write("seq.yaml", PROFILE + "sequence: $.id\n")
+
+    def events(self, name, ids, kind="a"):
+        return self.write_events(name, [{"id": i, "kind": kind, "size": 1} for i in ids])
+
+    def total_count(self, data):
+        return sum(rec["meta"]["count"] for rec in data["fingerprints"].values())
+
+    def test_first_run_records_the_highest_sequence(self):
+        code, _, err = self.fingerprint(self.events("one.jsonl", [3, 1, 5, 2]))
+        self.assertEqual(code, 0)
+        self.assertEqual(self.load_set()["sequence"], {"path": "$.id", "max": 5})
+        self.assertIn("  dropped: 0 events already merged (no earlier mark)", err)
+
+    def test_events_at_or_below_the_mark_are_dropped(self):
+        self.fingerprint(self.events("one.jsonl", [1, 2, 3, 4, 5]))
+        code, _, err = self.fingerprint(self.events("two.jsonl", [3, 5, 6, 8]))
+        self.assertEqual(code, 0)
+        self.assertIn("4 events read", err)
+        self.assertIn("  dropped: 2 events already merged (sequence ≤ 5)", err)
+        merged = self.load_set()
+        self.assertEqual((self.total_count(merged), merged["sequence"]["max"]), (7, 8))
+        history = os.path.join(self.dir, "set.history")
+        run = self.load_set(os.path.join(history, sorted(os.listdir(history))[-1]))
+        self.assertEqual(self.total_count(run), 2)  # only 6 and 8
+        self.assertEqual(run["run"]["sequence"], {"min": 6, "max": 8})
+
+    def test_rerun_over_the_same_input_adds_nothing(self):
+        events = self.events("one.jsonl", ["10", "11", "12"])  # numeric strings count
+        self.fingerprint(events)
+        before = self.load_set()
+        code, _, err = self.fingerprint(events)
+        self.assertEqual(code, 0)
+        self.assertIn("  dropped: 3 events already merged (sequence ≤ 12)", err)
+        after = self.load_set()
+        self.assertEqual(self.total_count(after), self.total_count(before))
+        history = os.path.join(self.dir, "set.history")
+        run = self.load_set(os.path.join(history, sorted(os.listdir(history))[-1]))
+        self.assertNotIn("sequence", run["run"])  # nothing merged in this run
+
+    def test_event_without_a_usable_sequence_is_a_line_error(self):
+        lines = [
+            {"kind": "a"},
+            {"id": "abc", "kind": "a"},
+            {"id": True, "kind": "a"},
+            {"id": 7, "kind": "a"},
+        ]
+        code, _, err = self.fingerprint(self.write_events("bad.jsonl", lines))
+        self.assertEqual(code, 1)
+        for lineno in (1, 2, 3):
+            self.assertIn(f"fingerprint: line {lineno}: no usable sequence at $.id - skipped", err)
+        self.assertIn("skipped: 3 malformed lines", err)
+        self.assertEqual(self.total_count(self.load_set()), 1)
+
+    def test_changed_sequence_path_ignores_the_old_mark(self):
+        self.fingerprint(self.events("one.jsonl", [1, 2, 3]))
+        data = self.load_set()
+        data["sequence"]["path"] = "$.old"
+        with open(self.set_path, "w") as f:
+            yaml.safe_dump(data, f)
+        _, _, err = self.fingerprint(self.events("two.jsonl", [2]))
+        self.assertIn(
+            "fingerprint: sequence path changed ($.old -> $.id); previous mark ignored", err
+        )
+        self.assertEqual(self.load_set()["sequence"], {"path": "$.id", "max": 2})
+
+    def test_profile_without_sequence_keeps_the_mark_and_drops_nothing(self):
+        self.fingerprint(self.events("one.jsonl", [1, 2, 3]))
+        plain = self.write("plain.yaml", PROFILE)
+        _, _, err = self.run_cli(
+            "merge", "-p", plain, "-s", self.set_path, self.events("two.jsonl", [1])
+        )
+        self.assertNotIn("dropped:", err)
+        merged = self.load_set()
+        self.assertEqual((self.total_count(merged), merged["sequence"]["max"]), (4, 3))

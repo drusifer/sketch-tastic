@@ -59,7 +59,7 @@ class _Numeric(Aggregator):
     """Uses numbers and numeric strings only."""
 
     def accept(self, _state: Any, value: Any) -> Any:
-        number = _as_number(value)
+        number = as_number(value)
         return SKIP if number is None else number
 
 
@@ -73,7 +73,7 @@ class _Ordered(Aggregator):
     """Uses numbers (and numeric strings), dates, datetimes or text; one kind, not a mix."""
 
     def accept(self, state: Any, value: Any) -> Any:
-        number = _as_number(value)
+        number = as_number(value)
         if number is not None:
             value = number
         elif not isinstance(value, (str, date)):
@@ -173,7 +173,7 @@ class Size(Op):
         return len(text.encode("utf-8"))
 
 
-def _as_number(value: Any) -> int | float | None:
+def as_number(value: Any) -> int | float | None:
     """Coerce to a finite number, or None if `value` isn't one (bools are not numbers)."""
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         return None
