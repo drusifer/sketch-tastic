@@ -54,6 +54,13 @@ class Aggregator(Rule):
         """Return the new state after `value`; `state` is EMPTY before the first value."""
         raise NotImplementedError
 
+    def merge(self, state: Any, later: Any) -> Any:
+        """The state after folding everything `state` saw, then everything `later` saw.
+
+        Neither is EMPTY. Folding a stream in parts and merging equals folding it whole.
+        """
+        raise NotImplementedError
+
 
 class _Numeric(Aggregator):
     """Uses numbers and numeric strings only."""
@@ -82,6 +89,11 @@ class _Ordered(Aggregator):
             return SKIP
         return value
 
+    def merge(self, state: Any, later: Any) -> Any:
+        if _kind(state) != _kind(later):  # one kind, not a mix: the first kind seen stays
+            return state
+        return self.fold(state, later)
+
 
 @dataclass(frozen=True, kw_only=True)
 class Sum(_Numeric):
@@ -89,6 +101,9 @@ class Sum(_Numeric):
 
     def fold(self, state: Any, value: Any) -> Any:
         return value if state is EMPTY else state + value
+
+    def merge(self, state: Any, later: Any) -> Any:
+        return state + later
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -116,6 +131,10 @@ class Avg(_Numeric):
         total, count = total + value, count + 1
         return {"avg": total / count, "sum": total, "count": count}
 
+    def merge(self, state: Any, later: Any) -> Any:
+        total, count = state["sum"] + later["sum"], state["count"] + later["count"]
+        return {"avg": total / count, "sum": total, "count": count}
+
 
 @dataclass(frozen=True, kw_only=True)
 class Count(Aggregator):
@@ -123,6 +142,9 @@ class Count(Aggregator):
 
     def fold(self, state: Any, _value: Any) -> Any:
         return 1 if state is EMPTY else state + 1
+
+    def merge(self, state: Any, later: Any) -> Any:
+        return state + later
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -134,7 +156,10 @@ class First(Aggregator):
 
     def fold(self, state: Any, value: Any) -> Any:
         samples = [] if state is EMPTY else state
-        return samples if len(samples) >= self.n else [*samples, value]
+        return samples if len(samples) >= self.n else [*samples, copy.deepcopy(value)]
+
+    def merge(self, state: Any, later: Any) -> Any:
+        return [*state, *later][: self.n]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -146,7 +171,10 @@ class Last(Aggregator):
 
     def fold(self, state: Any, value: Any) -> Any:
         samples = [] if state is EMPTY else state
-        return [*samples, value][-self.n :]
+        return [*samples, copy.deepcopy(value)][-self.n :]
+
+    def merge(self, state: Any, later: Any) -> Any:
+        return [*state, *later][-self.n :]
 
 
 class Op(Rule):
@@ -188,17 +216,6 @@ def as_number(value: Any) -> int | float | None:
     return value if math.isfinite(value) else None
 
 
-def _copy(value: Any) -> Any:
-    """A deep copy, fast for parsed JSON (dicts, lists, scalars); deepcopy for anything else."""
-    if isinstance(value, dict):
-        return {key: _copy(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_copy(item) for item in value]
-    if value is None or value is MISSING or isinstance(value, (str, int, float, date)):
-        return value  # immutable (datetime is a date)
-    return copy.deepcopy(value)
-
-
 @dataclass(frozen=True)
 class Aggregate:
     """Track `fn` over the values `path` selects (or what `op` makes of them), stored under `key`.
@@ -228,32 +245,15 @@ class Aggregate:
         object.__setattr__(self, "fn", functions)
 
     def update(self, states: dict, event: Any) -> int:
-        """Fold one event into `states[self.key]`. Returns how many values were skipped."""
-        return self.fold_values(states, self.select(event))
-
-    def select(self, event: Any, copies: dict[int, Any] | None = None) -> list[Any]:
-        """What this aggregate folds from `event`: a copy of each selected value after `op` or
-        `type`, so stored samples never alias the caller's event. Pass the same `copies` to
-        every aggregate reading one event, and a value two of them select is copied once.
-        """
-        values = self.path.values(event)
-        values = [self.op.apply(v) for v in values] if self.op else typed_values(values, self.type)
-        copies = {} if copies is None else copies
-        result = []
-        for value in values:
-            if id(value) not in copies:
-                copies[id(value)] = (_copy(value), value)  # keep value alive: ids stay unique
-            result.append(copies[id(value)][0])
-        return result
-
-    def fold_values(self, states: dict, values: list[Any]) -> int:
-        """Fold `select`'s values into `states[self.key]`. Returns how many were skipped.
+        """Fold one event into `states[self.key]`. Returns how many values were skipped.
 
         With one function the state is stored directly (`count: 12`); with several it is a
         map by function name (`{SUM: .., MAX: ..}`). A path that selects nothing is not a skip:
         one is counted per selected value that one of its functions could not use.
         """
+        values = self.path.values(event)
         skipped = 0
+        values = [self.op.apply(v) for v in values] if self.op else typed_values(values, self.type)
         for value in values:
             if value is MISSING:  # did not convert to the declared type
                 skipped += 1
@@ -268,6 +268,22 @@ class Aggregate:
                     self.store(states, function, function.fold(state, accepted))
             skipped += unusable
         return skipped
+
+    def merge(self, states: dict, later: dict) -> None:
+        """Merge `later[self.key]` (folded after `states`) into `states[self.key]`."""
+        if self.key not in later:
+            return
+        if self.key not in states:
+            states[self.key] = later[self.key]
+            return
+        for function in self.fn:
+            after = self._state(later, function)
+            if after is EMPTY:
+                continue
+            before = self._state(states, function)
+            self.store(
+                states, function, after if before is EMPTY else function.merge(before, after)
+            )
 
     def _state(self, states: dict, function: Aggregator) -> Any:
         if len(self.fn) == 1:

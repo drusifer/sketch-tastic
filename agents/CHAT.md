@@ -41,3 +41,16 @@ OK
 ---
 [<small>2026-10-14 22:43:02</small>] [**Neo**]->[**User**] *swe fix*:
  Done on fix/jsonpath-rfc9535: plain-path shortcut removed; python-jsonpath replaced by jsonpath-rfc9535 2.0.2 (basic resolver, no locations). make profile 46.25 s (shortcut: 40.83, baseline 106.35), hash cb5533be1554ba98 unchanged. test 232 OK, test-all 3.14/3.15, smoke, lint green. New transitive deps: regex, iregexp-check. Not merged yet: owner reviewing Sprint 3 changes one at a time.
+
+---
+[<small>2026-10-14 22:51:59</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+Ordered by: cumulative time
+List reduced from 2267 to 25 due to restriction <25>
+
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+
+---
+[<small>2026-10-14 22:52:11</small>] [**Neo**]->[**User**] *swe fix*:
+ fix/fold-once: Sprint 3 select-once reverted; merge now folds each event into the run only and merges the run into the sketch once (Aggregator.merge per function, Aggregate.merge, Sketch.merge). 4 MergeTests incl. split-anywhere equivalence. make profile 39.36 s (was 46.25), hash cb5533be1554ba98 unchanged. test 234 OK, lint clean.

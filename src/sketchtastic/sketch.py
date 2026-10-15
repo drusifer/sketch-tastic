@@ -8,6 +8,7 @@ aggregators, so the sketch works for any event stream, not just eBPF telemetry.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import os
 import tempfile
@@ -69,9 +70,9 @@ def builtin_aggregates() -> tuple[Aggregate, ...]:
     return tuple(Aggregate(**raw) for raw in yaml.safe_load(text)["aggregates"])
 
 
-def _fold(aggregates: Sequence[Aggregate], states: dict[str, Any], selected: list[list]) -> int:
-    """Fold each aggregate's selected values into its state. Returns how many were skipped."""
-    return sum(a.fold_values(states, values) for a, values in zip(aggregates, selected))
+def _fold(aggregates: Sequence[Aggregate], states: dict[str, Any], event: Any) -> int:
+    """Fold `event` into each aggregate's state. Returns how many values were skipped."""
+    return sum(aggregate.update(states, event) for aggregate in aggregates)
 
 
 class Sketch:
@@ -94,38 +95,41 @@ class Sketch:
         self.run: dict[str, Any] | None = None
         """Header of a run file (STORY-FING-48): what one run read. Saved if set; never loaded."""
 
-    def select(self, record: Any, run: str | None = None) -> tuple[list[list], list[list]]:
-        """What the aggregates read from `record`, for `upsert(selected=...)`.
+    def upsert(self, tokens: dict[str, str], record: Any, run: str | None = None) -> str:
+        """Fold one record into the sketch. Returns its skit_id.
 
         The profile's aggregates read the record. The built-in ones read an envelope,
         {"meta": {"run": run}, "record": record}, so injected fields never clash with the
         record's own; `run` is the id of the run reading it.
         """
-        envelope = {"meta": {"run": run}, "record": record}
-        copies: dict[int, Any] = {}  # FIRST and LAST both select the whole envelope
-        return (
-            [aggregate.select(record, copies) for aggregate in self._aggregates],
-            [aggregate.select(envelope, copies) for aggregate in builtin_aggregates()],
-        )
-
-    def upsert(
-        self,
-        tokens: dict[str, str],
-        record: Any,
-        run: str | None = None,
-        selected: tuple[list[list], list[list]] | None = None,
-    ) -> str:
-        """Fold one record into the sketch. Returns its skit_id.
-
-        `selected` is `select(record, run)` from a sketch with the same aggregates, so one
-        selection can feed several sketches (the sketch and its run file); computed if omitted.
-        """
         fid = skit_id(tokens)
         skit = self._records.setdefault(fid, Skit(dict(tokens)))
-        profile_values, builtin_values = selected or self.select(record, run)
-        self.skipped_values += _fold(self._aggregates, skit.aggregates, profile_values)
-        _fold(builtin_aggregates(), skit.meta, builtin_values)
+        envelope = {"meta": {"run": run}, "record": record}
+        self.skipped_values += _fold(self._aggregates, skit.aggregates, record)
+        _fold(builtin_aggregates(), skit.meta, envelope)
         return fid
+
+    def merge(self, later: Sketch) -> None:
+        """Fold `later` (a sketch of events that came after this one's) into this sketch.
+
+        The result equals folding both streams' events one by one (each aggregate function
+        merges its state), except that a MIN/MAX of a different kind from this sketch's keeps
+        this sketch's value without counting `later`'s values as skipped. Merged skits are
+        copies: `later` can change afterwards without changing this sketch.
+        """
+        if later._aggregates != self._aggregates:
+            raise SketchError("cannot merge sketches with different aggregates")
+        for fid, skit in later._records.items():
+            skit = copy.deepcopy(skit)
+            mine = self._records.get(fid)
+            if mine is None:
+                self._records[fid] = skit
+                continue
+            for aggregate in self._aggregates:
+                aggregate.merge(mine.aggregates, skit.aggregates)
+            for aggregate in builtin_aggregates():
+                aggregate.merge(mine.meta, skit.meta)
+        self.skipped_values += later.skipped_values
 
     def get(self, skit_id_: str) -> Skit | None:
         return self._records.get(skit_id_)

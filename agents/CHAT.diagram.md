@@ -14,4 +14,6 @@ sequenceDiagram
     Note right of User: "Revert the plain-path<br/>shortcut, replace<br/>python-jsonpath with<br/>jsonpath-rfc9535 2.0<br/>(basic strategy).<br/>Standard RFC 9535 only,<br/>no special synt…"
     Neo->>User: "swe fix"
     Note right of Neo: "Done on fix/jsonpath-<br/>rfc9535: plain-path<br/>shortcut removed,<br/>python-jsonpath replaced<br/>by jsonpath-rfc9535<br/>2.0.2 (basic resolver,<br/>no locations…"
+    Neo->>User: "swe fix"
+    Note right of Neo: "fix/fold-once: Sprint 3<br/>select-once reverted,<br/>merge now folds each<br/>event into the run only<br/>and merges the run into<br/>the sketch once<br/>(Aggrega…"
 ```

@@ -455,43 +455,61 @@ class VocabularyTests(unittest.TestCase):
             self.assertNotIn("fingerprints", data)
 
 
-class SelectOnceTests(unittest.TestCase):
-    """One selection per event feeds several sketches (STORY-SKT-05, D3-D4)."""
+class MergeTests(unittest.TestCase):
+    """Fold a run into its own sketch, then merge it once (fold once, then merge)."""
 
     AGGREGATES = (
-        Aggregate("size", "$.size", ["SUM", "MAX"]),
-        Aggregate("when", "$.at", "MIN", type="DATETIME"),
-        Aggregate("samples", "$", {"name": "LAST", "n": 2}),
+        Aggregate("n", "$.n", ["SUM", "COUNT", "MIN", "MAX", "AVG"]),
+        Aggregate("word", "$.word", ["MIN", "MAX"]),
+        Aggregate("first", "$.n", {"name": "FIRST", "n": 2}),
+        Aggregate("last", "$.n", {"name": "LAST", "n": 2}),
     )
-    EVENTS = (
-        {"k": "a", "size": 3, "at": "2026-10-14T10:00:00Z"},
-        {"k": "a", "size": "x", "at": "nope"},
-        {"k": "b", "size": 5},
-    )
+    EVENTS = [
+        ({"k": "a"}, {"n": 4, "word": "pear"}),
+        ({"k": "a"}, {"n": 1}),
+        ({"k": "b"}, {"n": 7, "word": "fig"}),
+        ({"k": "a"}, {"n": 9, "word": "apple"}),
+        ({"k": "c"}, {"word": "kiwi"}),
+        ({"k": "b"}, {"n": "x"}),
+        ({"k": "a"}, {"n": 2}),
+    ]
 
-    def test_upsert_with_a_selection_equals_upsert_with_the_record(self):
-        direct, selected = Sketch(self.AGGREGATES), Sketch(self.AGGREGATES)
-        for event in self.EVENTS:
-            tokens = {"k": event["k"]}
-            direct.upsert(tokens, event, run="261014-0001")
-            selection = selected.select(event, "261014-0001")
-            selected.upsert(tokens, event, run="261014-0001", selected=selection)
-        self.assertEqual(list(direct), list(selected))
-        for fid in direct:
-            self.assertEqual(direct.get(fid), selected.get(fid))
-        self.assertEqual(direct.skipped_values, selected.skipped_values)
-        self.assertEqual(direct.skipped_values, 2)  # size "x" (not a number), at "nope" (no date)
+    def fold(self, events, run_id):
+        sketch = Sketch(self.AGGREGATES, profile_id="p")
+        for tokens, record in events:
+            sketch.upsert(tokens, record, run=run_id)
+        return sketch
 
-    def test_saved_sketch_has_no_yaml_aliases(self):
-        sketch, run = Sketch(self.AGGREGATES), Sketch(self.AGGREGATES)
-        event = {"k": "a", "size": 1, "nested": {"deep": [1, 2]}}
-        selection = sketch.select(event, "261014-0001")
-        for target in (sketch, run):
-            target.upsert({"k": "a"}, event, run="261014-0001", selected=selection)
-        with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, "s.yaml")
-            sketch.save(path)
-            with open(path) as f:
-                text = f.read()
-        self.assertNotIn("&id", text)
-        self.assertNotIn("*id", text)
+    def test_merging_runs_equals_folding_every_event(self):
+        for split in range(len(self.EVENTS) + 1):
+            with self.subTest(split=split):
+                expected = self.fold(self.EVENTS[:split], "r1")
+                for tokens, record in self.EVENTS[split:]:
+                    expected.upsert(tokens, record, run="r2")
+                sketch = self.fold(self.EVENTS[:split], "r1")
+                sketch.merge(self.fold(self.EVENTS[split:], "r2"))
+                self.assertEqual(list(sketch), list(expected))
+                for fid in expected:
+                    self.assertEqual(sketch.get(fid), expected.get(fid))
+                self.assertEqual(sketch.skipped_values, expected.skipped_values)
+
+    def test_merge_into_an_empty_sketch_equals_the_run(self):
+        run = self.fold(self.EVENTS, "r1")
+        sketch = Sketch(self.AGGREGATES, profile_id="p")
+        sketch.merge(run)
+        self.assertEqual(list(sketch), list(run))
+        for fid in run:
+            self.assertEqual(sketch.get(fid), run.get(fid))
+
+    def test_merged_skits_do_not_alias_the_run(self):
+        run = self.fold(self.EVENTS[:1], "r1")
+        sketch = Sketch(self.AGGREGATES, profile_id="p")
+        sketch.merge(run)
+        fid = skit_id({"k": "a"})
+        run.get(fid).aggregates["last"].append(99)
+        self.assertEqual(sketch.get(fid).aggregates["last"], [4])
+
+    def test_aggregates_must_match(self):
+        sketch = Sketch(self.AGGREGATES, profile_id="p")
+        with self.assertRaises(SketchError):
+            sketch.merge(Sketch(self.AGGREGATES[:1], profile_id="p"))

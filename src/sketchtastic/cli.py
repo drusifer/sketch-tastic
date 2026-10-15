@@ -415,18 +415,15 @@ def _sequencer(profile: Profile, sketch: Sketch) -> _Sequencer | None:
 def _fold_stream(
     lines: Iterable[str],
     profile: Profile,
-    sketch: Sketch,
     run: Sketch,
+    run_id: str,
     sequencer: _Sequencer | None = None,
 ) -> dict:
-    """Fold each JSONL line into `sketch` and into `run` (this run only).
+    """Fold each JSONL line into `run` (this run only), recording `run_id` as where it was seen.
 
-    Both record the run's id (`sketch.last_run`) as where each event was seen. With a
-    `sequencer`, events already merged are dropped, and an event without a usable sequence
-    fails the run (_NotWritten). Returns run statistics.
+    With a `sequencer`, events already merged are dropped, and an event without a usable
+    sequence fails the run (_NotWritten). Returns run statistics.
     """
-    known_before = set(sketch)
-    seen: set[str] = set()
     events = skipped_lines = 0
 
     def warn(lineno: int, reason: str) -> None:
@@ -458,16 +455,11 @@ def _fold_stream(
         events += 1
         if sequence is DROP:
             continue
-        tokens = profile.tokens(event)
-        selected = sketch.select(event, sketch.last_run)  # once for both: the paths cost most
-        run.upsert(tokens, event, sketch.last_run, selected)
-        seen.add(sketch.upsert(tokens, event, sketch.last_run, selected))
+        run.upsert(profile.tokens(event), event, run_id)
 
     return {
         "events": events,
         "skipped_lines": skipped_lines,
-        "new": len(seen - known_before),
-        "updated": len(seen & known_before),
         **(sequencer.stats() if sequencer else {}),
     }
 
@@ -619,7 +611,11 @@ def _cmd_merge(args: argparse.Namespace) -> int:
         run = Sketch(profile.aggregates, profile.profile_id)
         sequencer = _sequencer(profile, sketch)
         with _open_events(args) as stream:
-            stats = _fold_stream(stream, profile, sketch, run, sequencer)
+            stats = _fold_stream(stream, profile, run, run_id, sequencer)
+        known_before = set(sketch)
+        sketch.merge(run)  # fold once, into the run; merge it once
+        stats["new"] = len(set(run) - known_before)
+        stats["updated"] = len(set(run) & known_before)
         if sequencer:
             sketch.sequence = sequencer.new_mark()
         try:

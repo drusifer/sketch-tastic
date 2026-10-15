@@ -39,3 +39,13 @@ a resolver that tracks no locations.
 evaluation ~19 s of profiled time (146 s with python-jsonpath). Profiles must use RFC 9535 syntax
 only. New transitive runtime dependencies: `regex` and `iregexp-check` (for I-Regexp in
 `match()`/`search()`).
+
+**Decision (owner, 2026-10-14, after Sprint 3):** `merge` folds each event once, into the run, and
+then merges the run into the sketch once (`Sketch.merge`; each aggregate function has a `merge`
+of two states). This replaces Sprint 3's select-once/`upsert(selected=)` change and its
+JSON-specific copy, which are removed; FIRST/LAST keep `copy.deepcopy`.
+**Consequences:** `make profile` 39.36 s, same sketch (46.25 s with select-once). Merging is
+exact for SUM, COUNT, MIN, MAX, AVG (from stored sum and count), FIRST and LAST; with floats a
+different summation order can change the last digits. A MIN/MAX value of another kind than the
+sketch's keeps the sketch's value and is not counted as skipped. `Sketch.merge` is also the base
+for sketch-to-sketch merge (backlog).
