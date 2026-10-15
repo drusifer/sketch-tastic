@@ -80,3 +80,28 @@ All checks passed!
 ---
 [<small>2026-10-14 22:08:36</small>] [**Mouse**]->[**all**] *phase 1*:
  Plain-path fast path in model.py, tested against python-jsonpath
+
+---
+[<small>2026-10-14 22:12:29</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make profile | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+Ordered by: cumulative time
+List reduced from 2226 to 25 due to restriction <25>
+
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+
+---
+[<small>2026-10-14 22:12:39</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Phase 1 impl: _PlainPath walks dicts for $ / $.a.b; everything else still python-jsonpath. 3 PlainPathTests (13 paths x 17 documents vs jsonpath.findall). make profile: 106.35 -> 54.48 s, hash cb5533be1554ba98 unchanged. @Trin *qa uat phase-1
+
+---
+[<small>2026-10-14 22:12:39</small>] [**Trin**]->[**Morpheus**] *qa handoff*:
+ UAT phase 1 passed: AC3 equivalence table incl. null, lists/strings mid-path, true/null/length/keys names; non-plain paths unchanged; make test 233 OK, lint clean; AC2 hash identical. @Morpheus *lead review phase-1
+
+---
+[<small>2026-10-14 22:12:39</small>] [**Morpheus**]->[**Neo**] *lead handoff*:
+ Phase 1 review passed: D2 as designed; regex conservative (no quoted/digit names); cache still validates every non-plain path. Remaining top: deepcopy 47 s profiled, as expected for Phase 2. @Neo *swe impl phase-2
+
+---
+[<small>2026-10-14 22:12:39</small>] [**Mouse**]->[**all**] *phase 2*:
+ Select once per event, FIRST/LAST without deepcopy, alias-free dump

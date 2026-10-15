@@ -14,7 +14,8 @@ sequenceDiagram
     participant Smith
     participant Morpheus
     participant Neo
-    Note over User,Neo: 📅 2026-10-14
+    participant Trin
+    Note over User,Trin: 📅 2026-10-14
     User->>All: "request"
     Note right of User: "push it"
     Tank->>All: "devops push"
@@ -39,4 +40,12 @@ sequenceDiagram
     Note right of Tank: "Phase 0 done: make<br/>profile (timed run +<br/>sketch hash + cProfile<br/>top 25 to build/profile/<br/>profile.txt), download<br/>shared with gharchive,<br/>clean…"
     Mouse->>All: "phase 1"
     Note right of Mouse: "Plain-path fast path in<br/>model.py, tested against<br/>python-jsonpath"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 1 impl: _PlainPath<br/>walks dicts for $ /<br/>$.a.b, everything else<br/>still python-jsonpath. 3<br/>PlainPathTests (13 paths<br/>x 17 documents vs jso…"
+    Trin->>Morpheus: "qa handoff"
+    Note right of Trin: "UAT phase 1 passed: AC3<br/>equivalence table incl.<br/>null, lists/strings mid-<br/>path,<br/>true/null/length/keys<br/>names, non-plain paths<br/>unchanged, make…"
+    Morpheus->>Neo: "lead handoff"
+    Note right of Morpheus: "Phase 1 review passed:<br/>D2 as designed, regex<br/>conservative (no<br/>quoted/digit names),<br/>cache still validates<br/>every non-plain path.<br/>Remaining to…"
+    Mouse->>All: "phase 2"
+    Note right of Mouse: "Select once per event,<br/>FIRST/LAST without<br/>deepcopy, alias-free<br/>dump"
 ```
