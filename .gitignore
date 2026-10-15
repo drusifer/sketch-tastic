@@ -222,3 +222,6 @@ __marimo__/
 # Bob Protocol / via — machine-local config and index, not portable
 .mcp.json
 .via/
+
+# Downloaded example data (make gharchive); removed by make clean
+data/

@@ -40,3 +40,23 @@ packages = ["src/fingerprint_sampler"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "examples", "README.md", "LICENSE"]
+
+[dependency-groups]
+# Development tools; installed by `make install` (uv sync), never shipped.
+dev = [
+    "radon>=6.0.1",
+    "ruff>=0.6",
+    "vulture>=2.16",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+# agents/ is BobProtocol tooling, maintained in its own repository. Markdown is excluded so
+# hand-aligned code sketches in the docs are left alone.
+extend-exclude = ["agents", "*.md"]
+
+[tool.ruff.lint]
+# Baseline gate: real errors (pyflakes, syntax/runtime-level pycodestyle) and import order.
+# Kept explicit so a ruff upgrade cannot silently widen the gate.
+select = ["E4", "E7", "E9", "F", "I"]

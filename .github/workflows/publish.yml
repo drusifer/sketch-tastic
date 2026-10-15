@@ -1,0 +1,33 @@
+# Publishes the package to PyPI when a version tag (v<version>) is pushed.
+# Uses PyPI trusted publishing: no token is stored anywhere. One-time setup is described in
+# docs/SDLC.md section 8. Only the project owner pushes tags.
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: build + publish to PyPI
+    needs: gates
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # required for trusted publishing
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Tag must match the package version
+        run: make release-check TAG="${GITHUB_REF_NAME}"
+      - run: make build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
