@@ -80,3 +80,67 @@ OK
 ---
 [<small>2026-10-15 09:59:30</small>] [**Mouse**]->[**User**] *handoff*:
  Prepared for a context clear: Mouse/Neo/Morpheus state and task.md updated (pipeline, profile-order rules, measurements, owner rules, backlog incl. profile evolution). No sprint in flight; main pushed at 636243e. Next: owner picks sprint-5 (STORY-SKT-08).
+
+---
+[<small>2026-11-17 19:50:28</small>] [**User**]->[**all**] *request*:
+ PyPI packaging with bob-protocol Init; corrected target is sketch-tastic, not fingerling.
+
+---
+[<small>2026-11-17 19:50:36</small>] [**Tank**]->[**all**] *devops init*:
+ Initialized Tank for sketch-tastic PyPI packaging. Why: packaging and trusted-publishing configuration already exist; reconcile their current state before release work.
+
+---
+[<small>2026-11-17 19:50:51</small>] [**Tank**]->[**Morpheus**] *handoff*:
+ Initialization complete in sketch-tastic. Existing Hatchling packaging, build/smoke/release-check targets and trusted-publishing workflow found. External publisher/environment setup remains unverified. Why: establish the actual starting point. @Morpheus *lead plan PyPI readiness work from this inventory when requested.
+
+---
+[<small>2026-11-17 19:53:44</small>] [**User**]->[**all**] *request*:
+ pypi publishing please
+
+---
+[<small>2026-11-17 19:53:44</small>] [**Tank**]->[**all**] *devops init*:
+ Resuming PyPI publishing as Tank. Why: owner requested release; checking existing workflow, release version and external setup.
+
+---
+[<small>2026-11-17 19:54:15</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make build | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make build @ 2026-11-17 19:54:10 ===
+sketch-tastic 0.2.0
+sketch_tastic-0.2.0-py3-none-any.whl
+sketch_tastic-0.2.0.tar.gz
+
+---
+[<small>2026-11-17 19:54:31</small>] [**Tank**]->[**Tank**] *handoff*:
+ Release 0.2.0 build and tag-version check pass; GitHub pypi environment created. Awaiting owner pending publisher setup on PyPI. No tag pushed. Why: trusted publishing needs account configuration. @Tank *devops deploy after setup.
+
+---
+[<small>2026-11-17 19:59:40</small>] [**Tank**]->[**all**] *devops resume*:
+ Owner confirms PyPI publisher is pending; resuming authorized 0.2.0 publication. Why: account setup prerequisite is complete.
+
+---
+[<small>2026-11-17 20:01:33</small>] [**Tank**]->[**Tank**] *handoff*:
+ Published sketch-tastic 0.2.0: CI and trusted publishing succeeded (run 44212325102); PyPI wheel and sdist verified. No approval button needed. Why: record completed release. @Tank *devops await next task.
+
+---
+[<small>2026-11-18 00:48:39</small>] [**User**]->[**all**] *request*:
+ prep for clear
+
+---
+[<small>2026-11-18 00:48:39</small>] [**Tank**]->[**all**] *devops resume*:
+ Tank preparing cold-start handoff. Why: preserve completed PyPI release and outstanding local documentation changes before context clear.
+
+---
+[<small>2026-11-18 00:48:39</small>] [**Tank**]->[**Tank**] *handoff*:
+ Ready for context clear: 0.2.0 published and CI green; Tank state has release URL, exact resume steps and uncommitted-file inventory. No sprint active. Why: prevent duplicate publishing. @Tank *devops await owner task.
+
+---
+[<small>2026-11-18 00:49:23</small>] [**User**]->[**all**] *request*:
+ commit docs too please
+
+---
+[<small>2026-11-18 00:49:23</small>] [**Tank**]->[**all**] *devops resume*:
+ Tank preparing documentation commit. Why: owner requested saving release records and clear-session handoff in git.
+
+---
+[<small>2026-11-18 00:49:23</small>] [**Tank**]->[**Tank**] *handoff*:
+ Release docs reviewed and ready to commit with saved cold-start state. Why: preserve successful 0.2.0 publication; no package changes or test rerun needed. @Tank *devops await owner task.

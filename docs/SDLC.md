@@ -173,13 +173,13 @@ Both workflows call only `make` targets, so CI cannot drift from the local gates
 | `.github/workflows/ci.yml` | by hand only (`workflow_dispatch`), as in fingerling | Matrix over Python 3.14 and 3.15: `make install`, `make lint`, `make test`. Separate job: `make secrets` over the full history. |
 | `.github/workflows/publish.yml` | push of a tag `v*` | Reruns the CI gates; `make release-check`; `make build`; publishes `dist/` to PyPI by trusted publishing (no stored token). |
 
-Neither workflow has run in this repository yet. **Before the first tag**, the owner sets up a
-PyPI trusted publisher for this repository (`drusifer/sketch-tastic`, workflow `publish.yml`,
-environment `pypi`) and creates the `pypi` environment on GitHub. There is no deploy target.
+Release `v0.2.0` was published with owner authorization on 2026-11-17 (America/New_York).
+Trusted publishing is configured for `drusifer/sketch-tastic`, workflow `publish.yml`,
+environment `pypi`. The GitHub environment has no approval gate. Publish run `44212325102`
+passed all CI gates and published the wheel and sdist, verified on PyPI. There is no deploy target.
 
 ## 9. Known deviations
 
-- **CI and publishing are unexercised here** (section 8).
 - **`uv` and `gitleaks` are machine prerequisites**, not installed by `make install`.
 
 ## 10. Conformance check
@@ -206,7 +206,8 @@ None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`,
 `sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
 
 ---
-*Last verified: 2026-10-15 at Sprint 4 close (`*devops sdlc-check`), by Tank — from-clean
+*Last verified: 2026-11-17 by Tank for CI and trusted publishing (v0.2.0 successful).
+Last full conformance check: 2026-10-15 at Sprint 4 close (`*devops sdlc-check`), by Tank — from-clean
 `make distclean install lint test secrets build`, `make smoke` and `make test-all` (3.14, 3.15)
 green; `profile` target updated (all cores + `-j 1`, `PROFILE_ARGS`); no new dependency (libyaml
 ships in PyYAML's wheels); lockfile current; hooks set; workflows call existing targets only.*
