@@ -1,81 +1,48 @@
 <!--
-Research finding and technical spike template. Owned by all agents — see agents/templates/ARTIFACTS.md.
-Used for documenting research spikes, performance investigations, bug root-cause discoveries,
-and tool/library evaluations.
-Delete this comment AND the review rubric at the end (everything from RUBRIC-START to
-RUBRIC-END): the rubric belongs to the template, not to the document.
-Oracle reviews this at groom (or Morpheus during architecture/spike reviews) using the FINDING rubric.
+Research finding, technical spike, benchmark, evaluation, or root-cause record. Any persona may
+write one; see the spike/fix workflow for process. Remove this note and the check block when used.
 -->
-# Research Spike / Finding: {Short Descriptive Title}
+# Finding: {Question or discovery}
 
-*   **Date**: {YYYY-MM-DD}
-*   **Author**: {AgentName / Persona}
-*   **Tags**: `#{Category}` `#{Component}` `#{Persona}`
-*   **Status**: {Completed | Abandoned | Converted to Story/ADR}
+- **Type:** {Research | Spike | Benchmark | Tool evaluation | Root cause}
+- **Date / author:** {YYYY-MM-DD / persona}
+- **Status:** {Complete | Abandoned | Follow-up needed}
+- **Related work:** {story, issue, ADR, or N/A with reason}
 
----
+## Question and Context
 
-## 1. Objective & Hypothesis
+- **Question or objective:** {What uncertainty, defect, or risk was investigated?}
+- **Expected outcome / hypothesis** (when testable): {Expected result or N/A with reason}
+- **Trigger and scope:** {Why this mattered; what was and was not investigated}
+- **Timebox** (for a spike): {limit or omit}
 
-* **Primary Question:** {What specific, falsifiable question were we trying to answer?}
-* **Hypothesis:** *If we {approach / condition}, then {expected outcome}, which resolves {risk / issue}.*
-* **Timebox / Effort:** {e.g. 2 hours / 1 day / exploratory spike}
+## Method and Evidence
 
-## 2. Context & Investigation Setup
+{Describe the method. Include environment, versions, input, and relevant configuration when they affect the result.}
 
-* **Background:** {What triggered this investigation? Bug, performance bottleneck, or new technology evaluation?}
-* **Test Environment:** {OS, runtime version, hardware, specific branch/commit}
-* **Tools Used:** {Profiling tools, test harnesses, via, benchmark scripts}
+- **Sources / reproduction:** {Exact command and output, benchmark data, source citations, or file/issue links appropriate to this finding}
+- **Observed evidence:** {Results separated from interpretation}
 
-## 3. Observable Evidence & Findings
+## Alternatives (when relevant)
 
-{Concrete logs, terminal commands run, benchmark figures, or code traces that prove the finding. No speculation.}
-
-```bash
-# Reproduction command:
-{command run}
-```
-
-```text
-# Observed output / logs / metrics:
-{exact output or trace snippet}
-```
-
-## 4. Trade-offs & Evaluated Options
-
-| Approach Explored | Pros | Cons | Verdict |
+| Approach | Evidence-based benefit | Cost / limitation | Outcome |
 |---|---|---|---|
-| **Option A:** {e.g. In-memory cache} | {High speed, zero deps} | {Memory overhead on large sets} | {Recommended / Viable} |
-| **Option B:** {e.g. Disk-backed SQLite} | {Persistent, low RAM} | {Higher I/O latency} | {Rejected due to X} |
+| {Approach} | {Evidence} | {Evidence} | {Selected / rejected} |
 
-## 5. Decision & Downstream Action Items
+## Conclusion and Follow-up
 
-* **Answer to Research Question:** {Direct 1-2 sentence answer based on evidence}
-* **Recommendation:** {Proceed with Option X | Abandon approach | Pivot}
-* **Spike Code Cleanup:** {Confirm: All temporary PoC / spike code is discarded or kept strictly in throwaway scratch branches — not merged to production directly.}
-* **Follow-up Actions:**
-  * [ ] Create downstream User Story / Task: `{ID or description}`
-  * [ ] Record Architecture Decision Record: `{ADR-ID if architectural choice locked}`
+- **Conclusion:** {Direct answer supported by evidence}
+- **Recommendation:** {Proceed | Pivot | Stop | More investigation, with reason}
+- **Temporary code:** {Removed, isolated, or retained with location and owner}
+- **Actions:** {Action, owner, due/trigger, or None}
 
-## 6. References & Reproduction
+<!-- RUBRIC-START -->
+## Check — FINDING
 
-* **Affected Files:** `{path/to/relevant/file}`
-* **Specification / Documentation:** `{URL, standard section, or external issue link}`
-* **Reproduction Steps:** {Exact steps for another engineer to reproduce the finding}
-
-<!-- RUBRIC-START — for reviewers. Delete everything from here to RUBRIC-END when you turn this
-     template into a real document. -->
-## Appendix: Review rubric — FINDING
-
-Self-checked by author upon recording; reviewed by Oracle at groom (or Morpheus during technical spike review).
-Verdict line: `rubric FINDING: HYPO=_ EVID=_ TRADE=_ ACTN=_ REPR=_` (W, A or S).
-Any W rejects, naming the criterion and the fix. See `agents/templates/ARTIFACTS.md`.
-
-| Code | Criterion | Weak (W) | Acceptable (A) | Strong (S) |
-|---|---|---|---|---|
-| `HYPO` | Does it address a specific, falsifiable question or spike objective? | Broad or narrative topic ("investigated auth") without a clear question, hypothesis, or measurable goal. | States a focused research question and the expected outcome or hypothesis being tested. | Quantifies the target threshold or pass/fail criterion (e.g. "whether library X handles >10k req/s under 50ms latency"). |
-| `EVID` | Is the discovery backed by verifiable, reproducible data? | Claims an outcome or limitation without evidence, reproduction commands, logs, or code snippets ("it didn't work"). | Includes concrete evidence: exact commands run, log outputs, benchmark figures, or specific spec/file citations. | Provides a minimal reproduction snippet or test case that any team member can run immediately to verify the behavior. |
-| `TRADE` | Were viable alternatives compared objectively? *(Report n/a for pure bug triage)* | Evaluates only one approach in isolation or dismisses alternatives without documented reasons. | Compares at least two viable approaches in a tradeoffs matrix outlining concrete pros and cons. | Scores options against explicit project constraints (runtime footprint, dependency health, maintenance burden, licensing). |
-| `ACTN` | Does it deliver an unambiguous decision and next step? | Concludes with "more research needed" or observations without a decision; leaves spike prototype code in production path. | Delivers a clear decision (proceed, pivot, or abandon) and lists actionable follow-up items (stories or ADRs). | Explicitly confirms temporary spike/PoC code is discarded or isolated, with links to drafted user stories or ADRs. |
-| `REPR` | Can another engineer locate the affected components and environment? | Omits file paths, hardware details, library versions, or environment configuration needed to reproduce the finding. | Names the exact files, versions, and environment conditions where the finding was observed. | Documents exact environment configuration (OS, runtime flags, hardware pins) and links related specs or commits. |
+- [ ] **PASS** — The question/objective and scope identify what was investigated and why; a testable hypothesis is included when applicable.
+- [ ] **PASS** — Evidence is appropriate to the finding type, distinguishes observation from interpretation, and can be checked through a source, reproduction, or referenced record.
+- [ ] **PASS** — Relevant alternatives are compared with evidence, or the document explains why comparison does not apply.
+- [ ] **PASS** — The conclusion answers the question and follow-up actions have an owner, or explicitly state that none are needed.
+- [ ] **PASS** — Temporary code is removed or its location and disposition are explicit.
+- [ ] **FAIL** — Any required evidence, conclusion, or disposition is missing or contradictory; cite the gap and smallest correction.
 <!-- RUBRIC-END -->

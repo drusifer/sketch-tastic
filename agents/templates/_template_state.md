@@ -1,43 +1,35 @@
-# Agent State Template
+# Agent State
 
-Agents *must* use this for keeping their `state.md` file organized. One file, three sections — this is the only state a persona writes on exit and reads on entry.
+Keep this working-memory file current. Preserve exactly these three top-level sections; see the
+State Management Protocol in `.agents/skills/bob-protocol/SKILL.md` for entry and exit steps.
 
 ## Context
-> ## Recent Decisions
->
-> ## Key Findings
-> - {WHAT}:
->   - {WHY}
->
-> ## Important Notes
-> {EXTENSIVE Notes}
+- **Recent decisions:** {decision and reason, or None}
+- **Key findings:** {finding and why it matters, or None}
+- **Important notes:** {relevant durable context, or None}
 
 ## Current Task
-**Status:** Not started
-**Assigned to:** N/A
-**Started:** N/A
-
-### Task Description
-No active task
-
-### Progress
-- [ ] Not started
-
-### Blockers
-None
-
-### Oracle Consultations
-None yet
+- **Status:** {Not started | In progress | Waiting | Complete}
+- **Assigned to:** {persona}
+- **Started:** {YYYY-MM-DD or N/A}
+- **Description:** {one-sentence task, or No active task}
+- **Progress:** {completed work and remaining work}
+- **Blockers:** {blocker and needed action, or None}
+- **Consultations:** {persona and outcome, or None}
 
 ## Next Steps
-### Immediate Next Action
-None planned
-
-### Waiting On
-None
-
-### Planned Work
-- [ ] No planned work
+- **Immediate next action:** {one concrete action, or None}
+- **Waiting on:** {person/event, or None}
+- **Planned work:** {ordered actions, or None}
 
 ---
-*Last updated: [timestamp]*
+*Last updated: {YYYY-MM-DD}*
+
+<!-- RUBRIC-START -->
+## Check — STATE
+
+- [ ] **PASS** — The file has exactly the required Context, Current Task, and Next Steps sections.
+- [ ] **PASS** — Status, update date, and next action (or explicit None) reflect the current work state.
+- [ ] **PASS** — Blockers and waiting dependencies are named, or explicitly marked None.
+- [ ] **FAIL** — A required section is absent, stale, or leaves current work/next action ambiguous; update it before handoff.
+<!-- RUBRIC-END -->
