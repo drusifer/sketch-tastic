@@ -4,7 +4,7 @@ import copy
 import unittest
 from pathlib import Path
 
-from sketchtastic import load_profile
+from sketchtastic import Sketch, load_profile
 
 PREFIXES = ("images", "gallery", "media_images", "media_gallery")
 
@@ -100,6 +100,43 @@ class PostProfileTests(unittest.TestCase):
         }
         self.assertEqual(self.profile.tokens(a), self.profile.tokens(b))
         self.assertEqual(self.profile.tokens(a)["languages"], "en,fr")
+
+    def test_aggregates_fold_real_posts_without_changing_identity(self):
+        a = sample(1)
+        a.update(text="hi", createdAt="2026-11-20T12:00:00Z")
+        a["embed"]["images"][0]["image"]["size"] = 100
+        b = copy.deepcopy(a)
+        b.update(text="hello", createdAt="2026-11-20T14:00:00+01:00")
+        b["embed"]["images"][0]["image"]["size"] = 300
+        self.assertEqual(self.profile.tokens(a), self.profile.tokens(b))
+        sketch = Sketch(self.profile.aggregates, self.profile.profile_id)
+        key = sketch.upsert(self.profile.tokens(a), a)
+        sketch.upsert(self.profile.tokens(b), b)
+        agg = sketch.get(key).aggregates
+        self.assertEqual(agg["images_count"], 2)
+        self.assertEqual(agg["images_bytes"]["SUM"], 400)
+        self.assertEqual(agg["images_bytes"]["MIN"], 100)
+        self.assertEqual(agg["images_bytes"]["MAX"], 300)
+        self.assertEqual(agg["images_bytes"]["AVG"], {"avg": 200.0, "sum": 400, "count": 2})
+        self.assertEqual(agg["text_bytes"]["SUM"], 7)
+        self.assertEqual(agg["posted_at"]["MIN"].hour, 12)
+        self.assertEqual(agg["posted_at"]["MAX"].hour, 13)
+
+    def test_image_aggregates_exclude_other_gallery_items_and_unrecognized_embeds(self):
+        for quote in (False, True):
+            post = sample(1, gallery=True, quote=quote)
+            embed = post["embed"]["media"] if quote else post["embed"]
+            embed["items"][0]["image"]["size"] = 200
+            embed["items"].append({"$type": "video", "image": {"size": 900}})
+            prefix = "media_gallery" if quote else "gallery"
+            sketch = Sketch(self.profile.aggregates, self.profile.profile_id)
+            key = sketch.upsert(self.profile.tokens(post), post)
+            self.assertEqual(sketch.get(key).aggregates[prefix + "_count"], 1)
+            self.assertEqual(sketch.get(key).aggregates[prefix + "_bytes"]["SUM"], 200)
+            post["embed"]["$type"] = "unknown"
+            other = Sketch(self.profile.aggregates, self.profile.profile_id)
+            key = other.upsert(self.profile.tokens(post), post)
+            self.assertEqual(other.get(key).aggregates[prefix + "_count"], 0)
 
 
 if __name__ == "__main__":

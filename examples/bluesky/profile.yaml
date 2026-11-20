@@ -43,3 +43,33 @@ fields:
   - {key: facet_types, path: "$.facets[*].features[*]['$type']"}
   - {key: languages, path: "$.langs[*]"}
   - {key: labels, path: "$.labels.values[*].val"}
+
+# Summaries across observations in each skit; these never affect kind identity.
+aggregates:
+  - key: images_count
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.images'].images[*].image"
+    fn: COUNT
+  - key: images_bytes
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.images'].images[*].image.size"
+    fn: [SUM, MIN, MAX, AVG]
+  - key: gallery_count
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.gallery'].items[?@['$type'] == 'app.bsky.embed.gallery#image'].image"
+    fn: COUNT
+  - key: gallery_bytes
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.gallery'].items[?@['$type'] == 'app.bsky.embed.gallery#image'].image.size"
+    fn: [SUM, MIN, MAX, AVG]
+  - key: media_images_count
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.images'].images[*].image"
+    fn: COUNT
+  - key: media_images_bytes
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.images'].images[*].image.size"
+    fn: [SUM, MIN, MAX, AVG]
+  - key: media_gallery_count
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.gallery'].items[?@['$type'] == 'app.bsky.embed.gallery#image'].image"
+    fn: COUNT
+  - key: media_gallery_bytes
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.gallery'].items[?@['$type'] == 'app.bsky.embed.gallery#image'].image.size"
+    fn: [SUM, MIN, MAX, AVG]
+  - {key: text_bytes, path: $.text, op: SIZE, fn: [SUM, MIN, MAX, AVG]}
+  - {key: facet_features, path: "$.facets[*].features[*]", fn: COUNT}
+  - {key: posted_at, path: $.createdAt, type: DATETIME, fn: [MIN, MAX]}

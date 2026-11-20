@@ -1,5 +1,12 @@
 # Task Board
 
+## Follow-up: Bluesky aggregate summaries (2026-11-20)
+
+- [x] Native profile aggregates for typed image counts/bytes, text bytes, facet features and post times.
+- [x] Generic report displays aggregate values, including typed dates; no identity changes.
+- [x] 282 tests and lint pass; independent review approved; full capture rebuilt in
+  `data/bluesky-posts-aggs` (20,789 posts, 860 skits, original profile ID preserved).
+
 ## Sprint 6: Original post kinds and regression coverage
 
 **Status:** Complete — launched 2026-11-20; generic core reporting and original-post demo verified.

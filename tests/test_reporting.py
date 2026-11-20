@@ -195,6 +195,20 @@ class ReportingTests(unittest.TestCase):
             export_samples(self.path, output)
         self.assertFalse(output.exists())
 
+    def test_report_includes_numeric_and_datetime_aggregates_safely(self):
+        data = yaml.safe_load(self.path.read_text())
+        data["skits"][self.ids["common"]]["aggregates"] = {
+            "bytes": {"SUM": 400, "AVG": {"avg": 200, "sum": 400, "count": 2}},
+            "posted_at": {"MIN": datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)},
+            "unsafe\x1b": "value\x1b",
+        }
+        self.path.write_text(yaml.safe_dump(data, sort_keys=False))
+        output = report(self.path, limit=1)
+        self.assertIn('"SUM":400', output)
+        self.assertIn('"avg":200', output)
+        self.assertIn("2026-01-01", output)
+        self.assertNotIn("\x1b", output)
+
     def test_non_json_retained_value_reports_error_without_publishing(self):
         data = yaml.safe_load(self.path.read_text())
         data["skits"][self.ids["common"]]["meta"]["first"][0]["record"]["invalid"] = datetime.date(
