@@ -30,3 +30,18 @@ Next Steps: Oracle grooming and Smith live-capture UAT; no repeat tests absent c
 Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
 Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
 Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.
+
+## Sprint 6 scope checkpoint
+Context: generic report/export/coverage commands added to core package; Bluesky prepares original posts. No dependencies or targets added; SDLC optional-demo paragraph updated to describe actual commands.
+Current Task: verification pending; native image-count profile blocked on parser complexity/user guidance. Preserve ignored captured data before any clean target.
+Next Steps: complete core and post preparation gates, verify profile after guidance; update Last verified at conformance close. No release/push.
+
+## Sprint 6 final conformance
+Context: owner authorized split profile; default compiles and four states are tested. No dependency/toolchain changes; SDLC reflects core reporting and post-only example.
+Current Task: complete, 100%. From-clean distclean/install/lint/test/test-all/smoke/security-install/security-scan all passed. 279 tests each on Python 3.14/3.15, three wheel smokes, build and audits green. Captures preserved under build during clean and restored to data; venv excludes system packages; lock unchanged.
+Next Steps: Oracle final docs and Smith default live UAT then retro/launch/local merge. No push/version/release; do not rerun unchanged checks.
+
+## Sprint 6 final checkpoint — supersedes pending work above
+Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
+Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
+Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.

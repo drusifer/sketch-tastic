@@ -1,29 +1,28 @@
 # Agent State
 
 ## Context
-- Sprint 5 local ASCII Bluesky demo: finite enum categories, public metadata only, retained representative source data, no credentials/image downloads.
-- Design and implementation security gates clear. Reports: agents/switch/reviews/2026-11-19-sprint5-{design,implementation}.md.
-- Optional security dependency group adds pip-audit; uv.lock updated by uv. Five security Makefile targets added; staged gitleaks hook modernized and redacted. Parent/Tank owns SDLC updates.
-- gitleaks 8.26.0 installed, executable hook enabled with core.hooksPath=.githooks. No open findings or accepted risks.
+- Sprint 6 owner steering: reporting/export/coverage belong in generic core CLI for any profile/sketch. Bluesky adapter only unwraps/deduplicates original posts and prepares artifacts.
+- Local profile/baseline files are operator-controlled artifacts; public and regression JSONL are untrusted. No new dependency in reviewed changes.
+- Sprint 5 security tooling and redacted staged hook remain. No open security findings or accepted risks.
 
 ## Current Task
 - **Status:** Complete
 - **Assigned to:** Switch
-- **Started:** 2026-11-19
-- **Description:** Sprint 5 threat review, security tooling, scans and implementation assessment.
-- **Progress:** security-install, security-test-hook and security-scan passed. 67 historical commits no leaks; all frozen lockfile groups no known vulnerabilities; synthetic staged key rejected using alternate index. Reviewed capture/model/demo/profile and capture tests. Parent fixed output publication collision and persisted report labels.
-- **Blockers:** None.
-- **Consultations:** Neo applied publication reservation and enum validation; parent logs shared handoff and Tank documents targets. Trin owns final boundary/full-suite verification.
+- **Started:** 2026-11-20
+- **Description:** Sprint 6 design and implementation security review.
+- **Progress:** Both gates: No blocking findings. Reviewed generic reporting/CLI integration, bounded original-post input, fresh prepare/export publication and tests. No make runs or scans; root/QA owns final execution. Reports in agents/switch/reviews/2026-11-20-sprint6-*.md.
+- **Blockers:** Separate functional default-profile compilation blocker remains outside security clearance.
+- **Consultations:** Read-only Oracle consultation diagnosed installed JSONPath parser cumulative max_expression_depth=30; union branches do not reset counter. Suggested shorter independent profile fields. No files changed for that consultation.
 
 ## Next Steps
-- **Immediate next action:** Morpheus completes implementation review after Trin verification; parent posts Switch shared chat handoff.
-- **Waiting on:** None for security assessment.
-- **Planned work:** Re-review only if security-relevant application/dependency changes occur. Staged hook checks uncommitted files at eventual commit; history scan covers committed history only.
+- **Immediate next action:** Morpheus completes functional review after Trin and profile resolution; parent logs shared Switch handoff.
+- **Waiting on:** Root secrets scan and QA execution for delivery, not further security assessment.
+- **Planned work:** Re-review if security-relevant source changes; do not rerun unchanged tests. Default profile compilation/coverage must pass before sprint acceptance.
 
 ---
-*Last updated: 2026-11-19*
+*Last updated: 2026-11-20*
 
-## Final Sprint 5 checkpoint — supersedes pending work above
-Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
-Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
-Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.
+## Sprint 6 final checkpoint — supersedes pending work above
+Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
+Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
+Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.

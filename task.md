@@ -1,5 +1,18 @@
 # Task Board
 
+## Sprint 6: Original post kinds and regression coverage
+
+**Status:** Complete — launched 2026-11-20; generic core reporting and original-post demo verified.
+**Branch:** `sprint-6`.
+**Scope:** STORY-SKT-10..11, Tier 2; docs/sprints/USER_STORIES_SPRINT6.md.
+
+- [x] Phase 1 `*impl` Neo (L3): profile-native post identity, bounded envelope extraction and sample provenance; preserve original records; absent/zero/one/multiple image states.
+- [x] Phase 1 `*impl` Neo (L3): generic core CLI report/export/coverage, independent of the Bluesky example; 258 core tests and live UAT passed.
+- [x] Phase 1 gates: Trin (L2) 279 tests on both Pythons, Switch (L2) security, Morpheus (L2) code/profile review.
+- [x] Close `*uat` Smith (L2): 20,789 posts / 860 kinds, exact representative IDs and weighted coverage; Oracle (L2) docs; Tank (L2) clean SDLC check; retro and Cypher launch.
+
+No recapture, push or package release required. Preserve existing captures during clean checks.
+
 ## Sprint 5: Bluesky Image Explorer
 
 **Status:** Complete; 8/8 points, launched 2026-11-19. **Branch:** `sprint-5` (integrated at close).

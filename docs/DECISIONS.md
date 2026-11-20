@@ -84,7 +84,7 @@ itself (skit id vs profile id) is backlogged with profile evolution.
 
 ## ADR-2026-11-19: Bluesky enum-based ASCII demo
 
-**Status:** Accepted. **Date:** 2026-11-19. **Deciders:** Owner (ASCII scope), Morpheus
+**Status:** Superseded by ADR-2026-11-20 below. **Date:** 2026-11-19. **Deciders:** Owner (ASCII scope), Morpheus
 (architecture), Tank (build mechanisms). **Related:** [Sprint 5 stories](sprints/USER_STORIES_SPRINT5.md).
 
 ### Context and drivers
@@ -120,3 +120,35 @@ The optional `demo` group supplies websockets for capture; offline preparation u
 dependencies. The optional `security` group supplies pip-audit. Make targets install and audit
 these groups in the project environment; neither expands package runtime requirements. The
 cost is extra development tooling and finite capture windows, with no web/frontend deployment.
+
+## ADR-2026-11-20: Original posts and generic regression coverage
+
+**Status:** Accepted. **Deciders:** Owner, Morpheus. Supersedes per-image normalization above.
+
+### Context
+The owner clarified that the unit of regression data is an original post. The sketch profile
+defines a kind of post; coverage means representing observed kinds and their real frequencies.
+Reporting is a core use case and must not be confined to a Bluesky application.
+
+### Considered options
+| Option | Benefit | Cost | Decision |
+|---|---|---|---|
+| Derived image model and demo-only reports | Simple per-image charts | Changes the unit under test and duplicates sketch semantics | Rejected |
+| Unchanged post rows, profile-native fields, generic CLI | Original test inputs and reusable coverage analysis | Explicit profiles can be verbose | Selected |
+| New general MAP/REDUCE engine | Broader derived-value support | Unneeded core complexity for this example | Deferred |
+
+### Outcome and consequences
+The demo only unwraps create-event envelopes and deduplicates identified observations; all
+feature selection uses the saved profile. Original posts and source line locators are retained.
+`report`, `export` and `coverage` live in the package CLI and know nothing about Bluesky.
+Coverage is unique baseline-kind intersection and the sum of original baseline counts for that
+intersection, divided by total baseline observations. Duplicate regression records never inflate
+coverage; unseen kinds are separate. Profile mismatch fails, empty denominators display N/A.
+No metric implies test execution, path coverage or unseen/global completeness.
+
+The owner authorized separate image-container expressions and an absent-array state. Each direct
+or quoted-media image/gallery container has presence, >=1 and >=2 bits, preserving absent,
+zero, one and multiple image members. Mixed galleries count only typed image entries.
+IS_PRESENT means a member exists (including null); this is not schema validation. Splitting
+keeps native JSONPath count expressions within the parser's cumulative complexity limit.
+Array token sets remain unordered/deduplicated; no claim of cross-field image pairing is made.

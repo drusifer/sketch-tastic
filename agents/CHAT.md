@@ -30,3 +30,7 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_5.md` (2026-11-19 21:50:28) — Sprint 5 delivered the repository-local Bluesky ASCII image-count demo. Bounded public capture and six enum dimensions produce representative image rows preserving the observed skit set. Live UAT: 4587 events, 821 images, 70 representatives. 267 tests pass on Python 3.14 and 3.15, with lint, wheel smoke/build, security scans and independent reviews. Owner-updated Bob Protocol skills included. No push or release.
 
 ---
+
+> **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_6.md` (2026-11-20 07:42:36) — Sprint 6 delivered generic sketch-tastic report, representative export and frequency-weighted regression coverage. The Bluesky example now preserves one original post per row; native split profile fields distinguish absent arrays and zero/one/multiple image members including mixed galleries. Owner clarified core ownership and approved profile splitting after parser-complexity diagnosis. Independent review and clean gates passed:279 tests on Python3.14/3.15 plus lint, wheel smoke/build and security scans. Live default profile:20789 posts,860 kinds, exact representative ID preservation and100% full-corpus coverage. No push or release.
+
+---

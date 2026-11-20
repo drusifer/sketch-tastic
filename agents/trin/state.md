@@ -19,3 +19,33 @@ Added eighth test for persisted profile missing a report dimension after targete
 Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
 Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
 Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.
+
+## Sprint 6 native post-profile review — 2026-11-20
+
+Read-only review of examples/bluesky/profile.yaml and tests/test_bluesky_profile.py; no shared
+make command run. Four independent present/any/multiple triples correctly preserve absent,
+zero, one and multiple image-member states without changing original rows. Typed gallery filters
+exclude unsupported gallery item types; non-selected text and array ordering collapse as intended.
+
+One correction requested before signoff: nested media count predicates guard the inner images/
+gallery type but omit the outer recordWithMedia discriminator. An unsupported parent embed with
+a media-shaped child can therefore set image flags. Root should add the scalar outer type guard
+to four nested media predicates and test unsupported parents with valid nested media. Presence
+bits may stay raw member-existence checks, as documented. Optional test clarity: null image member
+counts as present structurally, unlike an absent image member; profile does not validate schema.
+
+Next: root applies/rechecks guarded predicates, then independent review signs off; full runtime
+gates owned by root. No test or application edits made in this review.
+
+### Sprint 6 native profile final signoff
+
+Inspected the fix: all four nested media count predicates now require the outer recordWithMedia
+discriminator, and the added unsupported-parent fixture covers both images and galleries while
+preserving raw presence bits. Finding resolved. Profile review APPROVED, with no remaining known
+semantic defect. Root reports RED reproduced then six profile tests GREEN; no duplicate test run
+performed here. Root continues final clean conformance/UAT.
+
+## Sprint 6 final checkpoint — supersedes pending work above
+Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
+Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
+Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.

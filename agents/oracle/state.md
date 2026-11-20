@@ -47,3 +47,13 @@ Next: root records final UAT/conformance evidence and logs Oracle handoff to Smi
 Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
 Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
 Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.
+
+## Sprint 6 documentation sign-off
+Context: owner corrected regression unit to original posts and required coverage in core. ADR-2026-11-20 supersedes the Sprint5 per-image decision; old lesson explicitly superseded for this demo.
+Current Task: complete. README generic commands, post demo guide with four presence/count states, sprint stories/UAT, SDLC and task updated. STORIES/ARCH/DECISION/LESSON/SDLC documentation rubrics PASS; claims match 279-test clean verification and actual live post runs.
+Next Steps: Smith final acceptance, retro/Cypher launch, archive chat and local merge; no release/push. Future extensions must retain original records and generic reporting.
+
+## Sprint 6 final checkpoint — supersedes pending work above
+Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
+Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
+Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
