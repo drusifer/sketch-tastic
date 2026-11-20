@@ -8,7 +8,7 @@
 - Owner working style: steers designs live; explain options and trade-offs before building; no shortcuts or side paths (one mechanism; producers wait on full buffers); the profile is the only source of key order.
 
 ## Current Task
-**Status:** No sprint in flight. Prepared for a context clear on 2026-10-15.
+**Status:** Sprint 5 Bluesky Image Explorer planned on sprint-5. Stories and architecture approved by Smith. task.md is the execution board; next Tank Phase 0, then pipeline and UI phases. Owner may steer app location/dimensions; default local app with six shared dimensions.
 
 ## Next Steps
 1. Cold start: read the bottom of `agents/CHAT.md` and `task.md` (Backlog), then ask the owner what to pick up.
@@ -17,3 +17,20 @@
 
 ---
 *Last updated: 2026-10-15T09:55:00-04:00*
+
+
+## Current checkpoint — 2026-11-19 (supersedes earlier Sprint 5 plans)
+
+The owner authorized `$sprint until done` and clarified **local ASCII output**, with no browser,
+web app or TUI. Sprint 5 implementation and independent Trin/Switch/Morpheus reviews passed;
+Tank clean-environment gates and final Smith UAT remain pending. Six shared enum dimensions
+preserve observed image variants using the existing sketch/sample APIs. Original post/event
+and attachment indexes are retained. No global coverage or replay claim is made.
+
+Resume from `task.md` and `docs/sprints/UAT_PLAN_SPRINT5.md`; do not restart HDFS research or
+web design. Root coordinates final evidence, sprint close and handoffs. No push/release requested.
+
+## Final Sprint 5 checkpoint — supersedes pending work above
+Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
+Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
+Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.

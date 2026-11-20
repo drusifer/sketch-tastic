@@ -427,6 +427,12 @@ profile.tokens({"request": {"method": "GET", "path": "/items/17"}})
 Every modifier and aggregate function is a `Rule` subclass, registered by its `name`; the
 schema checks its arguments and the class checks the rest.
 
+## Bluesky ASCII demo
+
+The [Bluesky image-count demo](examples/bluesky/README.md) captures public post metadata,
+prints image-count charts by enumerated properties, and retains real example rows for every
+observed skit. It runs locally through `bobp make bluesky`; no web app is required.
+
 ## License
 
 MIT
