@@ -80,9 +80,12 @@ is a Mechanism-class change. `agents/` (BobProtocol tooling) and Markdown are ex
 `bobp make bluesky-install` installs the `demo` dependency group (websockets) into the same
 project environment. It is not a package runtime dependency. `bobp make bluesky-capture
 ARGS="--seconds 60 --output data/bluesky.jsonl"` captures public JSON metadata; `bobp make
-bluesky ARGS="--help"` exposes preparation and ASCII report commands. `bobp make test-bluesky`
-runs the focused tests; they also run in the normal test suite. No frontend toolchain or web
-server is used. Captures and generated sketches live under ignored `data/`; `clean` removes them.
+bluesky ARGS="--help"` exposes original-post preparation. Generic reporting, representative
+export and regression coverage live in the package CLI, via `bobp make run ARGS="report ..."`,
+`export ...` and `coverage ...`. `bobp make test-bluesky` runs the focused input/profile tests;
+`bobp make test ARGS=test_reporting` runs generic reporting tests. Both run in the normal suite.
+No frontend toolchain or web server is used. Captures and generated sketches live under ignored
+`data/`; `clean` removes them. Preserve captures before from-clean conformance checks.
 
 ### Security tooling
 
@@ -225,10 +228,11 @@ None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`,
 `sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
 
 ---
-*Last verified: 2026-11-19 by Tank at Sprint 5 close (`*devops sdlc-check`). From-clean
+*Last verified: 2026-11-20 by Tank at Sprint 6 close (`*devops sdlc-check`). From-clean
 `bobp make distclean`, `install`, `lint`, `test`, `test-all` (3.14 and 3.15), `smoke`
-(including wheel/sdist build), `security-install` and `security-scan` passed. All 267 tests
+(including wheel/sdist build), `security-install` and `security-scan` passed. All 279 tests
 pass on both supported interpreters; three installed-wheel smoke tests pass. The virtualenv
-excludes system packages, the lockfile remains current after sync, and the staged hook probe
-rejects a synthetic secret. Demo and security dependencies are optional groups; package runtime
+excludes system packages and the lockfile remains current after sync. The unchanged staged hook
+was verified at Sprint 5 close. Existing captures were preserved during cleaning and restored.
+Demo and security dependencies are optional groups; package runtime
 dependencies and release workflows are unchanged. v0.2.0 remains the published release.*

@@ -1,12 +1,45 @@
-# These fields are every decision category used by the ASCII image report.
-# Full values and source posts remain in built-in first/last samples.
+# One row is one original post. No model or derived image rows.
+# For each container, presence/any/multiple bits distinguish:
+# absent=FFF, present with zero image members=TFF, one=TTF, multiple=TTT.
+# IS_PRESENT checks member existence, not JSON Schema validity (null is present).
 version: 0
 fields:
-  - {key: reply, path: $.reply}
-  - {key: embed_kind, path: $.embed_kind}
-  - {key: attachment_count, path: $.attachment_count}
-  - {key: mime, path: $.mime}
-  - {key: orientation, path: $.orientation}
-  - {key: alt, path: $.alt}
-aggregates:
-  - {key: image_bytes, path: $.bytes, fn: [SUM, MIN, MAX, AVG]}
+  - {key: embed_type, path: "$.embed['$type']"}
+  - {key: media_type, path: "$.embed.media['$type']"}
+  - {key: reply, path: $.reply, modifier: IS_PRESENT}
+
+  - {key: images_present, path: $.embed.images, modifier: IS_PRESENT}
+  - key: images_any
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.images' && count(@.images[*].image) >= 1]"
+    modifier: IS_PRESENT
+  - key: images_multiple
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.images' && count(@.images[*].image) >= 2]"
+    modifier: IS_PRESENT
+
+  - {key: gallery_present, path: $.embed.items, modifier: IS_PRESENT}
+  - key: gallery_any
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.gallery' && count(@.items[?@['$type'] == 'app.bsky.embed.gallery#image'].image) >= 1]"
+    modifier: IS_PRESENT
+  - key: gallery_multiple
+    path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.gallery' && count(@.items[?@['$type'] == 'app.bsky.embed.gallery#image'].image) >= 2]"
+    modifier: IS_PRESENT
+
+  - {key: media_images_present, path: $.embed.media.images, modifier: IS_PRESENT}
+  - key: media_images_any
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.images' && count(@.images[*].image) >= 1]"
+    modifier: IS_PRESENT
+  - key: media_images_multiple
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.images' && count(@.images[*].image) >= 2]"
+    modifier: IS_PRESENT
+
+  - {key: media_gallery_present, path: $.embed.media.items, modifier: IS_PRESENT}
+  - key: media_gallery_any
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.gallery' && count(@.items[?@['$type'] == 'app.bsky.embed.gallery#image'].image) >= 1]"
+    modifier: IS_PRESENT
+  - key: media_gallery_multiple
+    path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.gallery' && count(@.items[?@['$type'] == 'app.bsky.embed.gallery#image'].image) >= 2]"
+    modifier: IS_PRESENT
+
+  - {key: facet_types, path: "$.facets[*].features[*]['$type']"}
+  - {key: languages, path: "$.langs[*]"}
+  - {key: labels, path: "$.labels.values[*].val"}
