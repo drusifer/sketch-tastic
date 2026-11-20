@@ -81,6 +81,11 @@ def _rows_text(rows: list[tuple[str, Skit]], total: int, path: Path | str, limit
         weight = f"{100 * count / total:.1f}%" if total else "N/A"
         share = f"{100 * cumulative / total:.1f}%" if total else "N/A"
         lines.append(f"{key} {count:9,} {weight:>9} {share:>11}  {_tokens(skit)}")
+        if skit.aggregates:
+            values = json.dumps(
+                skit.aggregates, ensure_ascii=True, default=str, separators=(",", ":")
+            )
+            lines.append(f"  aggregates: {values}")
         lines.append(f"  sample: {_locator(path, key)}")
     if not rows:
         lines.append("No kinds.")

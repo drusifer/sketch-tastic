@@ -257,6 +257,10 @@ tokens and retained-sample locations. `--limit 0` prints all rows. `export` writ
 retained record per kind to a **new** JSONL file. Repeat `--id FULL_ID` to export only selected
 kinds; omitting it exports all. Neither command needs application-specific preprocessing.
 
+When a sketch has aggregates, `report` also prints their values for each listed kind, including
+numeric summaries and typed timestamps. Aggregates summarize observations without changing kind
+identity or the baseline-count weights used for coverage.
+
 `coverage` applies the matching profile to the regression records and intersects their kind IDs
 with the baseline. It reports two separate measures:
 

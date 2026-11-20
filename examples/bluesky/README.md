@@ -29,6 +29,24 @@ These are 18 profile fields (six general fields and four groups of three bits), 
 are constrained by one another and the embed type; they do not imply 2^12 independent cases.
 Edit the profile to reflect the distinctions your application actually makes.
 
+### Per-kind aggregates
+
+The profile also summarizes observations without adding identity fields:
+
+- `images_count`, `gallery_count`, `media_images_count`, `media_gallery_count`: total recognized
+  image members across the posts in the skit, using the same typed-container rules as identity.
+- Corresponding `*_bytes`: SUM, MIN, MAX and AVG of declared blob sizes, **per image with a
+  numeric size**, not per post. No image binary is downloaded; missing sizes are not zeroes.
+- `text_bytes`: SUM, MIN, MAX and AVG of UTF-8 text size, per selected text value.
+- `facet_features`: total feature entries, including repeated types. The identity token still
+  uses only the distinct feature-type set.
+- `posted_at`: earliest/latest `createdAt` in UTC; these are post timestamps, not capture times.
+
+`meta.count` remains the built-in post count used for regression frequency weighting. `report`
+prints aggregate values below each kind; `show` also exposes them as sortable columns. Rebuild
+from the original capture to populate new aggregates for all observations; re-sketching only
+representatives cannot recover population statistics. Aggregates do not change the profile ID.
+
 ## Capture and prepare
 
 From the repository root:

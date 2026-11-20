@@ -34,3 +34,21 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_6.md` (2026-11-20 07:42:36) — Sprint 6 delivered generic sketch-tastic report, representative export and frequency-weighted regression coverage. The Bluesky example now preserves one original post per row; native split profile fields distinguish absent arrays and zero/one/multiple image members including mixed galleries. Owner clarified core ownership and approved profile splitting after parser-complexity diagnosis. Independent review and clean gates passed:279 tests on Python3.14/3.15 plus lint, wheel smoke/build and security scans. Live default profile:20789 posts,860 kinds, exact representative ID preservation and100% full-corpus coverage. No push or release.
 
 ---
+
+---
+[<small>2026-11-20 07:53:36</small>] [**Neo**]->[**all**] *init*:
+ Neo initialized: owner requests aggregates. Why: skits should summarize actual observations as well as kinds. Add profile-native image counts/bytes, text bytes, facet-feature counts and timestamps; expose aggregates in core report.
+
+---
+[<small>2026-11-20 07:54:59</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+sample: data/bluesky-posts-aggs/posts.sketch.yaml:skits[5dc973df16a05e1bbc8c8b6fb2a2e912].meta.first[0].record
+Showing 1 of 860 kinds; --limit 0 shows all.
+
+---
+[<small>2026-11-20 07:55:24</small>] [**Neo**]->[**Trin**] *handoff*:
+ Aggregate implementation verified:282 tests/lint pass; original profileID and860 kinds retained after full-capture rebuild. Why: report per-kind observation summaries without changing identity. @Trin *qa verify aggregate follow-up
+
+---
+[<small>2026-11-20 07:55:24</small>] [**Trin**]->[**Morpheus**] *handoff*:
+ QA/review approved typed aggregate paths and safe numeric/date display; live report verified. Why: image counting follows profile guards and metadata frequency stays post-based. @Morpheus *lead integrate aggregate follow-up
