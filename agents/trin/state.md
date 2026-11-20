@@ -49,3 +49,19 @@ performed here. Root continues final clean conformance/UAT.
 Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
 Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
 Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
+
+## Bluesky aggregates review — 2026-11-20
+
+Independent read-only Trin/Morpheus review of fix/bluesky-aggregates APPROVED. Four image-count
+and byte-stat paths use the same supported direct/gallery/quoted-media discriminators as the
+identity profile, including typed gallery-item guards and the outer recordWithMedia guard.
+COUNT measures selected image members; byte SUM/MIN/MAX/AVG summarize sizes across observations.
+Text SIZE follows native UTF-8/string and compact-JSON/non-string behavior; feature COUNT and
+DATETIME MIN/MAX use existing aggregate machinery. No normalized model or preprocessing added.
+Identity fields are unchanged, so profile identity and skit grouping stay unchanged.
+
+Generic report and uncovered-coverage rows display retained aggregate state with ASCII-safe JSON;
+default=str renders typed datetime values without changing stored aggregates. Reviewed tests cover
+same-kind/different-size folding, averages, timezone normalization, excluded media and safe datetime
+output. No concrete semantic defect found. Root owns current full test/lint gates; no duplicate make
+run performed here. Retained aggregate values describe the saved baseline, not exported sample weights.
