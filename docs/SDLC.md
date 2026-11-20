@@ -75,6 +75,25 @@ is a Mechanism-class change. `agents/` (BobProtocol tooling) and Markdown are ex
 
 ## 4. Dependencies
 
+### Optional Bluesky terminal demo
+
+`bobp make bluesky-install` installs the `demo` dependency group (websockets) into the same
+project environment. It is not a package runtime dependency. `bobp make bluesky-capture
+ARGS="--seconds 60 --output data/bluesky.jsonl"` captures public JSON metadata; `bobp make
+bluesky ARGS="--help"` exposes preparation and ASCII report commands. `bobp make test-bluesky`
+runs the focused tests; they also run in the normal test suite. No frontend toolchain or web
+server is used. Captures and generated sketches live under ignored `data/`; `clean` removes them.
+
+### Security tooling
+
+`bobp make security-install` installs the optional `security` (pip-audit) and `demo` groups.
+`bobp make security-scan` runs `security-scan-secrets` (git-aware, redacted gitleaks) and
+`security-scan-python` (all lockfile groups exported with frozen versions and audited without
+dependency resolution). Both must pass before release. `bobp make security-test-hook` verifies
+that the staged hook rejects a synthetic key using a temporary alternate index; the real index
+is untouched. The hook uses `gitleaks git --pre-commit --staged --redact`. Scanner inputs and
+output are under ignored `build/`. No advisories are ignored or accepted by default.
+
 - **Add a runtime dependency:** `uv add <package>`. Every runtime dependency becomes an install
   requirement for PyPI users — keep them minimal (today: PyYAML, jsonpath-rfc9535, jsonschema).
 - **Add a dev tool:** `uv add --dev <package>` (the `dev` dependency group).
@@ -206,8 +225,10 @@ None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`,
 `sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
 
 ---
-*Last verified: 2026-11-17 by Tank for CI and trusted publishing (v0.2.0 successful).
-Last full conformance check: 2026-10-15 at Sprint 4 close (`*devops sdlc-check`), by Tank — from-clean
-`make distclean install lint test secrets build`, `make smoke` and `make test-all` (3.14, 3.15)
-green; `profile` target updated (all cores + `-j 1`, `PROFILE_ARGS`); no new dependency (libyaml
-ships in PyYAML's wheels); lockfile current; hooks set; workflows call existing targets only.*
+*Last verified: 2026-11-19 by Tank at Sprint 5 close (`*devops sdlc-check`). From-clean
+`bobp make distclean`, `install`, `lint`, `test`, `test-all` (3.14 and 3.15), `smoke`
+(including wheel/sdist build), `security-install` and `security-scan` passed. All 267 tests
+pass on both supported interpreters; three installed-wheel smoke tests pass. The virtualenv
+excludes system packages, the lockfile remains current after sync, and the staged hook probe
+rejects a synthetic secret. Demo and security dependencies are optional groups; package runtime
+dependencies and release workflows are unchanged. v0.2.0 remains the published release.*

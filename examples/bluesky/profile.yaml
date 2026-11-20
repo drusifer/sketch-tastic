@@ -1,0 +1,12 @@
+# These fields are every decision category used by the ASCII image report.
+# Full values and source posts remain in built-in first/last samples.
+version: 0
+fields:
+  - {key: reply, path: $.reply}
+  - {key: embed_kind, path: $.embed_kind}
+  - {key: attachment_count, path: $.attachment_count}
+  - {key: mime, path: $.mime}
+  - {key: orientation, path: $.orientation}
+  - {key: alt, path: $.alt}
+aggregates:
+  - {key: image_bytes, path: $.bytes, fn: [SUM, MIN, MAX, AVG]}

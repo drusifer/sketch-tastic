@@ -1,5 +1,22 @@
 .DEFAULT_GOAL := help
 
+.PHONY: bluesky-install bluesky-capture bluesky test-bluesky
+
+bluesky-install: ## Install optional Bluesky capture tools into .venv
+	@uv sync --group demo --quiet
+
+bluesky-capture: ## Capture public Bluesky posts (ARGS="--seconds 60 --output data/bluesky.jsonl")
+	$(need_venv)
+	@$(PYTHON) -m examples.bluesky.capture $(ARGS)
+
+bluesky: ## Build or print Bluesky ASCII demo (ARGS="--help")
+	$(need_venv)
+	@$(PYTHON) -m examples.bluesky.demo $(ARGS)
+
+test-bluesky: ## Run focused Bluesky demo tests
+	$(need_venv)
+	@$(PYTHON) -m unittest discover -s tests -p 'test_bluesky*.py'
+
 # The project's one Makefile. Everything runs through the project virtualenv, which
 # `make install` builds with uv from pyproject.toml + uv.lock. See docs/SDLC.md.
 #
@@ -137,3 +154,38 @@ distclean: clean ## Also remove the virtualenv
 
 via_index: ## Build the via index required by the via MCP server
 	@via index "$(CURDIR)"
+
+.PHONY: security-install security-scan security-scan-secrets security-scan-python security-test-hook
+
+security-install: ## Install optional security scanner and capture tools into .venv
+	$(need_uv)
+	@uv sync --group security --group demo --quiet
+
+security-scan: security-scan-secrets security-scan-python ## Scan secrets and every lockfile dependency group
+
+security-scan-secrets: ## Scan committed secrets with redacted git-aware output
+	@command -v gitleaks >/dev/null || { echo "gitleaks is not installed - see docs/SDLC.md"; exit 1; }
+	@gitleaks detect --source . --redact
+
+security-scan-python: ## Audit exact locked Python versions (run security-install first)
+	$(need_venv)
+	@test -x .venv/bin/pip-audit || { echo "No pip-audit - run 'bobp make security-install' first"; exit 1; }
+	@mkdir -p build
+	@uv export --frozen --all-groups --no-emit-project --no-hashes --format requirements-txt --output-file build/security-requirements.txt --quiet
+	@.venv/bin/pip-audit --disable-pip --no-deps --requirement build/security-requirements.txt
+
+security-test-hook: ## Prove staged secret rejection using a disposable alternate git index
+	$(need_venv)
+	@mkdir -p build
+	@probe=$$(mktemp -d build/hook-probe-XXXXXX); \
+	trap 'rm -rf "$$probe"' EXIT; \
+	export GIT_INDEX_FILE="$(CURDIR)/$$probe/index"; \
+	git read-tree HEAD && \
+	$(PYTHON) -c 'import pathlib,sys; pathlib.Path(sys.argv[1]).write_text("aws_access_key_id = " + "AKIA" + "2BC4DE6FG8HI0JKL" + "\n")' "$$probe/fake-key.txt" && \
+	git add -f "$$probe/fake-key.txt" && \
+	if .githooks/pre-commit >"$$probe/hook.log" 2>&1; then \
+		echo "ERROR: staged fake-key probe was accepted"; exit 1; \
+	else \
+		grep -q 'leaks found' "$$probe/hook.log" || { echo "ERROR: hook failed without detecting probe"; exit 1; }; \
+		echo "Staged synthetic key rejected; real git index untouched"; \
+	fi
