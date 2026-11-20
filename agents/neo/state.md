@@ -58,3 +58,53 @@ No push requested. Preserve user migration; all old agent skills moved to .agent
 Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
 Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
 Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.
+
+## Sprint 6 preparation handoff (2026-11-20)
+Context: owner requires original posts per row, and reporting in core. Removed the image
+model and demo reporting. New input.py only unwraps bare/v1/v2 create records, deduplicates
+DID/rkey creates, counts ignored events, bounds JSONL reads, and yields source line numbers.
+Current Task: preparation subtask complete (100%). build(source, output, profile_path=PROFILE)
+saves exact profile.yaml, standard posts.sketch.yaml, unchanged representatives.jsonl,
+samples.json keyed by full skit ID with source/source_line/representative_line, and summary.json
+with source SHA256, counts, scope and optional capture sidecar. Output uses staged publication
+and refuses preexisting paths. TDD red observed; targeted 3 pipeline + 4 boundary tests pass.
+First boundary run found invalid test-only JSONPath '$.$type'; corrected to $.text and green.
+Capture implementation/tests unchanged. Generic reporting/export/coverage delegated separately.
+Next Steps: parent runs repository formatter at integration, reviews default profile separately
+(its native nested-count expressions currently under investigation), then Trin/Switch/Morpheus
+gates. No commit made. Do not repeat these unchanged tests except final integrated verification.
+
+## Sprint 6 core reporting checkpoint — 2026-11-20
+
+Owner steered all generic reporting into sketch-tastic CLI. Implemented reporting.py and cli.py
+registration for report/export/coverage; no Bluesky import or dependency changes. report ranks
+counts descending with full IDs, weight/cumulative percentages, tokens and original-sample
+locators. export selects unique full IDs, validates samples, and publishes original JSON objects
+through a same-directory staged file plus exclusive hardlink. coverage requires exact nonnull
+profile identity and recomputes regression IDs from bounded strict UTF-8 JSONL; intersection
+weights come from baseline counts, not candidate repetition. Empty denominators are N/A.
+
+TDD: tests/test_reporting.py RED at 07:30:01 (missing reporting module), GREEN 11 tests at
+07:31:10; expanded 14 contracts GREEN 07:32:01. Shared bobp make format passed 07:32:02.
+Contracts cover 90/9/1 weights, duplicates/unknown kinds, profile mismatch/missing identity,
+ASCII control escaping, full original exports, symlink/concurrent no-clobber, missing samples,
+invalid/zero counts, malformed/NaN/UTF8/oversize lines, empty inputs and row limits.
+
+Next: root independent security/code review and integration tests. Native Bluesky profile is
+root-owned and remains under investigation; this generic implementation does not depend on it.
+No commits made. Root coordinates shared chat handoff to Trin/Switch/Morpheus.
+
+Independent capture-agent review found non-JSON retained YAML values could raise uncaught
+TypeError during export. Added CLI date-value regression: RED 07:32:31, fixed serialization
+errors to report skit-context ValueError before publication, GREEN 15 tests 07:32:39. Format
+passed 07:32:40. Root independent review/integration remains next; no outstanding known core defect.
+
+## Sprint 6 resumed implementation complete
+Context: owner authorized split native image count and absence distinction. Each of images/gallery/media_images/media_gallery has present/any/multiple bits. Present with zero includes empty and video-only gallery; IS_PRESENT is member existence, not schema validation.
+Current Task: complete implementation; native profile compiles, six focused tests pass after independent review found and fixed missing outer recordWithMedia guard. First full 278-test/both-Python run passed before final guard regression; final clean run pending.
+Next Steps: Trin final conformance tests, existing Switch/Morpheus approvals plus profile re-review, default live UAT, close docs/retro/local merge. Preserve captures; no push/version bump.
+
+## Sprint 6 final checkpoint — supersedes pending work above
+Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
+Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
+Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.

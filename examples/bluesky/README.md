@@ -1,106 +1,115 @@
-# Bluesky image counts
+# Bluesky post kinds and regression data
 
-A local ASCII demo: capture public post records, count their image attachments by meaningful
-properties, and use sketch-tastic to retain one real example for every observed combination.
-No web app, login, image binary downloads, or frontend dependencies.
+One input row is one original post. The sketch profile defines what makes posts the same kind;
+its retained records provide compact regression data for an application handling those kinds.
+Reporting, sample export and frequency-weighted coverage are generic **sketch-tastic commands**.
 
-## Run it
+## Profile-defined post features
+
+The default profile includes embed type, quoted media type, reply presence, rich-text feature
+types, languages and content labels. For each of four containers—direct images, direct gallery,
+quoted-post media images and quoted-post media gallery—it also uses three boolean fields:
+
+| State | `*_present` | `*_any` | `*_multiple` |
+|---|---|---|---|
+| No array member | FALSE | FALSE | FALSE |
+| Array present, zero image entries | TRUE | FALSE | FALSE |
+| One image entry | TRUE | TRUE | FALSE |
+| Multiple image entries | TRUE | TRUE | TRUE |
+
+`IS_PRESENT` distinguishes a missing member from an empty array. It tests member existence,
+not schema validity: an explicit `null` is present. Native JSONPath `count()` expressions count
+image members; gallery counts include only entries typed `app.bsky.embed.gallery#image`, so a
+video-only gallery has zero images. Quoted-media counts require `recordWithMedia` and the right
+media type. Link thumbnails and references to another quoted post are not counted. All these
+rules live in the profile; the original post is unchanged. Separate expressions avoid the
+JSONPath parser's complexity limit. No general MAP/REDUCE feature or unnesting is needed.
+
+These are 18 profile fields (six general fields and four groups of three bits), but the bits
+are constrained by one another and the embed type; they do not imply 2^12 independent cases.
+Edit the profile to reflect the distinctions your application actually makes.
+
+## Capture and prepare
 
 From the repository root:
 
 ```sh
 bobp make bluesky-install
-bobp make bluesky-capture ARGS="--seconds 60 --limit 100000 --output data/bluesky.jsonl"
-bobp make bluesky ARGS="prepare data/bluesky.jsonl --output data/bluesky-demo"
-bobp make -vvv bluesky ARGS="report data/bluesky-demo --group-by orientation"
-bobp make -vvv bluesky ARGS="report data/bluesky-demo --group-by mime --where reply=reply"
-bobp make -vvv run ARGS="show data/bluesky-demo/images.sketch.yaml"
+bobp make bluesky-capture ARGS="--seconds 600 --limit 100000 --output data/posts-capture.jsonl"
+bobp make bluesky ARGS="prepare data/posts-capture.jsonl --output data/posts-demo"
 ```
 
-Use a **new filename/directory** for another capture or preparation; existing output is never
-overwritten. `--seconds` and `--limit` bound capture (whichever comes first); the connection
-attempt has a maximum 10-second timeout and closing may take two additional seconds. The
-capture sidecar records endpoint and UTC window. Preparation records the raw file's SHA-256.
-Increase the capture window to collect more variants. A bounded window is not a complete
-network snapshot. `bobp make clean` removes generated `data/`, so preserve a capture elsewhere
-if you need to keep it.
+Use fresh output paths. Capture saves raw public Jetstream frames plus endpoint/window provenance;
+it needs no login and downloads no image binaries. Preparation only unwraps post-create envelopes,
+deduplicates identified creates by DID/key, and feeds the **unchanged original post** to the sketch.
+It also accepts bare post JSONL, counting those rows as supplied. Updates/deletions and other event
+kinds are counted as exclusions. Posts without images remain in the baseline.
 
-Already have data? `prepare` accepts raw post records or v1/v2 Jetstream frames, one JSON object
-per line. Capture is optional. Preparation is offline and does not download referenced records.
-Identified post creates are deduplicated by author DID and record key; bare records have no
-identity and are counted as supplied. Updates/deletions are excluded and reported. This counts
-attachments observed in creates, not unique blobs or images still present on Bluesky.
+There is no image model, post-to-image expansion or computed feature row. JSONPath fields and
+modifiers in [profile.yaml](profile.yaml) define all kind distinctions. Supply `prepare --profile
+PATH` to choose another profile; the exact profile is saved with the resulting sketch.
 
-## What determines a skit?
-
-Every grouping/filter property is in [profile.yaml](profile.yaml). [model.py](model.py)
-explicitly maps source attributes into the finite categories used by the ASCII application:
-
-| Property | Values / decision |
-|---|---|
-| `reply` | `original`, `reply`, `invalid`; reply object presence/type |
-| `embed_kind` | `images`, `gallery`, `quote_images`, `quote_gallery`; embed union discriminator |
-| `attachment_count` | `1`, `2`, `3`, `4`, `5-10`, `11+`; number of the post's own images |
-| `mime` | `jpeg`, `png`, `webp`, `gif`, `other`, `missing`, `invalid`; image MIME mapping |
-| `orientation` | `portrait`, `square`, `landscape`, `missing`, `invalid`; compare aspect-ratio hint width/height |
-| `alt` | `present`, `empty`, `missing`, `invalid`; nonblank alt text, whitespace-only/empty, absent, wrong type |
-
-These are **this demo's application decisions**, not a claim to enumerate all branches of
-Bluesky. The upstream image grid separately handles 2, 3 and 4 images; its gallery schema
-documents an authoring limit of 10 and a schema ceiling of 20. The demo therefore preserves
-1–4 individually and partitions larger galleries at 10. JPEG/PNG/WebP/GIF are explicit mapping
-cases; other image MIME types remain visible as `other`. Exact values remain in source samples.
-The orientation is a metadata hint, not a measurement of downloaded pixels.
-
-Source references:
-- [Image schema](https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/images.json)
-- [Gallery schema](https://github.com/bluesky-social/bsky/blob/main/lexicons/app/bsky/embed/gallery.json)
-- [Image grid implementation](https://github.com/bluesky-social/social-app/blob/main/src/components/images/ImageLayoutGrid.tsx)
-- [Jetstream interface](https://bsky.network/docs/jetstream/)
-
-Direct images and the post's own media alongside a quote are counted. Images belonging to the
-referenced quoted post are not fetched or counted. Video and link-card thumbnails are excluded.
-Unsupported gallery item types and embeds are reported. Malformed image structures fail with
-their input line; invalid optional metadata instead produces an explicit category.
-
-## Counts and representative data
-
-Each image becomes one normalized row retaining its image index, exact post, and original
-event. This preserves correlations: a portrait PNG and a landscape JPEG in one post are two
-rows, not independent bags of formats and orientations.
-
-The sketch uses the existing `Profile` and `Sketch` APIs. Counts in the ASCII bars sum
-`meta.count` across matching skits; optional byte statistics are aggregates, not identity.
-The report shows which enum values were and were not observed. It does **not** turn marginal
-enum presence into a claim that all value combinations, branches, or program paths were covered.
-
-Preparation creates:
-- `images.sketch.yaml`: normal sketch-tastic file, inspectable with `skt show`.
-- `profile.yaml`: the exact profile used for the capture.
-- `summary.json`: provenance, exclusions, counts, enum definitions and validation result.
-- `representatives.jsonl`: one retained normalized image row per skit, including original data.
-
-Preparation re-sketches the retained rows and verifies that their skit IDs exactly equal the
-full sketch's IDs. That demonstrates preservation of the **observed variants under this
-profile**. Retained samples have different frequencies from the original population.
-
-You can independently re-sketch these rows through the public CLI:
+## Inspect kinds and locate samples
 
 ```sh
-bobp make run ARGS="merge -p data/bluesky-demo/profile.yaml -s data/representatives.sketch.yaml data/bluesky-demo/representatives.jsonl"
-bobp make -vvv run ARGS="show data/representatives.sketch.yaml"
+bobp make -vvv run ARGS="report data/posts-demo/posts.sketch.yaml --limit 20"
+bobp make -vvv run ARGS="report data/posts-demo/posts.sketch.yaml --limit 0"
 ```
 
-Choose a fresh sketch path for that comparison; `merge` adds to an existing sketch. Raw source
-posts remain accessible as `record.source` in sketch samples and `source` in representative rows.
-Multiple retained images can belong to the same post.
+The report ranks kinds by observed frequency, with full IDs, individual/cumulative percentages,
+tokens and retained-sample locators. Each skit contains its original post in the built-in first
+record. The demo also saves `samples.json`, mapping each full skit ID to the raw source filename
+and line number and its line in `representatives.jsonl`. Inspect the corresponding original
+capture line when the event envelope is useful. That provenance is not part of sketch identity.
+
+## Assemble regression data
+
+```sh
+# All observed kinds, one retained original post each:
+bobp make run ARGS="export data/posts-demo/posts.sketch.yaml --output data/regression-posts.jsonl"
+
+# Or copy full IDs from report and repeat --id to select specific kinds:
+bobp make run ARGS="export data/posts-demo/posts.sketch.yaml --output data/selected-posts.jsonl --id FULL_SKIT_ID"
+```
+
+Exports require a new path and preserve original post values. Preparation also writes
+`representatives.jsonl` for all observed kinds and verifies that re-sketching those records
+produces exactly the full baseline skit-ID set. Keep raw posts in your regression corpus;
+coverage accepts original JSON objects, not capture envelopes or a hand-written list of IDs.
+
+## Measure coverage
+
+```sh
+bobp make -vvv run ARGS="coverage data/posts-demo/posts.sketch.yaml -p data/posts-demo/profile.yaml data/regression-posts.jsonl"
+```
+
+The saved profile determines regression kind IDs. **Kind coverage** counts distinct baseline
+kinds represented in the corpus. **Frequency-weighted coverage** sums the original baseline
+counts of those kinds and divides by the baseline's total post count. Repeated samples of one
+kind add nothing; unseen regression kinds are reported separately. Missing baseline kinds are
+ranked by frequency, with full IDs you can export next. Percentages are N/A for an empty baseline.
+
+This measures represented kinds, not whether tests ran or passed. Completeness is relative to
+the selected profile and captured observations; it is not global Bluesky or code-path coverage.
+A highly frequent kind can dominate weighted coverage while rare untested kinds remain visible.
+
+## Files and scope
+
+Preparation creates a standard `posts.sketch.yaml`, its exact `profile.yaml`, unchanged-post
+`representatives.jsonl`, `samples.json` source locators and `summary.json` with input SHA-256,
+counts, capture provenance and retained-ID validation. The core tools also work on sketches from
+other applications without any Bluesky code. Generated files live under ignored `data/`;
+`bobp make clean` removes them, so preserve captures elsewhere when needed.
+
+Array JSONPath matches become sorted, deduplicated token sets within one post. They do not
+explode rows or retain cross-field pairing between different array elements. Choose fields
+according to the branches/mappings your application actually uses; do not add IDs, raw text or
+other distinctions that the application does not need. Structural presence is not schema validation.
 
 ## Verify
 
 ```sh
 bobp make test-bluesky
+bobp make test ARGS=test_reporting
 bobp make lint
 ```
-
-Tests cover duplicate capture events, direct/quoted/gallery image forms, enum boundaries,
-attribute correlations, missing/invalid values, retained-ID equality and output protection.

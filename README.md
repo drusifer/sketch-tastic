@@ -241,6 +241,39 @@ gh.sketch.yaml | tail` shows the heaviest skits. `-` sorts first, numbers before
 equal values keep file order. Exit status: `0` printed · `2` the sketch file could not be read,
 or KEY is not one of its columns (the message says why, and lists the columns).
 
+## Regression data coverage
+
+The profile defines each kind of event (a skit). Use the generic CLI to locate retained samples,
+export regression data, and measure how much of an observed baseline that data represents:
+
+```sh
+sketchtastic report baseline.sketch.yaml --limit 20
+sketchtastic export baseline.sketch.yaml --output regression.jsonl
+sketchtastic coverage baseline.sketch.yaml -p profile.yaml regression.jsonl
+```
+
+`report` ranks kinds by observation count, with full IDs, individual and cumulative frequency,
+tokens and retained-sample locations. `--limit 0` prints all rows. `export` writes one original
+retained record per kind to a **new** JSONL file. Repeat `--id FULL_ID` to export only selected
+kinds; omitting it exports all. Neither command needs application-specific preprocessing.
+
+`coverage` applies the matching profile to the regression records and intersects their kind IDs
+with the baseline. It reports two separate measures:
+
+- **Kind coverage:** distinct covered baseline kinds / all baseline kinds.
+- **Frequency-weighted coverage:** baseline observations in covered kinds / all baseline observations.
+
+Repeated regression examples of one kind do not increase coverage. Regression kinds absent from
+the baseline are listed separately, and missing baseline kinds are ranked by frequency to help
+choose the next samples. Empty-baseline percentages are N/A. Input is strict JSONL objects;
+malformed rows fail with line numbers. A mismatched or missing baseline profile ID is rejected.
+
+These numbers describe sample representation under this profile, not branch coverage or proof
+that tests ran successfully. Their real-world scope is the data represented by the baseline.
+Completeness means all observed profile-defined kinds, not every theoretically possible input.
+
+From a repository checkout, invoke these commands through `bobp make -vvv run ARGS="..."`.
+
 ## Profiles
 
 ```yaml
@@ -429,9 +462,9 @@ schema checks its arguments and the class checks the rest.
 
 ## Bluesky ASCII demo
 
-The [Bluesky image-count demo](examples/bluesky/README.md) captures public post metadata,
-prints image-count charts by enumerated properties, and retains real example rows for every
-observed skit. It runs locally through `bobp make bluesky`; no web app is required.
+The [Bluesky post demo](examples/bluesky/README.md) captures public metadata and sketches one
+unchanged post per row. Its profile defines post kinds using native JSONPath/modifiers, then
+the core `report`, `export` and `coverage` commands support regression-data selection.
 
 ## License
 

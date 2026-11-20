@@ -26,6 +26,7 @@ from sketchtastic import __version__
 from sketchtastic.aggregators import as_number
 from sketchtastic.model import Path
 from sketchtastic.profile import Profile, ProfileError, load_profile
+from sketchtastic.reporting import add_commands
 from sketchtastic.sketch import (
     ProfileMismatchError,
     Sketch,
@@ -229,6 +230,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     show.add_argument("sketch_path", metavar="SKETCH", help="sketch file to show")
     show.set_defaults(func=_cmd_show)
+    add_commands(commands)
     return parser
 
 
