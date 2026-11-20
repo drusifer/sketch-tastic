@@ -1,6 +1,25 @@
 # Task Board
 
-**No sprint in flight.** Last sprint: 4 (below), then two fixes on 2026-10-15 (pushed 636243e): every aggregate created in profile order at its initial state; skit ids from token values in profile order. fingerling: leave alone unless the owner asks.
+## Sprint 5: Bluesky Image Explorer
+
+**Status:** Complete; 8/8 points, launched 2026-11-19. **Branch:** `sprint-5` (integrated at close).
+**Scope:** STORY-SKT-08..09, 8 points, Tier 1. See `docs/sprints/USER_STORIES_SPRINT5.md`.
+
+- [x] Stage 0: SDLC read; main matched origin before branch creation. Existing research notes preserved.
+- [x] Phase 0 — Tank (L2): add documented demo make targets and capture dependency; install passed.
+- [x] Phase 1 `*impl` — Neo (L2): bounded public capture and provenance; mocked capture tests plus live smoke.
+- [x] Phase 1 `*impl` — Neo (L3): image normalization, enum profile, sketch/export pipeline and retained-ID equality.
+- [x] Phase 1 `*impl` — Neo (L2): ASCII report and guide, weighted counts and AND filters.
+- [x] Phase 1 gates — Trin (L2): 24 demo tests, full 267-test suite; Switch (L2): no blocking findings; Morpheus (L2): approved; Tank (L2): tooling approved.
+- [x] Close — Tank (L2): clean SDLC conformance, both supported Pythons, installed wheel, lint and security scans.
+- [x] Close — Oracle (L2) documentation, Smith (L2) live UAT, all-persona retro and Cypher (L1) launch.
+
+Execution note: the proposed separate report phase was implemented and reviewed with the pipeline
+as one three-task phase, sharing its enum contract. All final code was covered by the same QA,
+Switch and Morpheus gates. Live UAT passed: 821 images to 70 representatives, preserving all
+70 observed skits. Both supported Pythons pass 267 tests; no package version bump.
+
+No push or release requested. Leave fingerling alone. Prior sprint history follows.
 
 ## Sprint 4: Parallel Merge
 
@@ -83,6 +102,8 @@ Between Sprints 3 and 4 (owner review of Sprint 3): JSONPath via `jsonpath-rfc95
 - [x] Tank `*devops sdlc-check` · Oracle groom · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]
 
 ## Backlog (unscheduled)
+- Bluesky demo: collect a longer observation window to find rare gallery/enum combinations;
+  continue to report unobserved values explicitly. No additional implementation required now.
 Carried over from fingerling's `task.md`:
 - Test-internal names still say fingerprint (`wh`, `fingerprints` variables, test class names) — rename (Sprint 1 retro).
 - `-o`: owner may revisit (keep or drop).

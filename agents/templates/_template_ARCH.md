@@ -1,9 +1,8 @@
 <!--
-Architecture document template. Owned by Morpheus — see agents/morpheus/SKILL.md and the sprint skill.
+Architecture document template. Owned by Morpheus — see .agents/skills/morpheus/SKILL.md and the sprint skill.
 Can be instantiated as `docs/ARCH.md` (standing project architecture) or appended to the sprint
 stories document during Sprint Planning Step 2.
-Delete this comment AND the review rubric at the end (everything from RUBRIC-START to
-RUBRIC-END): the rubric belongs to the template, not to the document.
+Remove this note and the check block when creating a real artifact; checks belong to templates.
 Smith reviews this at Gate 2 using the ARCH rubric.
 -->
 # Architecture Document: {System or Feature Name}
@@ -17,33 +16,19 @@ Smith reviews this at Gate 2 using the ARCH rubric.
 
 ## 1. Executive Summary & System Overview
 
-{High-level summary: 2-4 sentences describing the purpose of the architecture, key problems solved, and primary business or technical drivers.}
+{State the design scope, key drivers, and intended outcome. Include goals and non-goals when they clarify boundaries.}
 
 ## 2. System Context & Boundaries
 
 {Describe the system boundary: who interacts with it (users, external services, upstream/downstream pipelines), network boundaries, and trust domains.}
 
-```mermaid
-graph TD
-    User["User / Client"] -->|"CLI / API Requests"| System["{System Name}"]
-    System -->|"Reads/Writes"| DB[("Storage / Database")]
-    System -->|"External Calls"| Ext["External Services / APIs"]
-```
+{Optional: add a context diagram when it clarifies actors, dependencies, or trust boundaries. A short description is sufficient for a small change.}
 
 ## 3. Component & Container Architecture
 
 {Decompose the system into cohesive components or containers. Describe the single responsibility of each block.}
 
-```mermaid
-graph TB
-    subgraph "Core System"
-        API["Interface Layer (CLI / HTTP / Event)"]
-        Logic["Domain Logic / Services"]
-        Data["Data Access / Adapters"]
-        API --> Logic
-        Logic --> Data
-    end
-```
+{Optional: show containers or components at the level needed to explain the design. Do not add lower-level diagrams without a decision they help explain.}
 
 ### Component Inventory
 | Component | Responsibility | Inputs | Outputs |
@@ -53,23 +38,9 @@ graph TB
 
 ## 4. Runtime Interaction & Critical Flows
 
-{Illustrate critical execution paths (happy path and primary workflows) with sequence diagrams showing caller, callee, and payloads.}
+{Describe the important user or system flows that change state or cross boundaries. Use a sequence diagram only when it is clearer than concise steps.}
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as User
-    participant CLI as CLI / Controller
-    participant Svc as Core Service
-    participant Store as Storage
-
-    User->>CLI: Invokes command {args}
-    CLI->>Svc: Process request payload
-    Svc->>Store: Query / persist state
-    Store-->>Svc: Success acknowledgment
-    Svc-->>CLI: Result object
-    CLI-->>User: Formatted output / Exit code 0
-```
+{Optional example: describe one critical flow as ordered steps with actor, action, and result.}
 
 ## 5. Interface & Contract Specifications
 
@@ -82,15 +53,15 @@ sequenceDiagram
 
 ## 6. Cross-Cutting Concepts & Resilience
 
-### Failure Modes & Error Handling
+### Failure Modes & Error Handling (when relevant)
 | Failure Mode | Trigger / Condition | System Behavior | User / Client Impact | Blast Radius |
 |---|---|---|---|---|
 | `{Dependency Timeout}` | {Network partition or slow remote} | {Timeout after Ns, retry with backoff, abort} | {Clear error message, exit code X} | {Isolated to calling command} |
 | `{Invalid Input}` | {Malformed file or invalid flag} | {Validation fails before execution} | {Helpful fix suggestion, state unmodified} | {None (zero state change)} |
 
-### Security & Privacy
-* **Authentication / Authorization:** {How identity/permissions are validated} / None.
-* **Sensitive Data:** {Handling of credentials, tokens, or PII} / None.
+### Security & Privacy (when relevant)
+* **Trust / access boundaries:** {Relevant controls or None — reason}.
+* **Sensitive data:** {Relevant handling or None — reason}.
 
 ## 7. Technical Stack & SDLC / Build Impact
 
@@ -109,20 +80,14 @@ sequenceDiagram
 ### Acknowledged Technical Debt & Trade-offs
 * `{Debt Item}`: {What compromise was made, why it was accepted now, and when it will be repaid}
 
-<!-- RUBRIC-START — for reviewers. Delete everything from here to RUBRIC-END when you turn this
-     template into a real document. -->
-## Appendix: Review rubric — ARCH
+<!-- RUBRIC-START -->
+## Check — ARCH
 
-Self-checked by Morpheus before handoff; reviewed by Smith at Gate 2.
-Verdict line: `rubric ARCH: BOUND=_ FLOW=_ FAIL=_ USER=_ DECS=_ FEAS=_` (W, A or S).
-Any W rejects, naming the criterion and the fix. See `agents/templates/ARTIFACTS.md`.
-
-| Code | Criterion | Weak (W) | Acceptable (A) | Strong (S) |
-|---|---|---|---|---|
-| `BOUND` | Does it clearly delimit system boundaries and responsibilities? | Boundaries are blurred or contradictory; components have overlapping duties; external interactions are handwaved ("magic happens here"). | System boundary is explicit; each component has a single responsibility; external systems and communication protocols are identified. | Diagrams follow C4 conventions; each boundary documents its interface contract and trust/security assumptions. |
-| `FLOW` | Can an engineer trace data and execution through critical paths? | Data flow is described only in narrative prose without sequencing, or diagrams lack direction/order, leaving call sequences ambiguous. | Critical paths have explicit sequence diagrams or step-by-step flows specifying caller, callee, and payload purpose. | Sequence diagrams specify data payload shapes, sync vs. async distinction, and latency/concurrency expectations. |
-| `FAIL` | Does it define behavior when dependencies fail or input is invalid? | Assumes happy-path execution; lacks timeout, retry, fallback, or error-propagation strategies; failure leaves state undefined. | Identifies primary failure modes for external calls and internal processing; specifies error reporting and blast-radius containment. | Defines explicit circuit breakers/fallbacks, transaction/rollback boundaries, and user-facing error mappings for each failure. |
-| `USER` | Does it preserve HCI standards and protect the user mental model? | Exposes internal database keys, raw stack traces, unhandled exceptions, or conflicting CLI flags/API schemas to the user surface. | Commands, API endpoints, flags, and outputs match user mental models, use consistent naming, and follow project UX standards. | Flags breaking changes with migration paths, provides copy-pasteable CLI/API examples, and adheres to Nielsen's heuristics. |
-| `DECS` | Are technical choices defended with context and tradeoffs? | Announces a technology or pattern without explaining why ("we will use X"); ignores obvious alternatives or drawbacks. | States driving requirements, at least one alternative considered, and why the chosen option was selected. | Links to or includes MADR-style decision records explicitly noting accepted technical debt, positive gains, and negative consequences. |
-| `FEAS` | Does it account for build-environment and operational feasibility? | Introduces new languages, packages, or services without checking `docs/SDLC.md`, or requires tools that cannot run in `make`. | All dependencies adhere to SDLC change classes; flags any new runtime, language, or package manager as a Tank Phase 0. | Specifies exact package versions, verification make targets, and migration/rollback steps for deployment. |
+- [ ] **PASS** — `BOUND` (Does it clearly delimit system boundaries and responsibilities?): System boundary is explicit; each component has a single responsibility; external systems and communication protocols are identified.
+- [ ] **PASS** — `FLOW` (Can an engineer trace data and execution through critical paths?): Important state-changing or boundary-crossing flows are described as concise steps or diagrams; irrelevant flows are marked N/A with a reason.
+- [ ] **PASS** — `FAIL` (Does it define behavior when dependencies fail or input is invalid?): Identifies relevant failure modes and their behavior, or marks the section N/A with a reason when the design adds no failure-sensitive behavior.
+- [ ] **PASS** — `USER` (Does it preserve HCI standards and protect the user mental model?): The design identifies user-visible interfaces and their observable behavior; user-facing changes have a linked acceptance criterion or review.
+- [ ] **PASS** — `DECS` (Are technical choices defended with context and tradeoffs?): Explains consequential choices against their drivers and links an ADR or alternative when needed; otherwise records N/A with a reason.
+- [ ] **PASS** — `FEAS` (Does it account for build-environment and operational feasibility?): All dependencies adhere to SDLC change classes; flags any new runtime, language, or package manager as a Tank Phase 0.
+- [ ] **FAIL** — Any required PASS condition is unmet or unsupported; cite the missing evidence and smallest correction.
 <!-- RUBRIC-END -->

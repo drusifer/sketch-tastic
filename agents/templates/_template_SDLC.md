@@ -1,11 +1,10 @@
 <!--
-SDLC template (base). Owned by Tank — see agents/skills/build-env/SKILL.md.
+SDLC template (base). Owned by Tank — see .agents/skills/build-env/SKILL.md.
 Copy to docs/SDLC.md and replace every {placeholder}. Describe what is true in this repo
 today, as commands a reader can run. Where a section does not apply, write "None" and why;
 do not delete the heading. For a single-language project start from
 _template_SDLC.<language>.md instead; for several languages, use this file and repeat the per-language rows/blocks.
-Delete this comment AND the review rubric at the end (RUBRIC-START to RUBRIC-END): the rubric
-belongs to the template, not to the document.
+Remove this note and the check block when creating a real artifact; checks belong to templates.
 -->
 # {Project} — SDLC
 
@@ -38,7 +37,7 @@ Prerequisites not installed by `make install`: {list} / None.
 
 ## 3. Make targets
 
-The Makefile is the only entry point; recipes call the native tools.
+The Makefile is the contributor entry point; recipes call native tools. Agents run these targets through `bobp make <target>`.
 
 | Target | Runs | Notes |
 |---|---|---|
@@ -135,22 +134,14 @@ Run by Tank at sprint close (`*devops sdlc-check`):
 ---
 *Last verified: {YYYY-MM-DD} against {commit or sprint} by Tank.*
 
-<!-- RUBRIC-START — for reviewers. Delete everything from here to RUBRIC-END when you turn this
-     template into a real document. -->
-## Appendix: Review rubric — SDLC
+<!-- RUBRIC-START -->
+## Check — SDLC
 
-Self-checked by Tank on every create or update; reviewed by Oracle at groom in any sprint where
-`docs/SDLC.md` changed. Verdict line: `rubric SDLC: TRUE=_ WHOLE=_ CLEAN=_ CLASS=_ CHECK=_ GAPS=_`
-(W, A or S). Any W rejects, naming the criterion and the fix. See `agents/templates/ARTIFACTS.md`.
-
-This rubric judges the document. Whether the project matches it is Tank's `*devops sdlc-check`.
-
-| Code | Criterion | Weak (W) | Acceptable (A) | Strong (S) |
-|---|---|---|---|---|
-| `TRUE` | Does it describe what exists today? | A command, target or file it names does not exist, or planned work is written as if done. | Everything stated as present is present; anything not yet built is labelled as such. | It carries a dated "last verified" line saying what was actually run. |
-| `WHOLE` | Can a newcomer find every part of the lifecycle? | A section is missing or left as a placeholder, so a reader cannot tell whether the topic was considered. | Every section is filled in, or says "None" with a reason. | Sections cross-reference each other where one depends on another (gates ↔ targets ↔ CI). |
-| `CLEAN` | Could someone go from a fresh checkout to passing tests using only this? | Setup depends on a tool, step or prior state the document does not mention. | Prerequisites and exact commands are listed in order. | It also says what each prerequisite is for and how to tell the setup worked. |
-| `CLASS` | Can a reader tell how *their* change must be handled? | Change classes overlap or leave common cases out, or "who approves" is a role nobody holds. | Any ordinary change falls into exactly one class with a named approver, gates and a place it is recorded. | The flow from request to record is written as steps a new contributor could follow unaided. |
-| `CHECK` | Is the conformance check something that can be run? | Items are judgements ("docs are up to date") with no way to answer yes or no. | Each item is a command or an inspection with a definite pass condition. | Items say what a failure would look like and who fixes it. |
-| `GAPS` | Does it admit what is missing or unverified? | A known gap is absent, or a deviation is listed without its reason. | Deviations from convention and unverified areas are listed with reasons. | Each gap says what would close it, and agreed-but-unbuilt changes are tracked until they land. |
+- [ ] **PASS** — `TRUE` (Does it describe what exists today?): Everything stated as present is present; anything not yet built is labelled as such.
+- [ ] **PASS** — `WHOLE` (Can a newcomer find every part of the lifecycle?): Every section is filled in, or says "None" with a reason.
+- [ ] **PASS** — `CLEAN` (Could someone go from a fresh checkout to passing tests using only this?): Prerequisites and exact commands are listed in order.
+- [ ] **PASS** — `CLASS` (Can a reader tell how *their* change must be handled?): Any ordinary change falls into exactly one class with a named approver, gates and a place it is recorded.
+- [ ] **PASS** — `CHECK` (Is the conformance check something that can be run?): Each item is a command or an inspection with a definite pass condition.
+- [ ] **PASS** — `GAPS` (Does it admit what is missing or unverified?): Deviations from convention and unverified areas are listed with reasons.
+- [ ] **FAIL** — Any required PASS condition is unmet or unsupported; cite the missing evidence and smallest correction.
 <!-- RUBRIC-END -->

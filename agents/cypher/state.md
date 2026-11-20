@@ -13,12 +13,12 @@ None yet
 - Next story id STORY-SKT-08. Ask the owner design questions before writing stories (it cut scope again in Sprint 2).
 
 ## Current Task
-**Status:** Not started
+**Status:** Sprint 5 stories drafted, ready for Smith Gate 1.
 **Assigned to:** N/A
 **Started:** N/A
 
 ### Task Description
-No active task
+Bluesky Image Explorer: STORY-SKT-08 capture/sketch, STORY-SKT-09 interactive app. See docs/sprints/USER_STORIES_SPRINT5.md. Eight points; local browser app assumed pending optional owner preference. Dimensions shared with sketch profile; sampled records cover observed combinations only.
 
 ### Progress
 - [ ] Not started
@@ -31,7 +31,7 @@ None yet
 
 ## Next Steps
 ### Immediate Next Action
-None planned
+Smith reviews stories, then Morpheus designs pipeline. No release or push authorized.
 
 ### Waiting On
 None
@@ -41,3 +41,20 @@ None
 
 ---
 *Last updated: [timestamp]*
+
+
+## Current checkpoint — 2026-11-19 (supersedes earlier Sprint 5 plans)
+
+The owner authorized `$sprint until done` and clarified **local ASCII output**, with no browser,
+web app or TUI. Sprint 5 implementation and independent Trin/Switch/Morpheus reviews passed;
+Tank clean-environment gates and final Smith UAT remain pending. Six shared enum dimensions
+preserve observed image variants using the existing sketch/sample APIs. Original post/event
+and attachment indexes are retained. No global coverage or replay claim is made.
+
+Resume from `task.md` and `docs/sprints/UAT_PLAN_SPRINT5.md`; do not restart HDFS research or
+web design. Root coordinates final evidence, sprint close and handoffs. No push/release requested.
+
+## Final Sprint 5 checkpoint — supersedes pending work above
+Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
+Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
+Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.

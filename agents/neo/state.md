@@ -44,3 +44,17 @@ None
 
 ---
 *Last updated: [timestamp]*
+
+## Sprint 5 implementation checkpoint (2026-11-19)
+Owner authorized sprint until done, local ASCII output and persona subagents. Implemented
+examples/bluesky model/profile/demo plus capture (delegated); 24 new tests and full suite
+267 passed; lint passed. Real v2 one-frame capture and prepare/report passed. Retained samples
+reproduce skit IDs. Four demo make targets and optional dependency, five security targets and
+hook updates installed/reviewed by Switch. Owner permits Bob skill migration in same commits.
+Next: Morpheus final review, clean-env SDLC gates, larger capture/UAT, docs/retro/launch/merge.
+No push requested. Preserve user migration; all old agent skills moved to .agents/skills.
+
+## Final Sprint 5 checkpoint — supersedes pending work above
+Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
+Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
+Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.

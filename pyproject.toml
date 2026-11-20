@@ -43,6 +43,8 @@ packages = ["src/sketchtastic"]
 include = ["src", "tests", "examples", "README.md", "LICENSE"]
 
 [dependency-groups]
+demo = ["websockets>=15,<17"]
+security = ["pip-audit>=2.9,<3"]
 # Development tools; installed by `make install` (uv sync), never shipped.
 dev = [
     "radon>=6.0.1",

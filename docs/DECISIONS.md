@@ -81,3 +81,42 @@ refuses it without `--force-profile`) and can never silently re-key skits.
 **Consequences:** every skit id and profile id changes (v0: sketches are rebuilt, no
 migration); README quickstart ids updated (9312137e…, profile 3f0dd0d9…). The two-id design
 itself (skit id vs profile id) is backlogged with profile evolution.
+
+## ADR-2026-11-19: Bluesky enum-based ASCII demo
+
+**Status:** Accepted. **Date:** 2026-11-19. **Deciders:** Owner (ASCII scope), Morpheus
+(architecture), Tank (build mechanisms). **Related:** [Sprint 5 stories](sprints/USER_STORIES_SPRINT5.md).
+
+### Context and drivers
+
+The owner wants a large public dataset to demonstrate compact regression test data: preserve
+meaningful application variants while eliminating repeated cases. The demo must live in this
+repository, print ASCII, use enumerated application decisions, and preserve real source data.
+
+### Considered options
+
+| Option | Benefits | Costs / risks | Decision |
+|---|---|---|---|
+| Group whole posts using nested image attributes | Direct raw-record ingestion | Loses per-image attribute correlations and makes image counts ambiguous | Rejected |
+| Normalize one image occurrence per row, retaining its source | Correlated fields, exact image counts and original samples | Extra derived rows and explicit normalization policy | Selected |
+
+### Outcome and consequences
+
+Six identity fields encode reply status, embed kind, attachment-count class, MIME, orientation
+and alt-text state. Exact counts and original values remain available in samples; byte sizes
+are aggregates. The existing Profile/Sketch APIs perform all grouping and sample retention.
+ASCII counts use full-sketch weights; one retained row per skit is re-folded and its ID set
+must equal the full sketch's ID set. This preserves observed variants under this profile;
+it does not prove branch coverage, combination reachability or global Bluesky completeness.
+
+Bounded capture saves endpoint/window provenance. Preparation hashes the raw source and saves
+the profile with original posts/events and image indexes. Identified create events deduplicate
+by DID/key; bare posts count as supplied. Normalized representative exports are valid input for
+the existing merge CLI, while demo preparation expects raw posts/events. Fresh output paths and
+staged publication protect prior captures and artifacts. A bounded capture may miss rare enums;
+the report displays absent values explicitly rather than treating them as covered.
+
+The optional `demo` group supplies websockets for capture; offline preparation uses existing
+dependencies. The optional `security` group supplies pip-audit. Make targets install and audit
+these groups in the project environment; neither expands package runtime requirements. The
+cost is extra development tooling and finite capture windows, with no web/frontend deployment.

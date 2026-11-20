@@ -1,9 +1,8 @@
 <!--
 Domain Model & Ubiquitous Language specification template.
-Owned by Cypher (Product Manager) and Morpheus (Tech Lead) — see agents/cypher/SKILL.md and agents/morpheus/SKILL.md.
+Owned by Cypher (Product Manager) and Morpheus (Tech Lead) — see .agents/skills/cypher/SKILL.md and .agents/skills/morpheus/SKILL.md.
 Instantiated as `docs/DOMAIN.md` (or `docs/domain/<subdomain>.md` in multi-context projects).
-Delete this comment AND the review rubric at the end (everything from RUBRIC-START to
-RUBRIC-END): the rubric belongs to the template, not to the document.
+Remove this note and the check block when creating a real artifact; checks belong to templates.
 Reviewed by Smith and Morpheus using the DOMAIN rubric.
 -->
 # Domain Model: {Domain or Subdomain Name}
@@ -28,19 +27,16 @@ Reviewed by Smith and Morpheus using the DOMAIN rubric.
 
 ## 2. Ubiquitous Language (Glossary)
 
-The authoritative dictionary for this domain. Every term here represents an agreed-upon business concept and **must map identically to code symbols** (classes, methods, enums). Technical slang (e.g. "Record", "Manager", "DTO") is forbidden in domain concepts.
+Record terms used by domain experts and their meaning in this bounded context. Add code mappings only when implementation exists; technical terms may appear when they are the agreed domain language.
 
-| Business Term | Kind | Definition & Business Rules | Code Mapping (Class / Method) |
+| Business Term | Kind (if useful) | Definition in this context | Code Mapping (optional) |
 |---|---|---|---|
-| **{Term A}** | Entity / Aggregate Root | {Authoritative business definition and key rules} | `{ClassSymbol}` |
-| **{Term B}** | Value Object | {Immutable concept defined purely by its attributes} | `{ValueClass / Dataclass}` |
-| **{Term C}** | Command | {Intent to perform an action that alters domain state} | `{CommandHandler / Method}` |
-| **{Term D}** | Domain Event | {Significant occurrence in the domain that domain experts care about} | `{EventClass}` |
+| **{Term}** | {Entity / Value Object / other, or omit} | {Meaning and relevant business rule} | `{symbol or N/A — not implemented}` |
 
 *(Kinds: Entity, Value Object, Command, Domain Event, Domain Service, Policy)*
 
-### Anti-Patterns (Forbidden & Deprecated Terminology)
-Terms that must NOT be used in discussions, documentation, or code:
+### Alternative or Deprecated Terms (optional)
+Record terms likely to cause confusion; do not prohibit technical vocabulary without a domain reason.
 
 | Forbidden / Deprecated Term | Preferred Ubiquitous Term | Rationale |
 |---|---|---|
@@ -49,16 +45,11 @@ Terms that must NOT be used in discussions, documentation, or code:
 
 ---
 
-## 3. Tactical Domain Model & Entity Relationships
+## 3. Context Map and Model (optional)
 
-{Visual model showing entities, value objects, and relationships within this context.}
+{Show neighboring contexts, ownership, and translation/integration relationships when they matter. Tactical model diagrams are optional.}
 
-```mermaid
-erDiagram
-    EntityA ||--|{ EntityB : contains
-    EntityA ||--|| ValueObjectC : has
-    EntityA ||--o{ DomainEventD : emits
-```
+
 
 ### Entities vs. Value Objects Summary
 * **Entities (Identity-based):**
@@ -83,9 +74,9 @@ Aggregates define transactional consistency boundaries. Changes within an aggreg
 
 ---
 
-## 5. Lifecycle & State Machine Transitions
+## 5. Lifecycle (optional)
 
-{Explicitly document valid state progressions. Any transition not shown here must be rejected by the domain logic.}
+{For concepts with meaningful states, document valid transitions and how invalid transitions are handled.}
 
 ```mermaid
 stateDiagram-v2
@@ -107,28 +98,22 @@ stateDiagram-v2
 
 ---
 
-## 6. Domain Events & Side-Effects
+## 6. Domain Events (optional)
 
-{Domain events emitted when significant business occurrences take place.}
+{Record significant business events and consumers when relevant; distinguish events from implementation side-effects.}
 
 | Event Name | Trigger Condition | Key Payload Properties | Primary Consumers / Subscribers |
 |---|---|---|---|
 | `{EntityCreated}` | {When Entity.Create() succeeds} | `{entity_id, owner_id, timestamp}` | `{AuditService, NotificationService}` |
 | `{StateChanged}` | {When state transition completes} | `{entity_id, old_state, new_state, actor}` | `{AnalyticsContext, DownstreamSync}` |
 
-<!-- RUBRIC-START — for reviewers. Delete everything from here to RUBRIC-END when you turn this
-     template into a real document. -->
-## Appendix: Review rubric — DOMAIN
+<!-- RUBRIC-START -->
+## Check — DOMAIN
 
-Self-checked by authors (Cypher & Morpheus) upon drafting; reviewed by Smith and Morpheus during sprint planning.
-Verdict line: `rubric DOMAIN: LANG=_ BOUND=_ INVAR=_ STATE=_ EVENT=_` (W, A or S).
-Any W rejects, naming the criterion and the fix. See `agents/templates/ARTIFACTS.md`.
-
-| Code | Criterion | Weak (W) | Acceptable (A) | Strong (S) |
-|---|---|---|---|---|
-| `LANG` | Does the ubiquitous language define terms without technical jargon and map 1:1 to code? | Uses persistence/technical slang (e.g. "Record", "Manager", "DTO") in business terms, or terms lack explicit code symbol mappings. | Every term has a clear non-technical definition, explicit category (Entity, Value Object, Command, Event), and maps to a code symbol. | Includes an anti-patterns table of forbidden/deprecated terms with rationale, ensuring cross-team consistency. |
-| `BOUND` | Are the boundaries and responsibilities of this domain clearly defined? | Boundaries are ambiguous; includes features or concepts belonging to other contexts without defining translation or ownership. | Explicitly documents what is in-scope vs. out-of-scope, and names upstream/downstream integrations. | Includes a Context Map showing integration patterns (Shared Kernel, Customer-Supplier, Anti-Corruption Layer) between contexts. |
-| `INVAR` | Are aggregate roots and consistency boundaries defined with enforceable rules? | Aggregates are unbounded or missing; business rules are stated as vague aspirations rather than enforceable invariants. | Identifies aggregate roots, their contained entities/value objects, and invariants that must always hold true across transactions. | Invariants specify validation rules and error conditions, clearly separating aggregate invariants from external business workflows. |
-| `STATE` | Does the model define valid lifecycle states and transitions for key entities? | Entity states are undefined, or transitions allow invalid sequences (e.g. paying for an already cancelled order). | Defines all valid states and allowable transitions (via text or state machine diagram), specifying the trigger for each transition. | Includes a complete Mermaid `stateDiagram` with terminal states, side-effects, and explicit rejection conditions for invalid transitions. |
-| `EVENT` | Are domain events and their payloads documented for business occurrences? | Side-effects across components rely on tight coupling or hidden calls without defining domain events. | Identifies key domain events, their triggers, payload data properties, and downstream subscribers. | Event payloads are minimal, decoupled from database representations, and specify whether communication is sync or async. |
+- [ ] **PASS** — `LANG` (Does the ubiquitous language define terms without technical jargon and map 1:1 to code?): Each included term has a context-specific definition; any kind or code mapping shown is accurate, and unimplemented concepts are labeled.
+- [ ] **PASS** — `BOUND` (Are the boundaries and responsibilities of this domain clearly defined?): Explicitly documents what is in-scope vs. out-of-scope, and names upstream/downstream integrations.
+- [ ] **PASS** — `INVAR` (Are aggregate roots and consistency boundaries defined with enforceable rules?): Identifies aggregate roots, their contained entities/value objects, and invariants that must always hold true across transactions.
+- [ ] **PASS** — `STATE` (Does the model define valid lifecycle states and transitions for key entities?): For concepts with lifecycle states, defines valid transitions and triggers; otherwise marks the criterion N/A with a reason.
+- [ ] **PASS** — `EVENT` (Are domain events and their payloads documented for business occurrences?): For relevant domain events, records triggers and consumers; otherwise marks the criterion N/A with a reason.
+- [ ] **FAIL** — Any required PASS condition is unmet or unsupported; cite the missing evidence and smallest correction.
 <!-- RUBRIC-END -->
