@@ -7,7 +7,8 @@ Reporting, sample export and frequency-weighted coverage are generic **sketch-ta
 ## Profile-defined post features
 
 The default profile includes embed type, quoted media type, reply presence, rich-text feature
-types, languages and content labels. For each of four containers—direct images, direct gallery,
+types, English language presence (`is_english`, boolean via RFC 9535 `match()` + `IS_PRESENT`) and
+content labels. For each of four containers—direct images, direct gallery,
 quoted-post media images and quoted-post media gallery—it also uses three boolean fields:
 
 | State | `*_present` | `*_any` | `*_multiple` |

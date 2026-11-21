@@ -173,3 +173,33 @@ Wrote interactive dashboard to data/bluesky-posts-event-time/analysis.html (20,7
 ---
 [<small>2026-11-21 18:18:22</small>] [**Smith**]->[**all**] *user approve*:
  UX verified: Chromium preview caught narrow 2-column ablation table and confirmed full-width stacked chart + 7-column table renders cleanly with 0 console errors. Approved for local merge.
+
+---
+[<small>2026-11-21 18:21:04</small>] [**User**]->[**all**] *request*:
+ let's add a modifier for language for is English so it is captured as a boolean
+
+---
+[<small>2026-11-21 18:21:04</small>] [**Neo**]->[**all**] *swe impl*:
+ Neo updating examples/bluesky/profile.yaml: replacing raw languages field with boolean is_english ($.langs[?match(@, '[Ee][Nn](-.*)?')] + IS_PRESENT), adding unit tests, and rebuilding the 10-min Bluesky dataset & dashboard.
+
+---
+[<small>2026-11-21 18:21:38</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+6:21PM INF 101 commits scanned.
+6:21PM INF scanned ~2488864 bytes (2.49 MB) in 639ms
+6:21PM INF no leaks found
+
+---
+[<small>2026-11-21 18:22:03</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Replaced raw languages with boolean is_english ($.langs[?match(@, '[Ee][Nn](-.*)?')] + IS_PRESENT) in examples/bluesky/profile.yaml; 309 tests + lint + gitleaks pass; rebuilt 10-min Bluesky dataset in data/bluesky-posts-is-english (20,789 posts -> 242 skits, down from 860, representatives_verified=true). @Trin *qa verify bluesky-is-english
+
+---
+[<small>2026-11-21 18:22:03</small>] [**Trin**]->[**all**] *qa approve*:
+ QA/review approved: is_english produces strictly TRUE/FALSE even on bilingual/mixed/absent arrays (10 test cases + 309 full suite OK); live dataset and dashboard verified.

@@ -60,4 +60,12 @@ sequenceDiagram
     Note right of Morpheus: "Code review passed:<br/>clean _ablate_one_field<br/>helper keeps radon <= C,<br/>Python/JS parity<br/>verified. rubric<br/>LOOP_IMPL: TFIRST=S<br/>VERIF=S MODUL=S…"
     Smith->>All: "user approve"
     Note right of Smith: "UX verified: Chromium<br/>preview caught narrow<br/>2-column ablation table<br/>and confirmed full-width<br/>stacked chart + 7-column<br/>table renders cleanly…"
+    User->>All: "request"
+    Note right of User: "let's add a modifier for<br/>language for is English<br/>so it is captured as a<br/>boolean"
+    Neo->>All: "swe impl"
+    Note right of Neo: "Neo updating examples/bl<br/>uesky/profile.yaml:<br/>replacing raw languages<br/>field with boolean<br/>is_english<br/>($.langs[?match(@,<br/>'[Ee][Nn](-.*)?')] + I…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Replaced raw languages<br/>with boolean is_english<br/>($.langs[?match(@,<br/>'[Ee][Nn](-.*)?')] +<br/>IS_PRESENT) in examples/<br/>bluesky/profile.yaml,<br/>309 te…"
+    Trin->>All: "qa approve"
+    Note right of Trin: "QA/review approved:<br/>is_english produces<br/>strictly TRUE/FALSE even<br/>on<br/>bilingual/mixed/absent<br/>arrays (10 test cases +<br/>309 full suite OK),<br/>live…"
 ```
