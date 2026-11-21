@@ -39,7 +39,11 @@ class VendoredChartJsAssetTests(unittest.TestCase):
 class DashboardRenderingTests(unittest.TestCase):
     def test_renders_self_contained_offline_html_with_strict_csp(self) -> None:
         profile = Profile(
-            fields=(Field("kind", "$.kind"), Field("code", "$.code")),
+            fields=(
+                Field("kind", "$.kind"),
+                Field("code", "$.code"),
+                Field("ok", "$.ok", modifier="IS_PRESENT"),
+            ),
             aggregates=(
                 Aggregate("ms", "$.ms", ["SUM", "MIN", "MAX", "AVG"]),
                 Aggregate("ts", "$.ts", ["MIN", "MAX"], type="DATETIME"),
@@ -50,7 +54,7 @@ class DashboardRenderingTests(unittest.TestCase):
             sketch = Sketch(profile.aggregates, profile.profile_id)
             sketch.last_run = "261121-0001"
             for event in (
-                {"kind": "ok", "code": 200, "ms": 12, "ts": "2026-11-21T10:00:00Z"},
+                {"kind": "ok", "code": 200, "ok": True, "ms": 12, "ts": "2026-11-21T10:00:00Z"},
                 {"kind": "err", "code": 500, "ms": 80, "ts": "2026-11-21T12:00:00Z"},
             ):
                 sketch.upsert(profile.tokens(event), event, run="261121-0001")
@@ -64,6 +68,8 @@ class DashboardRenderingTests(unittest.TestCase):
             self.assertIn("default-src 'none'", rendered)
             self.assertIn("connect-src 'none'", rendered)
             self.assertIn("<title>Sample Report</title>", rendered)
+            self.assertIn('"field_type":"boolean"', rendered)
+            self.assertIn("Boolean", rendered)
             # Chart.js is inlined, no external resource loading tags
             self.assertIn("Chart.js", rendered)
             self.assertNotRegex(rendered, r'<script[^>]+src=["\']https?://')

@@ -261,6 +261,61 @@ class AnalysisStatsAndDistributionsTests(unittest.TestCase):
             self.assertAlmostEqual(b["skit_stats"]["min"], 200.0)
             self.assertAlmostEqual(b["skit_stats"]["median"], 200.0)
 
+    def test_boolean_fields_classified_distinct_from_enum_and_numeric(self) -> None:
+        profile = Profile(
+            fields=(
+                Field("present", "$.err", modifier="IS_PRESENT"),
+                Field("flag", "$.flag"),
+                Field("const_false", "$.never", modifier="IS_PRESENT"),
+                Field("mixed", "$.mixed"),
+            ),
+        )
+        events = [
+            {"err": "boom", "flag": True, "mixed": "TRUE"},
+            {"flag": False, "mixed": "TRUE"},
+            {"flag": False, "mixed": "maybe"},
+            {"mixed": "maybe"},  # flag absent -> NULL
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            sketch_path = Path(tmp) / "bools.sketch.yaml"
+            _write_sketch(sketch_path, profile, events)
+            data = analyze_sketch(sketch_path)
+            fields = {f["key"]: f for f in data["fields"]}
+
+            # IS_PRESENT -> TRUE/FALSE Boolean (1 TRUE, 3 FALSE -> 25% true)
+            present = fields["present"]
+            self.assertEqual(present["field_type"], "boolean")
+            self.assertTrue(present["is_boolean"])
+            self.assertFalse(present["is_numeric"])
+            self.assertEqual(present["min"], "FALSE")
+            self.assertEqual(present["max"], "TRUE")
+            self.assertAlmostEqual(present["true_pct"], 25.0)
+            self.assertIsNone(present["weighted_mean"])
+
+            # DEFAULT JSON bool + NULL -> True/False Boolean (1 True, 2 False -> 33.3333% of non-NULL)
+            flag = fields["flag"]
+            self.assertEqual(flag["field_type"], "boolean")
+            self.assertTrue(flag["is_boolean"])
+            self.assertEqual(flag["min"], "False")
+            self.assertEqual(flag["max"], "True")
+            self.assertAlmostEqual(flag["true_pct"], 100.0 / 3, places=3)
+            self.assertAlmostEqual(flag["null_pct"], 25.0)
+
+            # Constant FALSE -> still Boolean
+            cf = fields["const_false"]
+            self.assertEqual(cf["field_type"], "boolean")
+            self.assertTrue(cf["is_boolean"])
+            self.assertTrue(cf["is_constant"])
+            self.assertAlmostEqual(cf["true_pct"], 0.0)
+            self.assertEqual(cf["min"], "FALSE")
+            self.assertEqual(cf["max"], "FALSE")
+
+            # Mixed TRUE + "maybe" -> Enum, not Boolean
+            mixed = fields["mixed"]
+            self.assertEqual(mixed["field_type"], "enum")
+            self.assertFalse(mixed["is_boolean"])
+            self.assertIsNone(mixed["true_pct"])
+
 
 class AnalysisHistoryDriftTests(unittest.TestCase):
     def test_auto_detected_history_computes_runs_and_drift(self) -> None:

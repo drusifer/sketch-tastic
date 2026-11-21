@@ -140,9 +140,35 @@ def _concentration(rows: list[tuple[str, Skit]], total: int) -> list[dict[str, A
     return result
 
 
-def _field_numeric_stats(
+def _parse_bool(value: str) -> bool | None:
+    lowered = value.strip().lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    return None
+
+
+def _field_type_stats(
     non_null: list[tuple[str, int]], has_any: bool
-) -> tuple[bool, Any, Any, float | None, float | None]:
+) -> tuple[str, Any, Any, float | None, float | None, float | None]:
+    """Classify a field as boolean, numeric, or enum and compute min/max and type stats."""
+    bool_pairs: list[tuple[bool, str, int]] = []
+    is_boolean = bool(non_null)
+    for val, obs in non_null:
+        parsed_bool = _parse_bool(val)
+        if parsed_bool is None:
+            is_boolean = False
+            break
+        bool_pairs.append((parsed_bool, val, obs))
+
+    if is_boolean:
+        ordered_bools = sorted(bool_pairs, key=lambda item: (item[0], item[1]))
+        total_obs = sum(obs for _, _, obs in bool_pairs)
+        true_obs = sum(obs for flag, _, obs in bool_pairs if flag)
+        true_pct = round(100.0 * true_obs / total_obs, 4) if total_obs > 0 else None
+        return "boolean", ordered_bools[0][1], ordered_bools[-1][1], None, None, true_pct
+
     numeric_pairs: list[tuple[int | float, int]] = []
     is_numeric = bool(non_null)
     for val, obs in non_null:
@@ -157,12 +183,12 @@ def _field_numeric_stats(
         num_weight = sum(obs for _, obs in numeric_pairs)
         mean = sum(n * obs for n, obs in numeric_pairs) / num_weight if num_weight > 0 else None
         med = _weighted_median([(float(n), obs) for n, obs in numeric_pairs])
-        return True, min(nums), max(nums), mean, med
+        return "numeric", min(nums), max(nums), mean, med, None
     if non_null:
         strs = [val for val, _ in non_null]
-        return False, min(strs), max(strs), None, None
+        return "enum", min(strs), max(strs), None, None, None
     fallback = "NULL" if has_any else None
-    return False, fallback, fallback, None, None
+    return "enum", fallback, fallback, None, None, None
 
 
 def _summarize_field(key: str, rows: list[tuple[str, Skit]], total: int) -> dict[str, Any]:
@@ -190,7 +216,9 @@ def _summarize_field(key: str, rows: list[tuple[str, Skit]], total: int) -> dict
     ]
     non_null = [(val, obs) for val, (obs, _) in by_val.items() if val != "NULL"]
     null_obs = by_val.get("NULL", [0, 0])[0]
-    is_numeric, min_val, max_val, w_mean, w_med = _field_numeric_stats(non_null, bool(by_val))
+    field_type, min_val, max_val, w_mean, w_med, true_pct = _field_type_stats(
+        non_null, bool(by_val)
+    )
     cardinality = len(values)
     mode = (
         {
@@ -203,13 +231,16 @@ def _summarize_field(key: str, rows: list[tuple[str, Skit]], total: int) -> dict
     )
     return {
         "key": key,
+        "field_type": field_type,
         "cardinality": cardinality,
         "non_null_cardinality": len(non_null),
         "is_constant": cardinality <= 1,
         "is_high_cardinality": (
             cardinality > HIGH_CARDINALITY_MIN and (cardinality / n_skits) >= HIGH_CARDINALITY_RATIO
         ),
-        "is_numeric": is_numeric,
+        "is_boolean": field_type == "boolean",
+        "is_numeric": field_type == "numeric",
+        "true_pct": true_pct,
         "null_observations": null_obs,
         "null_pct": round(100.0 * null_obs / total, 4) if total else None,
         "min": min_val,
