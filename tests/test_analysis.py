@@ -316,6 +316,53 @@ class AnalysisStatsAndDistributionsTests(unittest.TestCase):
             self.assertFalse(mixed["is_boolean"])
             self.assertIsNone(mixed["true_pct"])
 
+    def test_drop_one_ablation_identifies_singleton_and_cardinality_drivers(self) -> None:
+        profile = Profile(
+            fields=(
+                Field("env", "$.env"),
+                Field("kind", "$.kind"),
+                Field("lang", "$.lang"),
+            ),
+        )
+        # 4 skits total, 3 singletons driven entirely by `lang` on kind=post
+        events = [
+            {"env": "prod", "kind": "post", "lang": "en"},
+            {"env": "prod", "kind": "post", "lang": "en"},
+            {"env": "prod", "kind": "post", "lang": "fr"},
+            {"env": "prod", "kind": "post", "lang": "de"},
+            {"env": "prod", "kind": "post", "lang": "ja"},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            sketch_path = Path(tmp) / "ablate.sketch.yaml"
+            _write_sketch(sketch_path, profile, events)
+            data = analyze_sketch(sketch_path)
+
+            self.assertIn("ablation", data)
+            ablation = data["ablation"]
+            # Ranked highest impact first: `lang` collapses 4 -> 1 skit and 3 -> 0 singletons
+            self.assertEqual(ablation[0]["key"], "lang")
+            self.assertEqual(ablation[0]["cardinality"], 4)
+            self.assertEqual(ablation[0]["singleton_only_values"], 3)
+            self.assertEqual(ablation[0]["skits_collapsed"], 3)
+            self.assertAlmostEqual(ablation[0]["skits_collapsed_pct"], 75.0)
+            self.assertEqual(ablation[0]["singletons_removed"], 3)
+            self.assertAlmostEqual(ablation[0]["singletons_removed_pct"], 100.0)
+            self.assertEqual(ablation[0]["remaining_skits"], 1)
+            self.assertEqual(ablation[0]["remaining_singletons"], 0)
+
+            by_key = {row["key"]: row for row in ablation}
+            # Constant fields collapse 0 skits and 0 singletons
+            self.assertEqual(by_key["env"]["skits_collapsed"], 0)
+            self.assertEqual(by_key["env"]["singletons_removed"], 0)
+            self.assertEqual(by_key["kind"]["skits_collapsed"], 0)
+
+    def test_empty_sketch_has_empty_ablation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sketch_path = Path(tmp) / "empty.sketch.yaml"
+            Sketch(profile_id="empty").save(str(sketch_path))
+            data = analyze_sketch(sketch_path)
+            self.assertEqual(data["ablation"], [])
+
 
 class AnalysisHistoryDriftTests(unittest.TestCase):
     def test_auto_detected_history_computes_runs_and_drift(self) -> None:

@@ -259,6 +259,64 @@ def _analyze_fields(rows: list[tuple[str, Skit]], total: int) -> list[dict[str, 
     return [_summarize_field(key, rows, total) for key in field_order]
 
 
+def _ablate_one_field(
+    drop_key: str,
+    other_keys: list[str],
+    rows: list[tuple[str, Skit]],
+    total_skits: int,
+    total_singletons: int,
+) -> dict[str, Any]:
+    grouped: dict[tuple[str, ...], int] = {}
+    all_vals: set[str] = set()
+    non_singleton_vals: set[str] = set()
+    for _, skit in rows:
+        cnt = skit.meta["count"]
+        val = skit.tokens.get(drop_key, "NULL")
+        all_vals.add(val)
+        if cnt > 1:
+            non_singleton_vals.add(val)
+        reduced_key = tuple(skit.tokens.get(k, "NULL") for k in other_keys)
+        grouped[reduced_key] = grouped.get(reduced_key, 0) + cnt
+    remaining_skits = len(grouped)
+    remaining_singletons = sum(1 for c in grouped.values() if c == 1)
+    skits_collapsed = total_skits - remaining_skits
+    singletons_removed = total_singletons - remaining_singletons
+    return {
+        "key": drop_key,
+        "cardinality": len(all_vals),
+        "singleton_only_values": len(all_vals - non_singleton_vals),
+        "skits_collapsed": skits_collapsed,
+        "skits_collapsed_pct": round(100.0 * skits_collapsed / total_skits, 2)
+        if total_skits
+        else None,
+        "singletons_removed": singletons_removed,
+        "singletons_removed_pct": (
+            round(100.0 * singletons_removed / total_singletons, 2) if total_singletons else None
+        ),
+        "remaining_skits": remaining_skits,
+        "remaining_singletons": remaining_singletons,
+    }
+
+
+def _analyze_ablation(rows: list[tuple[str, Skit]]) -> list[dict[str, Any]]:
+    """Compute drop-one field ablation: skits and singletons collapsed when omitting each field."""
+    if not rows:
+        return []
+    field_order = list(dict.fromkeys(k for _, skit in rows for k in skit.tokens))
+    total_skits = len(rows)
+    total_singletons = sum(1 for _, skit in rows if skit.meta["count"] == 1)
+    results = [
+        _ablate_one_field(
+            key, [k for k in field_order if k != key], rows, total_skits, total_singletons
+        )
+        for key in field_order
+    ]
+    results.sort(
+        key=lambda item: (-item["skits_collapsed"], -item["singletons_removed"], item["key"])
+    )
+    return results
+
+
 def _is_avg_dict(value: Any) -> bool:
     return isinstance(value, dict) and value.keys() == AVG_KEYS
 
@@ -735,6 +793,7 @@ def analyze_sketch(
     singletons = sum(1 for _, skit in rows if skit.meta["count"] == 1)
 
     field_summaries = _analyze_fields(rows, total)
+    ablation = _analyze_ablation(rows)
     agg_summaries, time_axes, skit_bounds = _analyze_aggregates(rows)
     seen_axis, seen_bounds = _build_seen_time_axis(rows)
     if seen_axis is not None:
@@ -786,6 +845,7 @@ def analyze_sketch(
             "concentration": _concentration(rows, total),
         },
         "fields": field_summaries,
+        "ablation": ablation,
         "aggregates": agg_summaries,
         "time_axes": time_axes,
         "history": history,
