@@ -40,7 +40,12 @@ def build(source: Path, output: Path, profile_path: Path = PROFILE) -> dict:
         digest = hashlib.sha256()
         samples = {}
         for number, record in posts(source, counts, digest):
-            key = sketch.upsert(profile.tokens(record), record)
+            if profile.event_time is not None:
+                event_time, unusable = profile.extract_event_time(record)
+                sketch.skipped_values += int(unusable)
+                key = sketch.upsert(profile.tokens(record), record, seen=event_time)
+            else:
+                key = sketch.upsert(profile.tokens(record), record)
             samples.setdefault(
                 key,
                 {

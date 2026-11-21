@@ -22,6 +22,7 @@ import yaml
 
 from sketchtastic import _yaml
 from sketchtastic.aggregators import Aggregate
+from sketchtastic.model import MISSING
 
 SKETCH_VERSION = 0
 """Format version of sketch files: 0 until 1.0, when the format becomes stable."""
@@ -101,12 +102,20 @@ class Sketch:
         self.run: dict[str, Any] | None = None
         """Header of a run file (STORY-FING-48): what one run read. Saved if set; never loaded."""
 
-    def upsert(self, tokens: dict[str, str], record: Any, run: str | None = None) -> str:
+    def upsert(
+        self,
+        tokens: dict[str, str],
+        record: Any,
+        run: str | None = None,
+        *,
+        seen: Any = MISSING,
+    ) -> str:
         """Fold one record into the sketch. Returns its skit_id.
 
-        The profile's aggregates read the record. The built-in ones read an envelope,
-        {"meta": {"run": run}, "record": record}, so injected fields never clash with the
-        record's own; `run` is the id of the run reading it.
+        The profile's aggregates read the record. The built-in ones read an internal envelope
+        whose `sample` is {"meta": {"run": run}, "record": record} and whose `meta.seen` defaults
+        to `run` (or the caller-supplied `seen` value, such as an event UTC datetime from
+        `profile.event_time`).
 
         The sketch keeps references, not copies: FIRST and LAST store `record` (or parts of
         it) as given, so the caller must not modify `record` afterwards.
@@ -115,7 +124,9 @@ class Sketch:
         skit = self._records.get(fid)
         if skit is None:
             skit = self._records[fid] = self._new_skit(tokens)
-        envelope = {"meta": {"run": run}, "record": record}
+        seen_value = run if seen is MISSING else seen
+        sample = {"meta": {"run": run}, "record": record}
+        envelope = {"meta": {"run": run, "seen": seen_value}, "sample": sample}
         self.skipped_values += _fold(self._aggregates, skit.aggregates, record)
         _fold(builtin_aggregates(), skit.meta, envelope)
         return fid

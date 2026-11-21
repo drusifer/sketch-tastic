@@ -449,8 +449,12 @@ every problem at once.
   `SUM` and `COUNT`, laid out like `aggregates` (`payload_bytes: {SUM: 31.25}`, or `requests: 25.0`
   for a single-function aggregate). It is recomputed on every write; a value whose total is 0 has
   no share.
-- The tool records runs, not times, per skit; a run's start and finish times are in its run
-  file. To track a time field inside your records, add it to your profile's `aggregates`.
+- The tool records runs, not times, per skit by default; a run's start and finish times are in its
+  run file. To ingest historical data using each event's own timestamp for `first_seen` /
+  `last_seen`, add `event_time: $.created_at` (any JSONPath to an ISO-8601 date or datetime) at
+  the top level of your profile — `first_seen` and `last_seen` then store the earliest and latest
+  UTC timestamps per skit instead of run IDs (without changing `profile_id`). To track additional
+  time fields, add them to your profile's `aggregates`.
 - A sketch records the profile that built it (`profile_id`, derived from `fields`). Merging under a
   profile with different `fields` is refused, because the skits would not be comparable.
   Changing `aggregates` is always fine.

@@ -72,3 +72,40 @@ Agents **must** use this for every message posted to CHAT.md:
 ---
 [<small>2026-11-21 17:46:52</small>] [**Morpheus**]->[**all**] *lead approve*:
  Code review approved for fix/boolean-field-type: clean 3-way field_type (boolean/numeric/enum) parity between Python and JS, zero security regressions. Integrating locally to main.
+
+---
+[<small>2026-11-21 17:57:04</small>] [**User**]->[**all**] *request*:
+ /bloop add an optional config for an event time field (jsonpath). when provided it uses the value for that field instead of run-datetime so we can ingest historical data
+
+---
+[<small>2026-11-21 17:57:04</small>] [**Neo**]->[**all**] *swe impl*:
+ Starting *impl work-loop on fix/event-time: optional profile `event_time` JSONPath for historical first_seen/last_seen. Why: allow historical ingestion where seen bounds reflect event timestamps instead of merge run IDs. Running TDD RED phase first.
+
+---
+[<small>2026-11-21 17:59:30</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make quality | /home/drusifer/Projects/sketch-tastic/build/build.out
+F 659:0 _build_seen_time_axis - C (13)
+F 89:0 _weighted_median - C (12)
+F 728:0 analyze_sketch - C (12)
+F 194:0 _summarize_field - C (11)
+F 510:0 _load_run_file - C (11)
+
+---
+[<small>2026-11-21 17:59:30</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Implemented optional profile `event_time` JSONPath with TDD (RED confirmed -> GREEN 6/6 new tests, 305/305 full suite, lint clean). Why: allows historical data ingestion where first_seen/last_seen track UTC event timestamps instead of merge run IDs. @Trin *qa uat event-time
+
+---
+[<small>2026-11-21 17:59:30</small>] [**Trin**]->[**Switch**] *qa handoff*:
+ UAT event-time passed: 305/305 tests OK (incl. out-of-order historical events, multi-run backfill, TZ normalization, date-only, missing/malformed/multi-match handling, parallel -j 2, show, analyze, node --check) and quality clean. @Switch *sec review event-time
+
+---
+[<small>2026-11-21 17:59:30</small>] [**Switch**]->[**Morpheus**] *sec handoff*:
+ Reviewed fix/event-time diff: JSON Schema + RFC 9535 Path validation, strict ISO-8601 DatetimeType conversion, _json_safe + script-safe JSON embedding, gitleaks 0 leaks. security gate (event-time): No blocking findings. @Morpheus *lead review event-time
+
+---
+[<small>2026-11-21 17:59:30</small>] [**Morpheus**]->[**Smith**] *lead handoff*:
+ Code review passed: clean internal envelope split in builtin.yaml preserves meta.first/last contract byte-for-byte while supporting datetime or run-id seen bounds; profile_id unchanged. rubric LOOP_IMPL: TFIRST=S VERIF=S MODUL=S REGRESS=S BUDGET=S. @Smith *user test event-time
+
+---
+[<small>2026-11-21 17:59:30</small>] [**Smith**]->[**all**] *user approve*:
+ UX verified: `event_time: $.ts` mirrors `sequence:`, `show --sort "FIRST RUN"` orders historical dates cleanly, and `analyze` defaults Range Axis to `First / Last Seen (Event Time)` with compact UTC labels. Approved for local integration.
