@@ -228,11 +228,11 @@ None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`,
 `sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
 
 ---
-*Last verified: 2026-11-20 by Tank at Sprint 6 close (`*devops sdlc-check`). From-clean
-`bobp make distclean`, `install`, `lint`, `test`, `test-all` (3.14 and 3.15), `smoke`
-(including wheel/sdist build), `security-install` and `security-scan` passed. All 279 tests
-pass on both supported interpreters; three installed-wheel smoke tests pass. The virtualenv
-excludes system packages and the lockfile remains current after sync. The unchanged staged hook
-was verified at Sprint 5 close. Existing captures were preserved during cleaning and restored.
-Demo and security dependencies are optional groups; package runtime
-dependencies and release workflows are unchanged. v0.2.0 remains the published release.*
+*Last verified: 2026-11-21 by Tank at Sprint 7 close (`*devops sdlc-check`). From-clean
+`bobp make distclean`, `install` (x2 idempotent), `lint`, `test`, `test-all` (3.14 and 3.15),
+`smoke` (including wheel/sdist build and bundled Chart.js asset check), `security-install`,
+`security-scan`, and `uv lock --check` passed. All 298 tests pass on both supported interpreters;
+four installed-wheel smoke tests pass. The virtualenv excludes system packages, `.githooks` is
+active, and existing `data/` captures were preserved and restored. Vendored Chart.js v4.4.9 (MIT)
+ships as package data under `src/sketchtastic/assets/`; package runtime dependencies and release
+workflows are unchanged. v0.2.0 remains the published release.*

@@ -65,3 +65,9 @@ Next Steps: retro/launch/local integration; keep captures in data and warn clean
 Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
 Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
 Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
+
+
+## Sprint 7 final checkpoint — 2026-11-21
+- **Context:** Approved Stories (Gate 1), Architecture (Gate 2), and live Bluesky HTML dashboard UAT (`data/bluesky-posts-aggs/analysis.html`, 20,789 obs / 860 skits, Chromium 0 console errors). Caught and verified fix for full-width Aggregates table and clipped long Min/Max cells.
+- **Current Task:** Complete (100%) — UAT and LESSON rubrics passed.
+- **Next Steps:** Await next sprint; keep visual viewport checks part of HTML UAT.

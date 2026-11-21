@@ -49,3 +49,31 @@ here. Keep reporting generic so the same analysis works for other datasets.
   `src/sketchtastic/reporting.py`, `tests/test_bluesky_profile.py`.
 - **Applies when:** selecting representative original records for regression tests; completeness
   is relative to the observed baseline and profile, not all possible program behavior.
+
+## [2026-11-21] Preserve statistical scope honesty and visual table legibility in offline dashboards
+
+> **Tags:** #analysis #dashboard #security #ux #Oracle
+
+### Context
+Sprint 7 added `sketchtastic analyze`, generating a self-contained offline HTML dashboard bundling
+Chart.js v4.4.9 over sketch summaries (`tokens`, `aggregates`, `meta`, and optional `.history/`).
+
+### Observation and Cause
+1. Sketches retain per-skit summaries rather than raw per-event histograms. Calling an across-skit
+   median of per-skit `AVG` values a population median would mislead readers; similarly, falling
+   back from empty `AVG.avg=None` to `SUM=0` would pollute active-skit statistics with absent rows.
+2. Placing a 9-column Aggregates summary table inside a half-width two-column CSS grid hid columns
+   4–9 behind horizontal scroll on a 1280px viewport, caught immediately by live Chromium preview.
+
+### Rule
+Label observation-weighted statistics (`AVG.sum / AVG.count`, exact discrete observation-rank
+weighted medians for numeric token fields) separately from across-skit summaries, and never fall
+back to `SUM=0` when `AVG` has zero observations. Always preview generated HTML dashboards at a
+realistic desktop width and verify zero console errors, strict offline CSP, script-safe JSON
+escaping (`<`, `>`, `&`, U+2028/U+2029), and `Map`/safe-DOM rendering before closeout.
+
+### Evidence and Scope
+- **References:** `ADR-2026-11-21`, `src/sketchtastic/analysis.py`, `src/sketchtastic/dashboard.py`,
+  `tests/test_analysis.py`, `tests/test_dashboard.py`, `docs/sprints/UAT_PLAN_SPRINT7.md`.
+- **Applies when:** building offline HTML/JS analysis views or aggregate summaries on top of
+  mergeable sketches.

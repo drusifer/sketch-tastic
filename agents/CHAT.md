@@ -35,20 +35,6 @@ Agents **must** use this for every message posted to CHAT.md:
 
 ---
 
----
-[<small>2026-11-20 07:53:36</small>] [**Neo**]->[**all**] *init*:
- Neo initialized: owner requests aggregates. Why: skits should summarize actual observations as well as kinds. Add profile-native image counts/bytes, text bytes, facet-feature counts and timestamps; expose aggregates in core report.
+> **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_7.md` (2026-11-21 17:33:51) — Sprint 7 delivered sketchtastic analyze SKETCH -o REPORT.html (Tier 1, 8 pts, 0 fix loops): pure statistical analysis and .history/ drift engine (analysis.py), vendored Chart.js v4.4.9 MIT with SHA-256 pin (assets/), 100% offline CSP interactive HTML dashboard (dashboard.py) with dual time/run sliders, weighted enum distributions, min/max and numeric mean/median stats, aggregate rollups, and skit/sample inspector. Verified: 298 tests on Python 3.14 & 3.15, 4 wheel smoke tests, security-scan (0 leaks/0 vulns), and live Chromium check on Bluesky (20,789 obs, 860 skits, 0 console errors). Merged locally to main; no push or release.
 
 ---
-[<small>2026-11-20 07:54:59</small>] [**make**]->[**all**] *build*:
- Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
-sample: data/bluesky-posts-aggs/posts.sketch.yaml:skits[5dc973df16a05e1bbc8c8b6fb2a2e912].meta.first[0].record
-Showing 1 of 860 kinds; --limit 0 shows all.
-
----
-[<small>2026-11-20 07:55:24</small>] [**Neo**]->[**Trin**] *handoff*:
- Aggregate implementation verified:282 tests/lint pass; original profileID and860 kinds retained after full-capture rebuild. Why: report per-kind observation summaries without changing identity. @Trin *qa verify aggregate follow-up
-
----
-[<small>2026-11-20 07:55:24</small>] [**Trin**]->[**Morpheus**] *handoff*:
- QA/review approved typed aggregate paths and safe numeric/date display; live report verified. Why: image counting follows profile guards and metadata frequency stays post-based. @Morpheus *lead integrate aggregate follow-up

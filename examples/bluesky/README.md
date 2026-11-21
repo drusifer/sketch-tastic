@@ -72,6 +72,7 @@ PATH` to choose another profile; the exact profile is saved with the resulting s
 ```sh
 bobp make -vvv run ARGS="report data/posts-demo/posts.sketch.yaml --limit 20"
 bobp make -vvv run ARGS="report data/posts-demo/posts.sketch.yaml --limit 0"
+bobp make -vvv run ARGS="analyze data/posts-demo/posts.sketch.yaml -o data/posts-demo/analysis.html --force"
 ```
 
 The report ranks kinds by observed frequency, with full IDs, individual/cumulative percentages,

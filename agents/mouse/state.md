@@ -1,41 +1,28 @@
 # Agent State
 
-## Important Notes
-- 2026-10-14 Repository created from drusifer/fingerling (subtree split, history kept). Sprint 1 renamed it to sketch-tastic / `sketchtastic` / `skt` (sketch = the file, skit = one event shape). Sprint 2: `show --sort KEY` (lowest first, default COUNT; no --top). Sprint 3 + owner review: RFC 9535 JSONPath via jsonpath-rfc9535, fold each event once into the run then `Sketch.merge`, no FIRST/LAST copies. Sprint 4: `merge -j N` (long-lived workers, bounded task queue, output queue), libyaml for all YAML.
-- 2026-10-15 post-Sprint 4 fixes, pushed (636243e): every aggregate is created in profile order at its initial state (SUM/COUNT 0, FIRST/LAST [], AVG {avg: null, sum: 0, count: 0}, MIN/MAX null); skit id = MD5 of the JSON-encoded token values in profile order; profile id = field specs in profile order.
-- `make profile` (GH Archive hour, 180,387 events, Pi 5, 4 cores): parallel ~14 s, `-j 1` ~29 s (106 s before Sprint 3). Ids changed after the last profile run, so the next run prints a new `-j 1` hash.
-- Owner rules: no backwards compatibility before 1.0 (v0, no migrations); mainline (no tags/releases); CI by hand only, never poll it; KISS; no ad hoc testing (tests + `bobp make` only); no `rm` (use `bobp make clean`); `*fix` diagnoses and confirms first; integrity errors abort runs; agents push only when the owner says so; leave ../fingerling alone unless asked.
-- Owner working style: steers designs live; explain options and trade-offs before building; no shortcuts or side paths (one mechanism; producers wait on full buffers); the profile is the only source of key order.
+## Context
+- **Repository & History**:
+  - Sprints 1–6 + Bluesky aggregates follow-up merged on `main` (`65c4852`).
+  - **Sprint 7 (2026-11-21)**: Interactive Offline Sketch Analysis Dashboard (`STORY-SKT-12`..`14`, `ADR-2026-11-21`, Tier 1, 8 pts):
+    - `src/sketchtastic/analysis.py`: Pure analysis engine & `.history/` run-over-run drift loader.
+    - `src/sketchtastic/assets/chart.umd.min.js` (Chart.js v4.4.9 MIT, SHA-256 `bce154080959c574be0bb6b1a924ff32f08ebc6ff460c159171f51c53802c844`).
+    - `src/sketchtastic/dashboard.py`: Single-file offline HTML renderer with strict offline CSP, script-safe JSON escaping, `Map`/safe-DOM JS, dual-handle time/run range sliders (Overlap / First appeared / Contained), Pareto concentration curve, weighted enum distributions (Obs % vs Skits %), field Min/Max & exact numeric weighted Mean/Median, aggregate global rollups & across-skit stats, interactive skit/sample explorer, and history drift.
+    - `src/sketchtastic/reporting.py`: `sketchtastic analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--force]` with atomic no-clobber/no-symlink publishing.
+    - Verified: 298 tests on Python 3.14 & 3.15, 4 wheel smoke tests, `lint`, `security-scan` (0 leaks, 0 vulns), `uv lock --check`, live Bluesky dashboard `data/bluesky-posts-aggs/analysis.html` (20,789 obs, 860 skits, 0 browser console errors).
+- **Owner Rules**: Mainline (no push/tag/release unless owner explicitly asks); preserve `data/` across `clean`/`distclean`.
 
 ## Current Task
-**Status:** Sprint 5 Bluesky Image Explorer planned on sprint-5. Stories and architecture approved by Smith. task.md is the execution board; next Tank Phase 0, then pipeline and UI phases. Owner may steer app location/dimensions; default local app with six shared dimensions.
+**Status:** Complete (Sprint 7 launched and merged locally to `main`, 2026-11-21)
+
+### Progress
+- [x] Sprint 7 Phases 1–3 & Stage 3 closeout complete (8/8 pts)
+- [x] Local `--no-ff` merge to `main`, `sprint-7` branch deleted, chat archived to `agents/chat_archive/CHAT_SPRINT_7.md`
+- [ ] Await owner direction (review live Bluesky dashboard, push/publish, or next sprint from `task.md` Backlog)
 
 ## Next Steps
-1. Cold start: read the bottom of `agents/CHAT.md` and `task.md` (Backlog), then ask the owner what to pick up.
-2. Backlog highlights: **profile evolution** (owner: its own future sprint) — updating a sketch's profile, adding/removing fields, and whether to keep both the skit id and the profile id; test-internal "fingerprint" names; JSON Schema for sketch files.
-3. Next sprint is sprint-5, next story STORY-SKT-08. Measure speed only with `make profile` (`PROFILE_ARGS=` profiles a parallel run's parent). Keep chat messages under 512 characters and check every `bobp chat` result.
+1. Read tail of `agents/CHAT.md` and `task.md` before starting new work.
+2. Do not re-run unchanged tests on startup (298 tests green on Python 3.14 & 3.15).
+3. Generated live Bluesky dashboard is at `data/bluesky-posts-aggs/analysis.html` (ignored `data/`; `clean` deletes `data/`).
 
 ---
-*Last updated: 2026-10-15T09:55:00-04:00*
-
-
-## Current checkpoint — 2026-11-19 (supersedes earlier Sprint 5 plans)
-
-The owner authorized `$sprint until done` and clarified **local ASCII output**, with no browser,
-web app or TUI. Sprint 5 implementation and independent Trin/Switch/Morpheus reviews passed;
-Tank clean-environment gates and final Smith UAT remain pending. Six shared enum dimensions
-preserve observed image variants using the existing sketch/sample APIs. Original post/event
-and attachment indexes are retained. No global coverage or replay claim is made.
-
-Resume from `task.md` and `docs/sprints/UAT_PLAN_SPRINT5.md`; do not restart HDFS research or
-web design. Root coordinates final evidence, sprint close and handoffs. No push/release requested.
-
-## Final Sprint 5 checkpoint — supersedes pending work above
-Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
-Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
-Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.
-
-## Sprint 6 final checkpoint — supersedes pending work above
-Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
-Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
-Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
+*Last updated: 2026-11-21T17:33:00-05:00*

@@ -26,3 +26,9 @@
 Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
 Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
 Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
+
+
+## Sprint 7 final checkpoint — 2026-11-21
+- **Context:** Design threat model and Phases 1–3 implementation security reviews all passed (`No blocking findings`, saved in `agents/switch/reviews/2026-11-21-sprint7-*.md`). Verified Chart.js v4.4.9 MIT + SHA-256 pin, strict offline CSP, script-safe JSON escaping, `textContent`/`Map` DOM handling, atomic no-symlink output, `gitleaks` 0 leaks, and `pip-audit` 0 vulns.
+- **Current Task:** Complete (100%).
+- **Next Steps:** Re-verify SHA-256 and CSP if Chart.js or dashboard renderer is upgraded in a future sprint.
