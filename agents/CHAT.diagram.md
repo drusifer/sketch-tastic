@@ -101,8 +101,41 @@ sequenceDiagram
     Note right of Morpheus: "Phase 1 review passed:<br/>clean boundary in<br/>analysis.py, fixed<br/>SUM/COUNT separation and<br/>empty-AVG exclusion,<br/>statistical honesty<br/>upheld. Phase…"
 ```
 
-## Phase 1 so far
+## Phase 1 close-out
 
 - **Neo**: Phase 1 impl complete: analysis.py + 8 unit tests pass (lint clean). Why: pure stats, weighted distributions, numeric mean/median, and hist…
 - **Trin**: UAT phase 1 passed: 8/8 analysis tests pass covering empty sketch, Pareto thresholds, weighted enum stats, SUM+COUNT separation, AVG exclus…
 - **Morpheus**: Phase 1 review passed: clean boundary in analysis.py, fixed SUM/COUNT separation and empty-AVG exclusion, statistical honesty upheld. Phase…
+
+## Phase 2 starts
+
+Phase 2: Vendored Chart.js Asset &amp; Self-Contained HTML Dashboard Renderer (STORY-SKT-12, STORY-SKT-13, STORY-SKT-14)
+
+```mermaid
+%%{init: {"sequence": {"messageFontSize": 14, "noteFontSize": 18, "actorFontSize": 14}}}%%
+sequenceDiagram
+    autonumber
+    participant Mouse
+    participant All
+    participant Neo
+    participant Trin
+    participant Switch
+    participant Morpheus
+    Note over Mouse,Morpheus: 📅 2026-11-21
+    Mouse->>All: "phase 2"
+    Note right of Mouse: "Phase 2: Vendored<br/>Chart.js Asset & Self-<br/>Contained HTML Dashboard<br/>Renderer (STORY-SKT-12,<br/>STORY-SKT-13, STORY-<br/>SKT-14)"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 2 impl complete:<br/>vendored Chart.js v4.4.9<br/>(MIT, SHA-256 pinned) +<br/>dashboard.py offline<br/>interactive HTML<br/>renderer, 4/4 tests +<br/>node --…"
+    Trin->>Switch: "qa handoff"
+    Note right of Trin: "UAT phase 2 passed:<br/>offline CSP, zero<br/>external URLs, valid JS<br/>via node --check, empty<br/>sketch rendering, XSS<br/>breakout & prototype-<br/>pollution…"
+    Switch->>Morpheus: "sec handoff"
+    Note right of Switch: "Phase 2 review saved to<br/>agents/switch/reviews/20<br/>26-11-21-sprint7-<br/>phase2.md. Chart.js<br/>SHA-256 & MIT verified,<br/>strict offline CSP, safe<br/>JSON/…"
+    Morpheus->>Neo: "lead handoff"
+    Note right of Morpheus: "Phase 2 review passed:<br/>clean separation between<br/>analysis payload and<br/>dashboard renderer, hid<br/>unused drift selector<br/>when no history exists.…"
+```
+
+## Phase 2 so far
+
+- **Neo**: Phase 2 impl complete: vendored Chart.js v4.4.9 (MIT, SHA-256 pinned) + dashboard.py offline interactive HTML renderer, 4/4 tests + node --…
+- **Trin**: UAT phase 2 passed: offline CSP, zero external URLs, valid JS via node --check, empty sketch rendering, XSS breakout &amp; prototype-pollution…
+- **Morpheus**: Phase 2 review passed: clean separation between analysis payload and dashboard renderer, hid unused drift selector when no history exists.…
