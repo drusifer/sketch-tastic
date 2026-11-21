@@ -1462,7 +1462,7 @@ _APP_JS = r"""
       tr.appendChild(el("td", { class: "num" }, fmtInt(s.count)));
       tr.appendChild(el("td", { class: "num" }, fmtPct(wPct)));
       tr.appendChild(el("td", { class: "num" }, fmtPct(cPct)));
-      tr.appendChild(el("td", { class: "mono", style: "white-space:nowrap" }, (s.first_seen || "-") + " / " + (s.last_seen || "-")));
+      tr.appendChild(el("td", { class: "mono", style: "white-space:nowrap" }, fmtAny(s.first_seen) + " / " + fmtAny(s.last_seen)));
 
       const tokTd = el("td");
       const entries = Object.entries(s.tokens);
@@ -1921,7 +1921,7 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
           <thead>
             <tr>
               <th>Skit ID</th><th class="num">Count</th><th class="num">Weight %</th><th class="num">Cum %</th>
-              <th>First / Last Run</th><th>Tokens (click to filter)</th><th>Sample</th>
+              <th>First / Last Seen</th><th>Tokens (click to filter)</th><th>Sample</th>
             </tr>
           </thead>
           <tbody id="skits-tbody"></tbody>

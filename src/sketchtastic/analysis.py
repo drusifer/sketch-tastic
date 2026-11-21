@@ -656,6 +656,39 @@ def _load_history(
     }, run_map
 
 
+def _build_seen_time_axis(
+    rows: list[tuple[str, Skit]],
+) -> tuple[dict[str, Any] | None, dict[str, list[int]]]:
+    """Detect datetime/date `first_seen`/`last_seen` bounds (from profile `event_time`)."""
+    bounds_by_fid: dict[str, list[int]] = {}
+    candidates: list[Any] = []
+    for fid, skit in rows:
+        first_v = skit.meta.get("first_seen")
+        last_v = skit.meta.get("last_seen")
+        if not (isinstance(first_v, (date, datetime)) or isinstance(last_v, (date, datetime))):
+            continue
+        lo_val = first_v if isinstance(first_v, (date, datetime)) else last_v
+        hi_val = last_v if isinstance(last_v, (date, datetime)) else first_v
+        lo_ms = _to_epoch_ms(lo_val)
+        hi_ms = _to_epoch_ms(hi_val)
+        if lo_ms is not None and hi_ms is not None:
+            bounds_by_fid[fid] = [min(lo_ms, hi_ms), max(lo_ms, hi_ms)]
+            candidates.extend((lo_val, hi_val))
+    if not bounds_by_fid:
+        return None, {}
+    kind = "datetime" if any(isinstance(v, datetime) for v in candidates) else "date"
+    axis = {
+        "id": "seen",
+        "kind": kind,
+        "label": "First / Last Seen (Event Time)",
+        "min_ms": min(lo for lo, _ in bounds_by_fid.values()),
+        "max_ms": max(hi for _, hi in bounds_by_fid.values()),
+        "min_iso": _safe_extremum(candidates, pick_max=False),
+        "max_iso": _safe_extremum(candidates, pick_max=True),
+    }
+    return axis, bounds_by_fid
+
+
 def _build_runs_axis(
     rows: list[tuple[str, Skit]], run_map: dict[str, dict[str, Any]]
 ) -> dict[str, Any] | None:
@@ -703,6 +736,11 @@ def analyze_sketch(
 
     field_summaries = _analyze_fields(rows, total)
     agg_summaries, time_axes, skit_bounds = _analyze_aggregates(rows)
+    seen_axis, seen_bounds = _build_seen_time_axis(rows)
+    if seen_axis is not None:
+        time_axes.insert(0, seen_axis)
+        for fid, pair in seen_bounds.items():
+            skit_bounds[fid]["seen"] = pair
     history, run_map = _load_history(sketch_path, history_dir)
     runs_axis = _build_runs_axis(rows, run_map)
     if runs_axis is not None:
@@ -723,8 +761,8 @@ def analyze_sketch(
                 "count": count,
                 "weight_pct": round(100.0 * count / total, 4) if total else 0.0,
                 "cum_pct": round(100.0 * cumulative / total, 4) if total else 0.0,
-                "first_seen": skit.meta.get("first_seen"),
-                "last_seen": skit.meta.get("last_seen"),
+                "first_seen": _json_safe(skit.meta.get("first_seen")),
+                "last_seen": _json_safe(skit.meta.get("last_seen")),
                 "tokens": dict(skit.tokens),
                 "aggregates": _json_safe(skit.aggregates),
                 "time_bounds": skit_bounds.get(fid, {}),

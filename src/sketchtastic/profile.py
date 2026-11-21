@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from typing import Any
 
 import yaml
 
 from sketchtastic import _yaml
 from sketchtastic.aggregators import Aggregate
-from sketchtastic.model import Field, Path, tokens
+from sketchtastic.model import DatetimeType, Field, Path, tokens
 from sketchtastic.schema import schema_errors
 
 _SECTIONS = {"fields": Field, "aggregates": Aggregate}
@@ -48,6 +49,8 @@ class Profile:
     aggregates: tuple[Aggregate, ...] = ()
     sequence: Path | None = None
     """Where each event's sequence number is (STORY-FING-49): drops events already merged."""
+    event_time: Path | None = None
+    """Optional JSONPath to each event's ISO-8601 time; overrides run IDs for first_seen/last_seen."""
 
     @property
     def profile_id(self) -> str:
@@ -57,6 +60,32 @@ class Profile:
     def tokens(self, event: Any) -> dict[str, str]:
         """The tokens this profile's fields make of `event`, by key."""
         return tokens(event, self.fields)
+
+    def extract_event_time(self, event: Any) -> tuple[datetime | None, bool]:
+        """Extract one UTC datetime from `event_time`. Returns (moment_or_None, was_unusable).
+
+        Missing or null values return (None, False); non-ISO or multi-match values return
+        (None, True) so callers can count unusable values consistently with DATETIME aggregates.
+        """
+        if self.event_time is None:
+            return None, False
+        values = self.event_time.values(event)
+        if not values or (len(values) == 1 and values[0] is None):
+            return None, False
+        if len(values) != 1:
+            return None, True
+        raw = values[0]
+        if isinstance(raw, datetime):
+            moment = (
+                raw.replace(tzinfo=timezone.utc)
+                if raw.tzinfo is None
+                else raw.astimezone(timezone.utc)
+            )
+            return moment, False
+        if isinstance(raw, date):
+            return datetime(raw.year, raw.month, raw.day, tzinfo=timezone.utc), False
+        converted = DatetimeType().convert(raw)
+        return (converted, False) if converted is not None else (None, True)
 
 
 def _location(data: Any, path: tuple) -> str:
@@ -110,9 +139,15 @@ def check_profile(data: Any, source: str = "<profile>") -> tuple[Profile | None,
             sequence = Path(data["sequence"])
         except ValueError as exc:
             problems.append(f"{source}: sequence: {exc}")
+    event_time = None
+    if "event_time" in data:
+        try:
+            event_time = Path(data["event_time"])
+        except ValueError as exc:
+            problems.append(f"{source}: event_time: {exc}")
     if problems:
         return None, problems
-    return Profile(tuple(built["fields"]), tuple(built["aggregates"]), sequence), []
+    return Profile(tuple(built["fields"]), tuple(built["aggregates"]), sequence, event_time), []
 
 
 def parse_profile(data: Any, source: str = "<profile>") -> Profile:

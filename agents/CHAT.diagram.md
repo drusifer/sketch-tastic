@@ -11,7 +11,9 @@ sequenceDiagram
     participant Neo
     participant Trin
     participant Morpheus
-    Note over User,Morpheus: 📅 2026-11-21
+    participant Switch
+    participant Smith
+    Note over User,Smith: 📅 2026-11-21
     User->>All: "request"
     Note right of User: "*nit add Boolean type<br/>support (distinct from<br/>enum)"
     Neo->>All: "swe init"
@@ -22,4 +24,18 @@ sequenceDiagram
     Note right of Trin: "QA verified boolean-<br/>field-type: IS_PRESENT<br/>TRUE/FALSE, DEFAULT<br/>True/False+NULL,<br/>constant FALSE, and<br/>mixed enum edge cases<br/>all pass (299 tes…"
     Morpheus->>All: "lead approve"
     Note right of Morpheus: "Code review approved for<br/>fix/boolean-field-type:<br/>clean 3-way field_type<br/>(boolean/numeric/enum)<br/>parity between Python<br/>and JS, zero security…"
+    User->>All: "request"
+    Note right of User: "/bloop add an optional<br/>config for an event time<br/>field (jsonpath). when<br/>provided it uses the<br/>value for that field<br/>instead of run-datetime<br/>so…"
+    Neo->>All: "swe impl"
+    Note right of Neo: "Starting *impl work-loop<br/>on fix/event-time:<br/>optional profile<br/>`event_time` JSONPath<br/>for historical<br/>first_seen/last_seen.<br/>Why: allow historic…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Implemented optional<br/>profile `event_time`<br/>JSONPath with TDD (RED<br/>confirmed -> GREEN 6/6<br/>new tests, 305/305 full<br/>suite, lint clean). Why:<br/>al…"
+    Trin->>Switch: "qa handoff"
+    Note right of Trin: "UAT event-time passed:<br/>305/305 tests OK (incl.<br/>out-of-order historical<br/>events, multi-run<br/>backfill, TZ<br/>normalization, date-<br/>only, missing/mal…"
+    Switch->>Morpheus: "sec handoff"
+    Note right of Switch: "Reviewed fix/event-time<br/>diff: JSON Schema + RFC<br/>9535 Path validation,<br/>strict ISO-8601<br/>DatetimeType conversion,<br/>_json_safe + script-safe<br/>JSO…"
+    Morpheus->>Smith: "lead handoff"
+    Note right of Morpheus: "Code review passed:<br/>clean internal envelope<br/>split in builtin.yaml<br/>preserves<br/>meta.first/last contract<br/>byte-for-byte while<br/>supporting datetim…"
+    Smith->>All: "user approve"
+    Note right of Smith: "UX verified:<br/>`event_time: $.ts`<br/>mirrors `sequence:`,<br/>`show --sort #quot;FIRST<br/>RUN#quot;` orders historical<br/>dates cleanly, and<br/>`analyze` defaults Rang…"
 ```

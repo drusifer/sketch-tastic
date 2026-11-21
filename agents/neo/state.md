@@ -119,3 +119,9 @@ Next Steps: commit/local integrate reviewed single change; no push/release. Use 
 - **Context:** Implemented `src/sketchtastic/analysis.py`, `src/sketchtastic/dashboard.py`, vendored Chart.js v4.4.9 (`src/sketchtastic/assets/`), `sketchtastic analyze` CLI in `reporting.py`, unit tests (`test_analysis.py`, `test_dashboard.py`, `test_analyze_cli.py`), wheel smoke test, and README docs.
 - **Current Task:** Complete (100%) — 298 tests green on Python 3.14 & 3.15, lint clean, zero radon D/F.
 - **Next Steps:** Await next sprint assignment from `task.md`.
+
+
+## `*impl` event_time complete — 2026-11-21
+- **Context:** Added optional top-level profile `event_time` (JSONPath) in `profile.schema.json`, `profile.py`, `builtin.yaml`, `sketch.py`, `cli.py`, `analysis.py`, `dashboard.py`, `examples/bluesky/demo.py`, and `README.md`.
+- **Current Task:** Complete (100%) — TDD RED confirmed (`test_event_time`), then GREEN (`6/6` new tests, `305/305` full suite, lint & gitleaks clean), merged locally to `main`.
+- **Next Steps:** Context is healthy; ready for next user request or push if requested.

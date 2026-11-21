@@ -496,7 +496,12 @@ def _fold_lines(
         events += 1
         if sequence is DROP:
             continue
-        run.upsert(profile.tokens(event), event, run_id)
+        if profile.event_time is not None:
+            event_time, unusable = profile.extract_event_time(event)
+            run.skipped_values += int(unusable)
+            run.upsert(profile.tokens(event), event, run_id, seen=event_time)
+        else:
+            run.upsert(profile.tokens(event), event, run_id)
     return run, {"events": events, "skipped_lines": skipped_lines}, warnings, sequencer
 
 

@@ -1,10 +1,12 @@
 # Built-in metadata, kept for every skit under `meta`.
-# These aggregates read an envelope, not the bare record:
-#   {meta: {run: <id of the run that read it, e.g. 261015-0003>}, record: <the record, parsed from its JSONL line>}
-# so injected fields can never clash with the record's own. Run ids sort in run order.
+# These aggregates read an internal envelope, not the bare record:
+#   {meta: {run: <run id>, seen: <event time or run id>},
+#    sample: {meta: {run: <run id>}, record: <the record, parsed from its JSONL line>}}
+# so injected fields can never clash with the record's own, and `first_seen`/`last_seen`
+# can track either run ids or UTC event timestamps without altering retained sample envelopes.
 aggregates:
-  - {key: count,      path: $.meta,     fn: COUNT}
-  - {key: first_seen, path: $.meta.run, fn: MIN}
-  - {key: last_seen,  path: $.meta.run, fn: MAX}
-  - {key: first,      path: $,          fn: {name: FIRST, n: 1}}
-  - {key: last,       path: $,          fn: {name: LAST, n: 1}}
+  - {key: count,      path: $.meta,      fn: COUNT}
+  - {key: first_seen, path: $.meta.seen, fn: MIN}
+  - {key: last_seen,  path: $.meta.seen, fn: MAX}
+  - {key: first,      path: $.sample,    fn: {name: FIRST, n: 1}}
+  - {key: last,       path: $.sample,    fn: {name: LAST, n: 1}}
