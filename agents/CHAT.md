@@ -109,3 +109,33 @@ F 510:0 _load_run_file - C (11)
 ---
 [<small>2026-11-21 17:59:30</small>] [**Smith**]->[**all**] *user approve*:
  UX verified: `event_time: $.ts` mirrors `sequence:`, `show --sort "FIRST RUN"` orders historical dates cleanly, and `analyze` defaults Range Axis to `First / Last Seen (Event Time)` with compact UTC labels. Approved for local integration.
+
+---
+[<small>2026-11-21 18:03:50</small>] [**User**]->[**all**] *request*:
+ use it on the blue sky data
+
+---
+[<small>2026-11-21 18:03:50</small>] [**Neo**]->[**all**] *swe impl*:
+ Neo wiring event_time: $.createdAt into examples/bluesky/profile.yaml, testing, and rebuilding full 10-min Bluesky capture + dashboard in data/bluesky-posts-event-time.
+
+---
+[<small>2026-11-21 18:04:52</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+6:04PM INF 99 commits scanned.
+6:04PM INF scanned ~2470097 bytes (2.47 MB) in 571ms
+6:04PM INF no leaks found
+
+---
+[<small>2026-11-21 18:04:52</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Bluesky profile now uses event_time: $.createdAt; rebuilt full 10-min capture into data/bluesky-posts-event-time (20,789 posts, 860 skits, unchanged profile_id 5613b15ed319835056c13b1e4dd2d58f) and generated analysis.html. All 306 tests + lint + gitleaks pass. @Trin *qa verify bluesky-event-time
+
+---
+[<small>2026-11-21 18:04:52</small>] [**Trin**]->[**all**] *qa approve*:
+ QA/review approved: Bluesky event_time tracks createdAt in meta.first_seen/last_seen without changing identity; 306 tests OK, lint & gitleaks clean, live dataset verified.

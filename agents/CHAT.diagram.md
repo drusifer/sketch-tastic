@@ -38,4 +38,12 @@ sequenceDiagram
     Note right of Morpheus: "Code review passed:<br/>clean internal envelope<br/>split in builtin.yaml<br/>preserves<br/>meta.first/last contract<br/>byte-for-byte while<br/>supporting datetim…"
     Smith->>All: "user approve"
     Note right of Smith: "UX verified:<br/>`event_time: $.ts`<br/>mirrors `sequence:`,<br/>`show --sort #quot;FIRST<br/>RUN#quot;` orders historical<br/>dates cleanly, and<br/>`analyze` defaults Rang…"
+    User->>All: "request"
+    Note right of User: "use it on the blue sky<br/>data"
+    Neo->>All: "swe impl"
+    Note right of Neo: "Neo wiring event_time:<br/>$.createdAt into example<br/>s/bluesky/profile.yaml,<br/>testing, and rebuilding<br/>full 10-min Bluesky<br/>capture + dashboard in<br/>d…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Bluesky profile now uses<br/>event_time: $.createdAt,<br/>rebuilt full 10-min<br/>capture into<br/>data/bluesky-posts-<br/>event-time (20,789<br/>posts, 860 skits,…"
+    Trin->>All: "qa approve"
+    Note right of Trin: "QA/review approved:<br/>Bluesky event_time<br/>tracks createdAt in meta<br/>.first_seen/last_seen<br/>without changing<br/>identity, 306 tests OK,<br/>lint & gitlea…"
 ```
