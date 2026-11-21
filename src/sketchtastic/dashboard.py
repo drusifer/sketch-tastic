@@ -289,6 +289,12 @@ tr.clickable:hover { background: var(--surface-2); }
 tr.selected { background: rgba(88, 166, 255, 0.14); }
 .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
 .mono { font-family: var(--mono); }
+.clip {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .muted { color: var(--muted); }
 .note {
   background: var(--surface-2);
@@ -421,7 +427,11 @@ _APP_JS = r"""
   function fmtAny(v) {
     if (v === null || v === undefined) return "-";
     if (typeof v === "number") return fmtNum(v);
-    return String(v);
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s)) {
+      return s.slice(0, 19).replace("T", " ") + "Z";
+    }
+    return s;
   }
 
   function asNum(v) {
@@ -991,9 +1001,10 @@ _APP_JS = r"""
       tr.appendChild(el("td", { class: "mono" }, f.key));
       tr.appendChild(el("td", null, f.is_numeric ? "Numeric" : "Enum"));
       tr.appendChild(el("td", { class: "num" }, fmtInt(f.cardinality)));
-      tr.appendChild(el("td", { class: "mono" }, fmtAny(f.min)));
-      tr.appendChild(el("td", { class: "mono" }, fmtAny(f.max)));
-      tr.appendChild(el("td", { class: "mono" }, f.mode ? f.mode.value + " (" + fmtPct(f.mode.weight_pct) + ")" : "-"));
+      tr.appendChild(el("td", { class: "mono clip", title: fmtAny(f.min) }, fmtAny(f.min)));
+      tr.appendChild(el("td", { class: "mono clip", title: fmtAny(f.max) }, fmtAny(f.max)));
+      const modeText = f.mode ? f.mode.value + " (" + fmtPct(f.mode.weight_pct) + ")" : "-";
+      tr.appendChild(el("td", { class: "mono clip", title: modeText }, modeText));
       tr.appendChild(el("td", { class: "num" }, f.is_numeric ? fmtNum(f.weighted_mean) : "-"));
       tr.appendChild(el("td", { class: "num" }, f.is_numeric ? fmtNum(f.weighted_median) : "-"));
       tr.appendChild(el("td", { class: "num" }, fmtPct(f.null_pct)));
@@ -1779,23 +1790,21 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
       <div class="note">
         <strong>Statistical scope:</strong> Global Min, Max, Sum, and Obs-Weighted Mean (<code>AVG.sum / AVG.count</code>) cover all observations in the filtered skits. Across-Skit Median and Mean summarize the per-skit metric across active skits (sketches do not retain raw per-event quantiles).
       </div>
-      <div class="grid-2">
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Aggregate</th><th>Kind</th><th class="num">Global Min</th><th class="num">Global Max</th>
-                <th class="num">Global Sum</th><th class="num">Obs-Weighted Mean</th>
-                <th class="num">Across-Skit Median</th><th class="num">Across-Skit Mean</th><th class="num">Active Skits</th>
-              </tr>
-            </thead>
-            <tbody id="aggs-tbody"></tbody>
-          </table>
-        </div>
-        <div class="chart-wrap tall">
-          <canvas id="chart-agg"></canvas>
-          <div id="agg-empty" class="empty-state" style="display:none"></div>
-        </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Aggregate</th><th>Kind</th><th class="num">Global Min</th><th class="num">Global Max</th>
+              <th class="num">Global Sum</th><th class="num">Obs-Weighted Mean</th>
+              <th class="num">Across-Skit Median</th><th class="num">Across-Skit Mean</th><th class="num">Active Skits</th>
+            </tr>
+          </thead>
+          <tbody id="aggs-tbody"></tbody>
+        </table>
+      </div>
+      <div class="chart-wrap" style="margin-top:14px">
+        <canvas id="chart-agg"></canvas>
+        <div id="agg-empty" class="empty-state" style="display:none"></div>
       </div>
     </section>
 

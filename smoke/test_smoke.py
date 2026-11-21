@@ -95,6 +95,17 @@ class ReadmeTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_analyze_writes_offline_dashboard_from_wheel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.run_quickstart(tmp)
+            out_html = os.path.join(tmp, "dashboard.html")
+            result = sketchtastic("analyze", "app.sketch.yaml", "-o", out_html, cwd=tmp)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            with open(out_html, encoding="utf-8") as f:
+                body = f.read()
+            self.assertIn("Content-Security-Policy", body)
+            self.assertIn("Chart.js", body)
+
 
 if __name__ == "__main__":
     unittest.main()

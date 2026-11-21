@@ -213,6 +213,48 @@ def coverage(
     return "\n".join(lines)
 
 
+def analyze_to_html(
+    sketch_path: Path | str,
+    output: Path | str,
+    *,
+    history_dir: Path | str | None = None,
+    title: str | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Analyze a sketch (and optional history) and atomically write an offline HTML dashboard."""
+    from sketchtastic.analysis import analyze_sketch
+    from sketchtastic.dashboard import render_dashboard
+
+    out = Path(output)
+    if out.is_symlink():
+        raise ValueError(f"Output must not be a symlink: {out}")
+    if out.is_dir():
+        raise IsADirectoryError(f"Output is a directory: {out}")
+    if not force and out.exists():
+        raise FileExistsError(f"Output already exists: {out} (pass --force to overwrite)")
+    if not out.parent.is_dir():
+        raise FileNotFoundError(f"Output directory does not exist: {out.parent}")
+
+    payload = analyze_sketch(sketch_path, history_dir=history_dir)
+    document = render_dashboard(payload, title=title)
+
+    with tempfile.TemporaryDirectory(prefix=".skt-analyze-", dir=out.parent) as staging:
+        staged = Path(staging) / "dashboard.html"
+        staged.write_text(document, encoding="utf-8")
+        if out.is_symlink():
+            raise ValueError(f"Output must not be a symlink: {out}")
+        if force:
+            os.replace(staged, out)
+        else:
+            os.link(staged, out)
+
+    return {
+        "total_observations": payload["meta"]["total_observations"],
+        "total_skits": payload["meta"]["total_skits"],
+        "history_runs": len(payload["history"]["runs"]),
+    }
+
+
 def _command(args: argparse.Namespace) -> int:
     try:
         if args.command == "report":
@@ -224,6 +266,20 @@ def _command(args: argparse.Namespace) -> int:
                 f"{key}  {safe_text(args.output)}:{index}" for index, key in enumerate(ids, 1)
             )
             text = "\n".join(lines)
+        elif args.command == "analyze":
+            summary = analyze_to_html(
+                args.sketch_path,
+                args.output,
+                history_dir=args.history,
+                title=args.title,
+                force=args.force,
+            )
+            text = (
+                f"Wrote interactive dashboard to {safe_text(args.output)} "
+                f"({summary['total_observations']:,} observations, "
+                f"{summary['total_skits']:,} skits, "
+                f"{summary['history_runs']:,} history runs)"
+            )
         else:
             text = coverage(args.sketch_path, args.profile, args.regression, args.limit)
     except (OSError, ValueError, RecursionError) as exc:
@@ -239,6 +295,7 @@ def add_commands(commands: argparse._SubParsersAction) -> None:
         ("report", "rank skits by frequency and locate original samples"),
         ("export", "export original representative JSON objects to a new JSONL file"),
         ("coverage", "measure regression sample representation against a baseline sketch"),
+        ("analyze", "generate an interactive offline HTML analysis dashboard for a sketch"),
     ):
         parser = commands.add_parser(name, help=help_text, description=help_text)
         parser.add_argument("sketch_path", metavar="BASELINE" if name == "coverage" else "SKETCH")
@@ -250,6 +307,23 @@ def add_commands(commands: argparse._SubParsersAction) -> None:
                 action="append",
                 metavar="FULL_ID",
                 help="select this full skit ID; repeat to select several (default all)",
+            )
+        elif name == "analyze":
+            parser.add_argument("-o", "--output", required=True, metavar="REPORT.html")
+            parser.add_argument(
+                "--history",
+                metavar="DIR",
+                help="history directory of run files (default: auto-detect <sketch>.history)",
+            )
+            parser.add_argument(
+                "--title",
+                metavar="TEXT",
+                help="dashboard page title (default: sketch filename)",
+            )
+            parser.add_argument(
+                "--force",
+                action="store_true",
+                help="overwrite an existing regular output file",
             )
         else:
             parser.add_argument(

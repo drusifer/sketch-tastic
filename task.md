@@ -26,10 +26,10 @@
 
 ### Phase 3: CLI Integration (`sketchtastic analyze`), Docs, Smoke & Live UAT
 *Phase goal: Wire `sketchtastic analyze` with atomic no-clobber output, document it, add wheel smoke coverage, and verify live on Bluesky data.*
-- [ ] **Task 3.1 (L2):** Write CLI tests (`tests/test_analyze_cli.py`) first, add `analyze` subcommand in `src/sketchtastic/reporting.py` (`-o/--output`, `--history`, `--title`, `--force`, atomic no-symlink publish), update `README.md`, `examples/bluesky/README.md`, and `smoke/test_smoke.py`. (*Owner: Neo | Trace: STORY-SKT-12 AC1–3, STORY-SKT-14 AC4–5 | Verification: `bobp make test && bobp make lint`*)
-- [ ] **Task 3.2 (L2):** Execute Sprint 7 UAT plan (`docs/sprints/UAT_PLAN_SPRINT7.md`) including live Bluesky dataset (`data/bluesky-posts-aggs/posts.sketch.yaml`) and multi-run history sketch. (*Owner: Trin | Trace: STORY-SKT-12..14 | Verification: UAT verdict in `docs/sprints/UAT_PLAN_SPRINT7.md` & `agents/CHAT.md`*)
-- [ ] **Task 3.3 (L2):** Security review of Phase 3 diff (atomic output & symlink refusal, terminal escaping, full `bobp make security-scan`). (*Owner: Switch | Trace: STORY-SKT-12 AC2–3 / sprint7-design | Verification: `security gate (phase 3): ...` in `agents/CHAT.md`*)
-- [ ] **Task 3.4 (L2):** Code & architecture review of Phase 3; commit `feat(cli): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-21 | Verification: review verdict in `agents/CHAT.md`*)
+- [x] **Task 3.1 (L2):** Write CLI tests (`tests/test_analyze_cli.py`) first, add `analyze` subcommand in `src/sketchtastic/reporting.py` (`-o/--output`, `--history`, `--title`, `--force`, atomic no-symlink publish), update `README.md`, `examples/bluesky/README.md`, and `smoke/test_smoke.py`. (*Owner: Neo | Trace: STORY-SKT-12 AC1–3, STORY-SKT-14 AC4–5 | Verification: `bobp make test && bobp make lint`*)
+- [x] **Task 3.2 (L2):** Execute Sprint 7 UAT plan (`docs/sprints/UAT_PLAN_SPRINT7.md`) including live Bluesky dataset (`data/bluesky-posts-aggs/posts.sketch.yaml`) and multi-run history sketch. (*Owner: Trin | Trace: STORY-SKT-12..14 | Verification: UAT verdict in `docs/sprints/UAT_PLAN_SPRINT7.md` & `agents/CHAT.md`*)
+- [x] **Task 3.3 (L2):** Security review of Phase 3 diff (atomic output & symlink refusal, terminal escaping, full `bobp make security-scan`). (*Owner: Switch | Trace: STORY-SKT-12 AC2–3 / sprint7-design | Verification: `security gate (phase 3): ...` in `agents/CHAT.md`*)
+- [x] **Task 3.4 (L2):** Code & architecture review of Phase 3; commit `feat(cli): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-21 | Verification: review verdict in `agents/CHAT.md`*)
 
 ### Stage 3: Sprint Closeout
 - [ ] **Task C.1 (L2):** SDLC conformance check (preserve `data/` across `distclean`, run `install`, `lint`, `test`, `test-all` 3.14/3.15, `smoke`, `build`, `security-scan`; verify `chart.umd.min.js` ships inside wheel). (*Owner: Tank | Trace: N/A — closeout | Verification: `docs/SDLC.md` section 10 checks pass*)

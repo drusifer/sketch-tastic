@@ -134,8 +134,41 @@ sequenceDiagram
     Note right of Morpheus: "Phase 2 review passed:<br/>clean separation between<br/>analysis payload and<br/>dashboard renderer, hid<br/>unused drift selector<br/>when no history exists.…"
 ```
 
-## Phase 2 so far
+## Phase 2 close-out
 
 - **Neo**: Phase 2 impl complete: vendored Chart.js v4.4.9 (MIT, SHA-256 pinned) + dashboard.py offline interactive HTML renderer, 4/4 tests + node --…
 - **Trin**: UAT phase 2 passed: offline CSP, zero external URLs, valid JS via node --check, empty sketch rendering, XSS breakout &amp; prototype-pollution…
 - **Morpheus**: Phase 2 review passed: clean separation between analysis payload and dashboard renderer, hid unused drift selector when no history exists.…
+
+## Phase 3 starts
+
+Phase 3: CLI Integration (sketchtastic analyze), Docs, Smoke &amp; Live UAT (STORY-SKT-12, STORY-SKT-14)
+
+```mermaid
+%%{init: {"sequence": {"messageFontSize": 14, "noteFontSize": 18, "actorFontSize": 14}}}%%
+sequenceDiagram
+    autonumber
+    participant Mouse
+    participant All
+    participant Neo
+    participant Trin
+    participant Switch
+    participant Morpheus
+    participant Tank
+    Note over Mouse,Tank: 📅 2026-11-21
+    Mouse->>All: "phase 3"
+    Note right of Mouse: "Phase 3: CLI Integration<br/>(sketchtastic analyze),<br/>Docs, Smoke & Live UAT<br/>(STORY-SKT-12, STORY-<br/>SKT-14)"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 3 impl complete:<br/>sketchtastic analyze CLI<br/>+ atomic no-symlink<br/>output + README/Bluesky<br/>docs + wheel smoke test<br/>+ analysis.py complexit…"
+    Trin->>Switch: "qa handoff"
+    Note right of Trin: "UAT phase 3 passed:<br/>UAT_PLAN_SPRINT7.md<br/>scenarios UAT-<br/>SKT-701..705 passed (298<br/>tests OK, Chromium<br/>console clean, live<br/>Bluesky dashboard ver…"
+    Switch->>Morpheus: "sec handoff"
+    Note right of Switch: "Phase 3 review saved to<br/>agents/switch/reviews/20<br/>26-11-21-sprint7-<br/>phase3.md. Atomic temp<br/>staging, symlink refusal<br/>even with --force,<br/>safe_te…"
+    Morpheus->>Tank: "lead handoff"
+    Note right of Morpheus: "All phases reviewed:<br/>clean CLI contract,<br/>complexity refactored<br/>(zero radon D/F), table<br/>UX polished, 298 tests<br/>green. Handing off for<br/>SDLC c…"
+```
+
+## Phase 3 so far
+
+- **Neo**: Phase 3 impl complete: sketchtastic analyze CLI + atomic no-symlink output + README/Bluesky docs + wheel smoke test + analysis.py complexit…
+- **Trin**: UAT phase 3 passed: UAT\_PLAN\_SPRINT7.md scenarios UAT-SKT-701..705 passed (298 tests OK, Chromium console clean, live Bluesky dashboard ver…

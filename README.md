@@ -250,7 +250,37 @@ export regression data, and measure how much of an observed baseline that data r
 sketchtastic report baseline.sketch.yaml --limit 20
 sketchtastic export baseline.sketch.yaml --output regression.jsonl
 sketchtastic coverage baseline.sketch.yaml -p profile.yaml regression.jsonl
+sketchtastic analyze baseline.sketch.yaml -o analysis.html
 ```
+
+### Interactive HTML analysis dashboard
+
+```
+sketchtastic analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--force]
+```
+
+Generates a single, 100% offline HTML dashboard bundling Chart.js (MIT) with a strict Content
+Security Policy and zero external network requests. Open `REPORT.html` directly in any browser to
+explore:
+
+- **Overview & Pareto concentration curve:** observation totals, distinct skits, singletons, and
+  how many skits cover 50%, 80%, 90%, 95%, and 99% of observations.
+- **Enumerated field distributions & min/max/numeric stats:** observation-weighted and
+  skit-weighted bar charts for every field (click any bar to cross-filter), min/max across all
+  fields, constant/high-cardinality diagnostics, and exact observation-weighted mean and median for
+  numeric token fields.
+- **Time & run range sliders:** dual-handle sliders automatically populated for `DATETIME`/`DATE`
+  aggregates (`MIN`/`MAX`) and `first_seen`/`last_seen` runs (with overlap, first-appeared, and
+  fully-contained modes) that dynamically recompute every chart and metric.
+- **Aggregates & outliers:** global SUM, COUNT, MIN, MAX, exact observation-weighted MEAN
+  (`AVG.sum / AVG.count`), clearly labeled across-skit mean/median, and top outlier / histogram
+  charts.
+- **Interactive skit explorer & history drift:** searchable, sortable skit table with copyable full
+  IDs, expandable retained original JSON samples, and run-over-run drift when
+  `<sketch>.history/` is present (or supplied with `--history DIR`).
+
+By default `analyze` refuses to overwrite an existing file (pass `--force` to replace a regular
+file; symlinks are always refused). Exit status: `0` written · `2` invalid input or output error.
 
 `report` ranks kinds by observation count, with full IDs, individual and cumulative frequency,
 tokens and retained-sample locations. `--limit 0` prints all rows. `export` writes one original
