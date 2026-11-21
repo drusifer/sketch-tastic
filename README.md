@@ -269,6 +269,9 @@ explore:
   for every field (click any bar to cross-filter), automatic **Boolean**, **Numeric**, and **Enum**
   classification, min/max across all fields, boolean true-rate %, constant/high-cardinality
   diagnostics, and exact observation-weighted mean and median for numeric token fields.
+- **Drop-one field ablation:** ranks every profile field by how many skits and singletons collapse
+  when that field is removed alone (plus singleton-only value counts), helping spot cardinality
+  drivers to coarsen with modifiers.
 - **Time & run range sliders:** dual-handle sliders automatically populated for `DATETIME`/`DATE`
   aggregates (`MIN`/`MAX`) and `first_seen`/`last_seen` runs (with overlap, first-appeared, and
   fully-contained modes) that dynamically recompute every chart and metric.

@@ -139,3 +139,37 @@ F 510:0 _load_run_file - C (11)
 ---
 [<small>2026-11-21 18:04:52</small>] [**Trin**]->[**all**] *qa approve*:
  QA/review approved: Bluesky event_time tracks createdAt in meta.first_seen/last_seen without changing identity; 306 tests OK, lint & gitleaks clean, live dataset verified.
+
+---
+[<small>2026-11-21 18:15:47</small>] [**User**]->[**all**] *request*:
+ can you add drop-one ablation analysis to the report?
+
+---
+[<small>2026-11-21 18:15:47</small>] [**Neo**]->[**all**] *swe impl*:
+ Starting *impl work-loop on fix/drop-one-ablation: add drop-one field ablation analysis (skits collapsed, singletons removed, singleton-only values, remaining skits/singletons) to analysis.py and interactive Chart.js dashboard. Running TDD RED first.
+
+---
+[<small>2026-11-21 18:18:00</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make run @ 2026-11-21 18:17:55 ===
+Wrote interactive dashboard to data/bluesky-posts-event-time/analysis.html (20,789 observations, 860 skits, 0 history runs)
+
+---
+[<small>2026-11-21 18:18:22</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Implemented Drop-One Field Ablation with TDD (RED confirmed -> GREEN 308/308 tests, lint, quality, gitleaks clean) in analysis.py and interactive Chart.js dashboard. @Trin *qa uat drop-one-ablation
+
+---
+[<small>2026-11-21 18:18:22</small>] [**Trin**]->[**Switch**] *qa handoff*:
+ UAT passed: 308/308 tests OK (ablation accuracy, empty sketch, node --check), live Bluesky dashboard verified (languages collapses -701 skits / -311 singletons). @Switch *sec review drop-one-ablation
+
+---
+[<small>2026-11-21 18:18:22</small>] [**Switch**]->[**Morpheus**] *sec handoff*:
+ Reviewed fix/drop-one-ablation: Map + length-prefixed collision-free composite keys, textContent DOM rendering, gitleaks 0 leaks. security gate (drop-one-ablation): No blocking findings. @Morpheus *lead review drop-one-ablation
+
+---
+[<small>2026-11-21 18:18:22</small>] [**Morpheus**]->[**Smith**] *lead handoff*:
+ Code review passed: clean _ablate_one_field helper keeps radon <= C; Python/JS parity verified. rubric LOOP_IMPL: TFIRST=S VERIF=S MODUL=S REGRESS=S BUDGET=S. @Smith *user test drop-one-ablation
+
+---
+[<small>2026-11-21 18:18:22</small>] [**Smith**]->[**all**] *user approve*:
+ UX verified: Chromium preview caught narrow 2-column ablation table and confirmed full-width stacked chart + 7-column table renders cleanly with 0 console errors. Approved for local merge.

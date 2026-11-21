@@ -1518,6 +1518,152 @@ _APP_JS = r"""
     document.getElementById("next-page").disabled = state.page >= totalPages;
   }
 
+  function computeAblation(skits) {
+    const keys = DATA.fields.map(f => f.key);
+    const totalSkits = skits.length;
+    if (!totalSkits || !keys.length) return [];
+    const totalSingletons = skits.reduce((n, s) => n + (s.count === 1 ? 1 : 0), 0);
+    const results = keys.map(dropKey => {
+      const otherKeys = keys.filter(k => k !== dropKey);
+      const grouped = new Map();
+      const allVals = new Set();
+      const nonSingletonVals = new Set();
+      for (const s of skits) {
+        const val = Object.prototype.hasOwnProperty.call(s.tokens, dropKey) ? s.tokens[dropKey] : "NULL";
+        allVals.add(val);
+        if (s.count > 1) nonSingletonVals.add(val);
+        const parts = [];
+        for (const k of otherKeys) {
+          const ov = Object.prototype.hasOwnProperty.call(s.tokens, k) ? s.tokens[k] : "NULL";
+          parts.push(ov.length + ":" + ov);
+        }
+        const compKey = parts.join("|");
+        grouped.set(compKey, (grouped.get(compKey) || 0) + s.count);
+      }
+      let remainingSingletons = 0;
+      for (const cnt of grouped.values()) {
+        if (cnt === 1) remainingSingletons += 1;
+      }
+      let singletonOnly = 0;
+      for (const v of allVals) {
+        if (!nonSingletonVals.has(v)) singletonOnly += 1;
+      }
+      const remainingSkits = grouped.size;
+      const skitsCollapsed = totalSkits - remainingSkits;
+      const singletonsRemoved = totalSingletons - remainingSingletons;
+      return {
+        key: dropKey,
+        cardinality: allVals.size,
+        singleton_only_values: singletonOnly,
+        skits_collapsed: skitsCollapsed,
+        skits_collapsed_pct: totalSkits ? (100 * skitsCollapsed) / totalSkits : null,
+        singletons_removed: singletonsRemoved,
+        singletons_removed_pct: totalSingletons ? (100 * singletonsRemoved) / totalSingletons : null,
+        remaining_skits: remainingSkits,
+        remaining_singletons: remainingSingletons
+      };
+    });
+    results.sort((a, b) =>
+      (b.skits_collapsed - a.skits_collapsed) ||
+      (b.singletons_removed - a.singletons_removed) ||
+      (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
+    );
+    return results;
+  }
+
+  function renderAblationSection(ablation, fields) {
+    destroyChart("ablation");
+    const tbody = document.getElementById("ablation-tbody");
+    clear(tbody);
+    const canvas = document.getElementById("chart-ablation");
+    const empty = document.getElementById("ablation-empty");
+    if (!ablation.length) {
+      const tr = el("tr");
+      tr.appendChild(el("td", { colspan: "7", class: "empty-state" }, "No fields to ablate in the current filter."));
+      tbody.appendChild(tr);
+      canvas.style.display = "none";
+      empty.style.display = "";
+      return;
+    }
+    canvas.style.display = "";
+    empty.style.display = "none";
+
+    for (const r of ablation) {
+      const tr = el("tr", { class: "clickable" });
+      tr.addEventListener("click", () => {
+        state.selectedField = r.key;
+        renderFieldsSection(fields);
+        document.getElementById("field-select").scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+      tr.appendChild(el("td", { class: "mono" }, r.key));
+      tr.appendChild(el("td", { class: "num" }, fmtInt(r.cardinality)));
+      tr.appendChild(el("td", { class: "num" }, fmtInt(r.singleton_only_values)));
+      const skTxt = r.skits_collapsed > 0
+        ? "-" + fmtInt(r.skits_collapsed) + " (" + fmtPct(r.skits_collapsed_pct) + ")"
+        : "0";
+      const sgTxt = r.singletons_removed > 0
+        ? "-" + fmtInt(r.singletons_removed) + " (" + fmtPct(r.singletons_removed_pct) + ")"
+        : "0";
+      tr.appendChild(el("td", { class: "num" }, skTxt));
+      tr.appendChild(el("td", { class: "num" }, sgTxt));
+      tr.appendChild(el("td", { class: "num" }, fmtInt(r.remaining_skits)));
+      tr.appendChild(el("td", { class: "num" }, fmtInt(r.remaining_singletons)));
+      tbody.appendChild(tr);
+    }
+
+    const nonZero = ablation.filter(r => r.skits_collapsed > 0 || r.singletons_removed > 0);
+    const chartRows = (nonZero.length ? nonZero : ablation).slice(0, 15);
+    const tc = themeColors();
+    state.charts.ablation = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: chartRows.map(r => r.key),
+        datasets: [
+          {
+            label: "Skits Collapsed",
+            data: chartRows.map(r => r.skits_collapsed),
+            backgroundColor: tc.accent + "cc",
+            borderRadius: 4
+          },
+          {
+            label: "Singletons Removed",
+            data: chartRows.map(r => r.singletons_removed),
+            backgroundColor: "#d29922cc",
+            borderRadius: 4
+          }
+        ]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        onClick: (_evt, els) => {
+          if (!els.length) return;
+          const row = chartRows[els[0].index];
+          if (row) {
+            state.selectedField = row.key;
+            renderFieldsSection(fields);
+          }
+        },
+        scales: {
+          x: { beginAtZero: true, ticks: { color: tc.muted }, grid: { color: tc.border + "55" }, title: { display: true, text: "Count collapsed if field omitted", color: tc.muted } },
+          y: { ticks: { color: tc.text, font: { family: "monospace", size: 11 } }, grid: { display: false } }
+        },
+        plugins: {
+          legend: { labels: { color: tc.text } },
+          tooltip: {
+            callbacks: {
+              afterLabel: ctx => {
+                const r = chartRows[ctx.dataIndex];
+                return "Remaining: " + fmtInt(r.remaining_skits) + " skits (" + fmtInt(r.remaining_singletons) + " singletons)";
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
   function render() {
     updateSliderUI();
     renderChips();
@@ -1525,11 +1671,13 @@ _APP_JS = r"""
     const totalObs = skits.reduce((sum, s) => sum + s.count, 0);
     const conc = computeConcentration(skits, totalObs);
     const fields = computeFields(skits, totalObs);
+    const ablation = computeAblation(skits);
     const aggs = computeAggregates(skits);
 
     renderKPIs(skits, totalObs, conc);
     renderPareto(skits, totalObs);
     renderFieldsSection(fields);
+    renderAblationSection(ablation, fields);
     renderAggregatesSection(aggs);
     renderExplorer(skits, totalObs);
   }
@@ -1818,6 +1966,31 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
             </tr>
           </thead>
           <tbody id="fields-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Profile Diagnostics — Drop-One Field Ablation</h2>
+          <div class="muted" style="font-size:12px">Skits and singletons collapsed if each field is removed alone (holding all other fields fixed). Click any field to inspect its distribution above.</div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-ablation"></canvas>
+        <div id="ablation-empty" class="empty-state" style="display:none">No fields to ablate in the current filter.</div>
+      </div>
+      <div class="table-wrap" style="margin-top:14px">
+        <table>
+          <thead>
+            <tr>
+              <th>Field Dropped</th><th class="num">Cardinality</th><th class="num">Singleton-Only Vals</th>
+              <th class="num">Skits Collapsed</th><th class="num">Singletons Removed</th>
+              <th class="num">Remaining Skits</th><th class="num">Remaining Singletons</th>
+            </tr>
+          </thead>
+          <tbody id="ablation-tbody"></tbody>
         </table>
       </div>
     </section>

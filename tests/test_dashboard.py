@@ -70,6 +70,8 @@ class DashboardRenderingTests(unittest.TestCase):
             self.assertIn("<title>Sample Report</title>", rendered)
             self.assertIn('"field_type":"boolean"', rendered)
             self.assertIn("Boolean", rendered)
+            self.assertIn("Drop-One Field Ablation", rendered)
+            self.assertIn('"ablation":', rendered)
             # Chart.js is inlined, no external resource loading tags
             self.assertIn("Chart.js", rendered)
             self.assertNotRegex(rendered, r'<script[^>]+src=["\']https?://')
