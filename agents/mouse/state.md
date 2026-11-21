@@ -1,41 +1,28 @@
 # Agent State
 
 ## Context
-- **Repository & History**: Created 2026-10-14 from `drusifer/fingerling` (subtree split, history kept).
-  - Sprint 1: renamed to `sketch-tastic` / `sketchtastic` / `skt` (`Sketch`, `Skit`).
-  - Sprint 2: `show --sort KEY` (lowest first, default `COUNT`; `--top` dropped).
-  - Sprint 3 + review: RFC 9535 JSONPath via `jsonpath-rfc9535`, fold once per event then `Sketch.merge`, no FIRST/LAST copies.
-  - Sprint 4: `merge -j N` (long-lived workers, bounded task queue, output queue), libyaml everywhere (`make profile`: ~14 s parallel / ~29 s `-j 1` on Pi 5).
-  - Sprint 5 (`977e9ad`): local ASCII Bluesky image variant explorer (6 enum dimensions, 4,587 events -> 821 images -> 70 skits; 267 tests on Python 3.14/3.15).
-  - Sprint 6 (`50af954`): generic core `report`/`export`/`coverage` in `src/sketchtastic/reporting.py`; original post rows as regression unit; split native array-state profile fields (absent/zero/one/multiple). Dataset `data/bluesky-posts` (20,789 posts, 860 kinds; 279 tests).
-  - **Latest follow-up (`7f25a57` + `65c4852`, 2026-11-20)**: Bluesky aggregate summaries + ASCII report display:
-    - `examples/bluesky/profile.yaml` (L47–L75): native `aggregates` for 4 typed image containers (`images`, `gallery`, `media_images`, `media_gallery` counts + byte `SUM`/`MIN`/`MAX`/`AVG`), `text_bytes` (`SIZE`), `facet_features` (`COUNT`), and `posted_at` (`DATETIME` `MIN`/`MAX`).
-    - `src/sketchtastic/reporting.py` (L84–L88): ASCII report displays `skit.aggregates` with safe JSON/datetime serialization; kind identity unchanged.
-    - Tests & docs: `tests/test_bluesky_profile.py`, `tests/test_reporting.py`, `README.md`, `examples/bluesky/README.md`. All 282 tests + lint passed; Trin/Morpheus review approved.
-    - Rebuilt full-capture dataset at `data/bluesky-posts-aggs/posts.sketch.yaml` (`summary.json`): 20,789 posts, 860 skits, unchanged `profile_id` (`5613b15ed319835056c13b1e4dd2d58f`). Note: old `data/bluesky-posts` intentionally kept intact; aggregates require full observations (not representative-only rebuilds).
-- **Owner Rules & Style**: No backwards compatibility before 1.0 (v0, no migrations); mainline (no tags/releases unless asked); CI by hand only, never poll; KISS; no ad hoc testing (`bobp make` only); no `rm` (use `bobp make clean`, noting it deletes `data/`); `*fix` diagnoses and confirms first; agents push/release only when owner explicitly asks; leave `../fingerling` alone unless asked.
-- **Git / Workspace Status (at 2026-11-21 checkpoint)**:
-  - Branch: `main` at `65c4852` (12 local commits ahead of `origin/main`; nothing pushed).
-  - Uncommitted tracked modifications: `agents/CHAT.md` (includes 2026-11-21 `make run` output + this checkpoint) and `agents/mouse/state.md` (this checkpoint). No uncommitted code changes.
+- **Repository & History**:
+  - Sprints 1–6 + Bluesky aggregates follow-up merged on `main` (`65c4852`).
+  - **Sprint 7 (2026-11-21)**: Interactive Offline Sketch Analysis Dashboard (`STORY-SKT-12`..`14`, `ADR-2026-11-21`, Tier 1, 8 pts):
+    - `src/sketchtastic/analysis.py`: Pure analysis engine & `.history/` run-over-run drift loader.
+    - `src/sketchtastic/assets/chart.umd.min.js` (Chart.js v4.4.9 MIT, SHA-256 `bce154080959c574be0bb6b1a924ff32f08ebc6ff460c159171f51c53802c844`).
+    - `src/sketchtastic/dashboard.py`: Single-file offline HTML renderer with strict offline CSP, script-safe JSON escaping, `Map`/safe-DOM JS, dual-handle time/run range sliders (Overlap / First appeared / Contained), Pareto concentration curve, weighted enum distributions (Obs % vs Skits %), field Min/Max & exact numeric weighted Mean/Median, aggregate global rollups & across-skit stats, interactive skit/sample explorer, and history drift.
+    - `src/sketchtastic/reporting.py`: `sketchtastic analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--force]` with atomic no-clobber/no-symlink publishing.
+    - Verified: 298 tests on Python 3.14 & 3.15, 4 wheel smoke tests, `lint`, `security-scan` (0 leaks, 0 vulns), `uv lock --check`, live Bluesky dashboard `data/bluesky-posts-aggs/analysis.html` (20,789 obs, 860 skits, 0 browser console errors).
+- **Owner Rules**: Mainline (no push/tag/release unless owner explicitly asks); preserve `data/` across `clean`/`distclean`.
 
 ## Current Task
-**Status:** Completed (between tasks — awaiting owner direction)
+**Status:** Complete (Sprint 7 launched and merged locally to `main`, 2026-11-21)
 
 ### Progress
-- [x] Sprint 5: Bluesky Image Explorer (merged to `main` at `977e9ad`)
-- [x] Sprint 6: Generic `report`/`export`/`coverage` & original-post array-state profile (merged to `main` at `50af954`)
-- [x] Follow-up: Bluesky native profile aggregates & ASCII report display (`7f25a57`, review recorded `65c4852`, 282 tests + lint green, full capture rebuilt in `data/bluesky-posts-aggs`)
-- [ ] Await owner decision on next step (inspect/tweak aggregate report, push/PyPI publish, or start next sprint from `task.md` Backlog)
-
-**Blockers:** None.
+- [x] Sprint 7 Phases 1–3 & Stage 3 closeout complete (8/8 pts)
+- [x] Local `--no-ff` merge to `main`, `sprint-7` branch deleted, chat archived to `agents/chat_archive/CHAT_SPRINT_7.md`
+- [ ] Await owner direction (review live Bluesky dashboard, push/publish, or next sprint from `task.md` Backlog)
 
 ## Next Steps
-1. **Cold-start orientation**: Read the tail of `agents/CHAT.md`, `task.md` (top status + Backlog), and this file (`agents/mouse/state.md`). Do NOT run full test suites on startup (no code changes since the last 282-test green run).
-2. **Verify workspace state**: Run `git status --short && git log -n 5 --oneline` to confirm `main` is at `65c4852` (12 commits ahead of `origin/main`) and check uncommitted agent log updates (`agents/CHAT.md`, `agents/mouse/state.md`).
-3. **Confirm next action with owner**:
-   - **If inspecting aggregate report output**: inspect `data/bluesky-posts-aggs/posts.sketch.yaml` via `bobp make` (check `Makefile` targets with `bobp make help`; do NOT run `bobp make clean` without warning since it removes `data/`).
-   - **If pushing or publishing to PyPI**: confirm branch/version/workflow steps in `docs/SDLC.md` first (only push or release on explicit owner instruction).
-   - **If starting Sprint 7**: pick from `task.md` Backlog (e.g., profile evolution, renaming test-internal `fingerprint` identifiers, JSON Schema for sketch files, sketch-to-sketch merge, or `LEN`/`ABS` aggregate ops).
+1. Read tail of `agents/CHAT.md` and `task.md` before starting new work.
+2. Do not re-run unchanged tests on startup (298 tests green on Python 3.14 & 3.15).
+3. Generated live Bluesky dashboard is at `data/bluesky-posts-aggs/analysis.html` (ignored `data/`; `clean` deletes `data/`).
 
 ---
-*Last updated: 2026-11-21T16:59:00-05:00*
+*Last updated: 2026-11-21T17:33:00-05:00*

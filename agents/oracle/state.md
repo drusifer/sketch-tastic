@@ -57,3 +57,9 @@ Next Steps: Smith final acceptance, retro/Cypher launch, archive chat and local 
 Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
 Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
 Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
+
+
+## Sprint 7 final checkpoint — 2026-11-21
+- **Context:** Recorded ADR-2026-11-21 in `docs/DECISIONS.md` and Sprint 7 lesson in `docs/LESSONS.md`; groomed README, Bluesky README, UAT plan, SDLC, and archived chat to `agents/chat_archive/CHAT_SPRINT_7.md`. Rubrics DECISION, LESSON, and SDLC passed.
+- **Current Task:** Complete (100%).
+- **Next Steps:** Await next sprint; reference `CHAT_SPRINT_7.md` for Sprint 7 audit trail.

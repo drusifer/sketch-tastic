@@ -5,7 +5,7 @@
 *   **Goal**: Deliver `sketchtastic analyze SKETCH -o REPORT.html` to turn any sketch (and optional history) into a 100% offline, interactive HTML dashboard bundling Chart.js v4.4.9 (MIT) with weighted enum distributions, min/max and numeric mean/median stats, time/run range sliders, skit/sample explorer, and history drift.
 *   **Tier**: Tier 1 (Major) · **Total Points**: 8 · **Branch**: `sprint-7`
 *   **Source**: `docs/sprints/USER_STORIES_SPRINT7.md` (`STORY-SKT-12`..`14`, `ADR-2026-11-21`)
-*   **Status**: In Progress — Planning approved (Smith Gate 1 & 2, Switch Gate 2b, Morpheus Step 3a)
+*   **Status**: Complete — launched 2026-11-21; merged locally to `main` (298 tests on Python 3.14 & 3.15, 4 wheel smoke tests, security scans & live Bluesky dashboard verified)
 
 ### Stage 0: SDLC Gate (Blocker)
 - [x] **Task 0.1 (L1):** Verify `docs/SDLC.md` exists and is current; create `sprint-7` branch from `main`. (*Owner: Mouse | Trace: N/A — sprint gate | Verification: `test -f docs/SDLC.md && git branch --show-current`*)
@@ -32,11 +32,11 @@
 - [x] **Task 3.4 (L2):** Code & architecture review of Phase 3; commit `feat(cli): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-21 | Verification: review verdict in `agents/CHAT.md`*)
 
 ### Stage 3: Sprint Closeout
-- [ ] **Task C.1 (L2):** SDLC conformance check (preserve `data/` across `distclean`, run `install`, `lint`, `test`, `test-all` 3.14/3.15, `smoke`, `build`, `security-scan`; verify `chart.umd.min.js` ships inside wheel). (*Owner: Tank | Trace: N/A — closeout | Verification: `docs/SDLC.md` section 10 checks pass*)
-- [ ] **Task C.2 (L2):** Document grooming, lesson archiving (`docs/LESSONS.md`), and sprint chat report. (*Owner: Oracle | Trace: N/A — closeout | Verification: `bobp chat-report --moniker SPRINT_7 ...`*)
-- [ ] **Task C.3 (L2):** End-to-end user usability testing on live Bluesky dashboard & lesson review. (*Owner: Smith | Trace: STORY-SKT-12..14 | Verification: `*user approve` recorded in `agents/CHAT.md`*)
-- [ ] **Task C.4 (L1):** Sprint retrospective & backlog grooming. (*Owner: Mouse | Trace: N/A — closeout | Verification: Retros posted in `agents/CHAT.md`*)
-- [ ] **Task C.5 (L1):** Sprint launch announcement and local `--no-ff` merge to `main` (no push/release). (*Owner: Cypher | Trace: N/A — release decision | Verification: Cypher launch in `agents/CHAT.md` & `git log -n 2`*)
+- [x] **Task C.1 (L2):** SDLC conformance check (preserve `data/` across `distclean`, run `install`, `lint`, `test`, `test-all` 3.14/3.15, `smoke`, `build`, `security-scan`; verify `chart.umd.min.js` ships inside wheel). (*Owner: Tank | Trace: N/A — closeout | Verification: `docs/SDLC.md` section 10 checks pass*)
+- [x] **Task C.2 (L2):** Document grooming, lesson archiving (`docs/LESSONS.md`), and sprint chat report. (*Owner: Oracle | Trace: N/A — closeout | Verification: `bobp chat-report --moniker SPRINT_7 ...`*)
+- [x] **Task C.3 (L2):** End-to-end user usability testing on live Bluesky dashboard & lesson review. (*Owner: Smith | Trace: STORY-SKT-12..14 | Verification: `*user approve` recorded in `agents/CHAT.md`*)
+- [x] **Task C.4 (L1):** Sprint retrospective & backlog grooming. (*Owner: Mouse | Trace: N/A — closeout | Verification: Retros posted in `agents/CHAT.md`*)
+- [x] **Task C.5 (L1):** Sprint launch announcement and local `--no-ff` merge to `main` (no push/release). (*Owner: Cypher | Trace: N/A — release decision | Verification: Cypher launch in `agents/CHAT.md` & `git log -n 2`*)
 
 ---
 
@@ -162,6 +162,7 @@ Between Sprints 3 and 4 (owner review of Sprint 3): JSONPath via `jsonpath-rfc95
 - [x] Tank `*devops sdlc-check` · Oracle groom · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]
 
 ## Backlog (unscheduled)
+- Interactive dashboard (`analyze`): optional `--no-samples` flag to omit retained sample payloads for ultra-compact HTML on very large sketches; optional CSV/JSON export of filtered skits from the browser; browser-side multi-field cross-tab heatmap (Sprint 7 retro).
 - Bluesky demo: collect a longer observation window to find rare gallery/enum combinations;
   continue to report unobserved values explicitly. No additional implementation required now.
 Carried over from fingerling's `task.md`:

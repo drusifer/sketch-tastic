@@ -105,3 +105,9 @@ Next Steps: resolve pending profile question; no first/second raw-position worka
 Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
 Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
 Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
+
+
+## Sprint 7 final checkpoint — 2026-11-21
+- **Context:** ADR-2026-11-21 accepted and delivered: pure `analysis.py`, vendored Chart.js v4.4.9 (`assets/`), offline CSP `dashboard.py`, atomic no-symlink `reporting.py:analyze_to_html`. Refactored `analysis.py` complexity from radon F/D down to C max.
+- **Current Task:** Complete (100%) — all 3 phases reviewed and merged locally to `main`.
+- **Next Steps:** Read `task.md` before Sprint 8; preserve statistical honesty boundary (observation-weighted vs across-skit).
