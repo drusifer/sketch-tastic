@@ -1,5 +1,45 @@
 # Task Board
 
+## Sprint 7: Interactive Sketch Analysis Dashboard
+
+*   **Goal**: Deliver `sketchtastic analyze SKETCH -o REPORT.html` to turn any sketch (and optional history) into a 100% offline, interactive HTML dashboard bundling Chart.js v4.4.9 (MIT) with weighted enum distributions, min/max and numeric mean/median stats, time/run range sliders, skit/sample explorer, and history drift.
+*   **Tier**: Tier 1 (Major) · **Total Points**: 8 · **Branch**: `sprint-7`
+*   **Source**: `docs/sprints/USER_STORIES_SPRINT7.md` (`STORY-SKT-12`..`14`, `ADR-2026-11-21`)
+*   **Status**: In Progress — Planning approved (Smith Gate 1 & 2, Switch Gate 2b, Morpheus Step 3a)
+
+### Stage 0: SDLC Gate (Blocker)
+- [x] **Task 0.1 (L1):** Verify `docs/SDLC.md` exists and is current; create `sprint-7` branch from `main`. (*Owner: Mouse | Trace: N/A — sprint gate | Verification: `test -f docs/SDLC.md && git branch --show-current`*)
+
+### Phase 1: Analysis Data Engine & History Drift Loader
+*Phase goal: Compute verified sketch statistics, field distributions/min/max/numeric stats, aggregate rollups, time/run axes, and history drift in `src/sketchtastic/analysis.py`.*
+- [x] **Task 1.1 (L3):** Write unit tests (`tests/test_analysis.py`) first and implement `src/sketchtastic/analysis.py` (ranked skits, Pareto thresholds, per-field observation/skit weighted distributions & min/max/numeric mean/median, per-aggregate global & across-skit stats, datetime/run axes, history discovery & run-over-run drift). (*Owner: Neo | Trace: STORY-SKT-13, STORY-SKT-14 / ADR-2026-11-21 | Verification: `bobp make test ARGS=test_analysis && bobp make lint`*)
+- [x] **Task 1.2 (L2):** Run Phase 1 UAT against analysis acceptance criteria (empty sketch, numeric/enum fields, aggregates, history drift, malformed inputs). (*Owner: Trin | Trace: STORY-SKT-13 AC1–4, STORY-SKT-14 AC3–4 | Verification: UAT verdict in `agents/CHAT.md`*)
+- [x] **Task 1.3 (L1):** Security review of Phase 1 diff (safe YAML loading, bounds, history path handling). (*Owner: Switch | Trace: STORY-SKT-12 AC3 / sprint7-design | Verification: `security gate (phase 1): ...` in `agents/CHAT.md`*)
+- [x] **Task 1.4 (L2):** Code & architecture review of Phase 1; commit `feat(analysis): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-21 | Verification: review verdict in `agents/CHAT.md`*)
+
+### Phase 2: Vendored Chart.js Asset & Self-Contained HTML Dashboard Renderer
+*Phase goal: Vendor MIT Chart.js v4.4.9 with SHA-256 verification and build the interactive offline HTML dashboard in `src/sketchtastic/dashboard.py`.*
+- [ ] **Task 2.1 (L3):** Vendor Chart.js v4.4.9 (`src/sketchtastic/assets/chart.umd.min.js`, `CHARTJS_LICENSE.txt`, `CHARTJS_SHA256.txt`), write tests (`tests/test_dashboard.py`) first, and implement `src/sketchtastic/dashboard.py` (strict offline CSP, script-safe JSON escaping, `Map`/safe-DOM interactive JS with dual time/run sliders, weighted enum charts, min/max & mean/median panels, aggregate rollups, skit explorer/sample inspector, and history drift). (*Owner: Neo | Trace: STORY-SKT-12, STORY-SKT-13, STORY-SKT-14 / ADR-2026-11-21 | Verification: `bobp make test ARGS=test_dashboard && bobp make lint`*)
+- [ ] **Task 2.2 (L2):** Run Phase 2 UAT (offline self-containment, JS syntax check via `node`, XSS breakout resistance, empty sketch, interactive filtering logic). (*Owner: Trin | Trace: STORY-SKT-12 AC1,4,5; STORY-SKT-13 AC1–5; STORY-SKT-14 AC1–3 | Verification: UAT verdict in `agents/CHAT.md`*)
+- [ ] **Task 2.3 (L2):** Security review of Phase 2 diff (Chart.js SHA-256/license audit, CSP, XSS & prototype-pollution checks, `bobp make security-scan`). (*Owner: Switch | Trace: STORY-SKT-12 AC5 / sprint7-design | Verification: `security gate (phase 2): ...` in `agents/CHAT.md`*)
+- [ ] **Task 2.4 (L2):** Code & architecture review of Phase 2; commit `feat(dashboard): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-21 | Verification: review verdict in `agents/CHAT.md`*)
+
+### Phase 3: CLI Integration (`sketchtastic analyze`), Docs, Smoke & Live UAT
+*Phase goal: Wire `sketchtastic analyze` with atomic no-clobber output, document it, add wheel smoke coverage, and verify live on Bluesky data.*
+- [ ] **Task 3.1 (L2):** Write CLI tests (`tests/test_analyze_cli.py`) first, add `analyze` subcommand in `src/sketchtastic/reporting.py` (`-o/--output`, `--history`, `--title`, `--force`, atomic no-symlink publish), update `README.md`, `examples/bluesky/README.md`, and `smoke/test_smoke.py`. (*Owner: Neo | Trace: STORY-SKT-12 AC1–3, STORY-SKT-14 AC4–5 | Verification: `bobp make test && bobp make lint`*)
+- [ ] **Task 3.2 (L2):** Execute Sprint 7 UAT plan (`docs/sprints/UAT_PLAN_SPRINT7.md`) including live Bluesky dataset (`data/bluesky-posts-aggs/posts.sketch.yaml`) and multi-run history sketch. (*Owner: Trin | Trace: STORY-SKT-12..14 | Verification: UAT verdict in `docs/sprints/UAT_PLAN_SPRINT7.md` & `agents/CHAT.md`*)
+- [ ] **Task 3.3 (L2):** Security review of Phase 3 diff (atomic output & symlink refusal, terminal escaping, full `bobp make security-scan`). (*Owner: Switch | Trace: STORY-SKT-12 AC2–3 / sprint7-design | Verification: `security gate (phase 3): ...` in `agents/CHAT.md`*)
+- [ ] **Task 3.4 (L2):** Code & architecture review of Phase 3; commit `feat(cli): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-21 | Verification: review verdict in `agents/CHAT.md`*)
+
+### Stage 3: Sprint Closeout
+- [ ] **Task C.1 (L2):** SDLC conformance check (preserve `data/` across `distclean`, run `install`, `lint`, `test`, `test-all` 3.14/3.15, `smoke`, `build`, `security-scan`; verify `chart.umd.min.js` ships inside wheel). (*Owner: Tank | Trace: N/A — closeout | Verification: `docs/SDLC.md` section 10 checks pass*)
+- [ ] **Task C.2 (L2):** Document grooming, lesson archiving (`docs/LESSONS.md`), and sprint chat report. (*Owner: Oracle | Trace: N/A — closeout | Verification: `bobp chat-report --moniker SPRINT_7 ...`*)
+- [ ] **Task C.3 (L2):** End-to-end user usability testing on live Bluesky dashboard & lesson review. (*Owner: Smith | Trace: STORY-SKT-12..14 | Verification: `*user approve` recorded in `agents/CHAT.md`*)
+- [ ] **Task C.4 (L1):** Sprint retrospective & backlog grooming. (*Owner: Mouse | Trace: N/A — closeout | Verification: Retros posted in `agents/CHAT.md`*)
+- [ ] **Task C.5 (L1):** Sprint launch announcement and local `--no-ff` merge to `main` (no push/release). (*Owner: Cypher | Trace: N/A — release decision | Verification: Cypher launch in `agents/CHAT.md` & `git log -n 2`*)
+
+---
+
 ## Follow-up: Bluesky aggregate summaries (2026-11-20)
 
 - [x] Native profile aggregates for typed image counts/bytes, text bytes, facet features and post times.

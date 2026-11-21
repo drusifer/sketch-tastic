@@ -152,3 +152,21 @@ zero, one and multiple image members. Mixed galleries count only typed image ent
 IS_PRESENT means a member exists (including null); this is not schema validation. Splitting
 keeps native JSONPath count expressions within the parser's cumulative complexity limit.
 Array token sets remain unordered/deduplicated; no claim of cross-field image pairing is made.
+
+## ADR-2026-11-21: Offline interactive HTML analysis dashboard with vendored Chart.js
+
+**Status:** Accepted. **Date:** 2026-11-21. **Deciders:** Owner, Morpheus, Switch. **Related:** [Sprint 7 stories & architecture](sprints/USER_STORIES_SPRINT7.md).
+
+### Context and drivers
+The owner requested a generic `sketchtastic` CLI capability for a sketch analysis report delivered as an interactive, self-contained HTML dashboard using a charting library: weighted enumerated value distributions, min/max and numeric mean/median statistics across fields and aggregates, dual-handle time/run range sliders (`MIN`/`MAX` dates and `first_seen`/`last_seen`), interactive skit/sample exploration, and run-over-run history drift. The package must remain offline-capable with minimal PyPI runtime dependencies and no frontend build toolchain.
+
+### Considered options
+| Option | Benefits | Costs / risks | Decision |
+|---|---|---|---|
+| Vendored Chart.js v4.4.9 UMD (MIT) inlined as package data | Polished interactive charts, 100% offline, zero CDN/network calls, zero new PyPI deps, no Node build step | ~200 KB increase in wheel and generated HTML size; requires SHA-256 pinning and license bundling | Selected |
+| CDN-loaded Chart.js with SRI hash | Minimal wheel/HTML size | Fails offline; breaks air-gapped/local analysis | Rejected |
+| Pure hand-written SVG/Canvas | Zero third-party JS | Lower chart ergonomics and higher custom maintenance cost | Rejected |
+| Heavyweight suite (Plotly / ECharts) | Built-in box plots/heatmaps | 1–3.5 MB wheel and HTML bloat | Rejected |
+
+### Outcome and consequences
+`sketchtastic analyze SKETCH -o REPORT.html` generates a single standalone HTML file with a strict offline CSP (`default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none';`), vendored Chart.js v4.4.9 (`src/sketchtastic/assets/chart.umd.min.js` + MIT license + SHA-256 checksum), script-safe JSON escaping, and safe DOM rendering. Existing ASCII `report` and `show` commands remain unchanged. Because sketches retain per-skit summaries rather than raw per-event distributions, exact observation-weighted mean/median are reported for numeric token fields and skit counts, exact observation-weighted mean is reported for `AVG` aggregates (`sum / count`), and aggregate medians are explicitly labeled as across-skit statistics.

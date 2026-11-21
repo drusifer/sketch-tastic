@@ -62,4 +62,9 @@ Next Steps: read task.md and sprint UAT before new work. Sprint close integrates
 ## Sprint 6 final checkpoint — supersedes pending work above
 Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
 Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
-Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
+## Sprint 7 planning — 2026-11-21 (active)
+- **Context:** Owner confirmed Sprint 7 scope on 2026-11-21: generic CLI subcommand `sketchtastic analyze SKETCH -o REPORT.html` generating a 100% offline self-contained interactive HTML dashboard bundling MIT Chart.js (~200 KB), with concentration curve, weighted enum distributions, min/max & numeric mean/median stats across all fields and aggregates, time/run range sliders (`DATETIME`/`DATE` min/max + `first_seen`/`last_seen`), cross-filtering skit explorer with retained JSON sample inspector, and run-over-run history drift.
+- **Current Task:** Stories `STORY-SKT-12`..`14` drafted in `docs/sprints/USER_STORIES_SPRINT7.md` (8 pts, Tier 1) and self-checked against STORIES rubric. Handed off to Smith for Gate 1 review.
+- **Next Steps:**
+  1. Smith evaluates `docs/sprints/USER_STORIES_SPRINT7.md` at Gate 1 (`*user review`).
+  2. Morpheus appends Architecture + ADR-2026-11-21 → Smith Gate 2 → Switch Gate 2b → Mouse task board → Morpheus plan review.
