@@ -3,6 +3,7 @@
 # absent=FFF, present with zero image members=TFF, one=TTF, multiple=TTT.
 # IS_PRESENT checks member existence, not JSON Schema validity (null is present).
 version: 0
+event_time: $.createdAt
 fields:
   - {key: embed_type, path: "$.embed['$type']"}
   - {key: media_type, path: "$.embed.media['$type']"}

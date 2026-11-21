@@ -122,6 +122,23 @@ class PostProfileTests(unittest.TestCase):
         self.assertEqual(agg["posted_at"]["MIN"].hour, 12)
         self.assertEqual(agg["posted_at"]["MAX"].hour, 13)
 
+    def test_event_time_tracks_created_at_in_first_and_last_seen(self):
+        self.assertIsNotNone(self.profile.event_time)
+        assert self.profile.event_time is not None
+        self.assertEqual(self.profile.event_time.text, "$.createdAt")
+        a = sample(1)
+        a.update(text="hi", createdAt="2026-11-20T12:00:00Z")
+        b = copy.deepcopy(a)
+        b.update(text="hello", createdAt="2026-11-20T14:00:00+01:00")
+        sketch = Sketch(self.profile.aggregates, self.profile.profile_id)
+        for post in (b, a):
+            seen, unusable = self.profile.extract_event_time(post)
+            self.assertFalse(unusable)
+            key = sketch.upsert(self.profile.tokens(post), post, seen=seen)
+        meta = sketch.get(key).meta
+        self.assertEqual(meta["first_seen"].hour, 12)
+        self.assertEqual(meta["last_seen"].hour, 13)
+
     def test_image_aggregates_exclude_other_gallery_items_and_unrecognized_embeds(self):
         for quote in (False, True):
             post = sample(1, gallery=True, quote=quote)
