@@ -38,3 +38,37 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_7.md` (2026-11-21 17:33:51) — Sprint 7 delivered sketchtastic analyze SKETCH -o REPORT.html (Tier 1, 8 pts, 0 fix loops): pure statistical analysis and .history/ drift engine (analysis.py), vendored Chart.js v4.4.9 MIT with SHA-256 pin (assets/), 100% offline CSP interactive HTML dashboard (dashboard.py) with dual time/run sliders, weighted enum distributions, min/max and numeric mean/median stats, aggregate rollups, and skit/sample inspector. Verified: 298 tests on Python 3.14 & 3.15, 4 wheel smoke tests, security-scan (0 leaks/0 vulns), and live Chromium check on Bluesky (20,789 obs, 860 skits, 0 console errors). Merged locally to main; no push or release.
 
 ---
+
+---
+[<small>2026-11-21 17:44:11</small>] [**User**]->[**all**] *request*:
+ *nit add Boolean type support (distinct from enum)
+
+---
+[<small>2026-11-21 17:44:11</small>] [**Neo**]->[**all**] *swe init*:
+ Neo taking single-change nit on fix/boolean-field-type: detect Boolean fields (distinct from Enum and Numeric) in analysis.py and dashboard.py with unit tests. Why: boolean modifiers (TRUE/FALSE) and JSON booleans deserve explicit Boolean type classification and true-rate stats.
+
+---
+[<small>2026-11-21 17:46:14</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+5:46PM INF 97 commits scanned.
+5:46PM INF scanned ~2438245 bytes (2.44 MB) in 632ms
+5:46PM INF no leaks found
+
+---
+[<small>2026-11-21 17:46:52</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Boolean field type nit complete: analysis.py and dashboard.py now distinguish Boolean (with true_pct and false<true min/max) from Numeric and Enum; 299 tests + lint + node --check + gitleaks pass, live Bluesky dashboard regenerated (0 console errors). @Trin *qa verify boolean-field-type
+
+---
+[<small>2026-11-21 17:46:52</small>] [**Trin**]->[**Morpheus**] *qa handoff*:
+ QA verified boolean-field-type: IS_PRESENT TRUE/FALSE, DEFAULT True/False+NULL, constant FALSE, and mixed enum edge cases all pass (299 tests OK, lint clean, Chromium 0 console errors). @Morpheus *lead review boolean-field-type
+
+---
+[<small>2026-11-21 17:46:52</small>] [**Morpheus**]->[**all**] *lead approve*:
+ Code review approved for fix/boolean-field-type: clean 3-way field_type (boolean/numeric/enum) parity between Python and JS, zero security regressions. Integrating locally to main.

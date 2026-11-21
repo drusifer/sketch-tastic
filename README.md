@@ -265,10 +265,10 @@ explore:
 
 - **Overview & Pareto concentration curve:** observation totals, distinct skits, singletons, and
   how many skits cover 50%, 80%, 90%, 95%, and 99% of observations.
-- **Enumerated field distributions & min/max/numeric stats:** observation-weighted and
-  skit-weighted bar charts for every field (click any bar to cross-filter), min/max across all
-  fields, constant/high-cardinality diagnostics, and exact observation-weighted mean and median for
-  numeric token fields.
+- **Field distributions & min/max/type stats:** observation-weighted and skit-weighted bar charts
+  for every field (click any bar to cross-filter), automatic **Boolean**, **Numeric**, and **Enum**
+  classification, min/max across all fields, boolean true-rate %, constant/high-cardinality
+  diagnostics, and exact observation-weighted mean and median for numeric token fields.
 - **Time & run range sliders:** dual-handle sliders automatically populated for `DATETIME`/`DATE`
   aggregates (`MIN`/`MAX`) and `first_seen`/`last_seen` runs (with overlap, first-appeared, and
   fully-contained modes) that dynamically recompute every chart and metric.

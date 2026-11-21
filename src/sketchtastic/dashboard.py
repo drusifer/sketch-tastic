@@ -443,6 +443,14 @@ _APP_JS = r"""
     return Number.isFinite(n) ? n : null;
   }
 
+  function asBool(v) {
+    if (typeof v !== "string") return null;
+    const t = v.trim().toLowerCase();
+    if (t === "true") return true;
+    if (t === "false") return false;
+    return null;
+  }
+
   function getAxis() {
     return DATA.time_axes.find(a => a.id === state.axisId) || null;
   }
@@ -597,15 +605,34 @@ _APP_JS = r"""
       }));
       const nonNull = entries.filter(([v]) => v !== "NULL");
       const nullObs = byVal.has("NULL") ? byVal.get("NULL")[0] : 0;
-      let isNumeric = nonNull.length > 0;
-      const numPairs = [];
+      let isBoolean = nonNull.length > 0;
+      const boolPairs = [];
       for (const [v, [obs]] of nonNull) {
-        const parsed = asNum(v);
-        if (parsed === null) { isNumeric = false; break; }
-        numPairs.push([parsed, obs]);
+        const b = asBool(v);
+        if (b === null) { isBoolean = false; break; }
+        boolPairs.push([b, v, obs]);
       }
-      let minVal = null, maxVal = null, wMean = null, wMed = null;
+      let isNumeric = !isBoolean && nonNull.length > 0;
+      const numPairs = [];
       if (isNumeric) {
+        for (const [v, [obs]] of nonNull) {
+          const parsed = asNum(v);
+          if (parsed === null) { isNumeric = false; break; }
+          numPairs.push([parsed, obs]);
+        }
+      }
+      let fieldType = "enum";
+      let minVal = null, maxVal = null, wMean = null, wMed = null, truePct = null;
+      if (isBoolean) {
+        fieldType = "boolean";
+        boolPairs.sort((a, b) => (a[0] === b[0] ? (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) : (a[0] ? 1 : -1)));
+        minVal = boolPairs[0][1];
+        maxVal = boolPairs[boolPairs.length - 1][1];
+        const bTotal = boolPairs.reduce((a, p) => a + p[2], 0);
+        const tObs = boolPairs.reduce((a, p) => a + (p[0] ? p[2] : 0), 0);
+        truePct = bTotal > 0 ? (100 * tObs) / bTotal : null;
+      } else if (isNumeric) {
+        fieldType = "numeric";
         const nums = numPairs.map(p => p[0]);
         minVal = Math.min(...nums);
         maxVal = Math.max(...nums);
@@ -624,10 +651,13 @@ _APP_JS = r"""
       }
       return {
         key,
+        field_type: fieldType,
         cardinality: values.length,
         is_constant: values.length <= 1,
         is_high_cardinality: nSkits > 0 && values.length > 20 && (values.length / nSkits) >= 0.5,
+        is_boolean: isBoolean,
         is_numeric: isNumeric,
+        true_pct: truePct,
         min: minVal,
         max: maxVal,
         mode: values.length ? values[0] : null,
@@ -989,7 +1019,8 @@ _APP_JS = r"""
       state.selectedField = fields[0].key;
     }
     for (const f of fields) {
-      const opt = el("option", { value: f.key }, f.key + " (" + f.cardinality + ")");
+      const typeLabel = f.field_type === "boolean" ? "Boolean" : f.field_type === "numeric" ? "Numeric" : "Enum";
+      const opt = el("option", { value: f.key }, f.key + " [" + typeLabel + ", " + f.cardinality + "]");
       if (f.key === state.selectedField) opt.selected = true;
       sel.appendChild(opt);
 
@@ -999,7 +1030,11 @@ _APP_JS = r"""
         renderFieldsSection(fields);
       });
       tr.appendChild(el("td", { class: "mono" }, f.key));
-      tr.appendChild(el("td", null, f.is_numeric ? "Numeric" : "Enum"));
+      const typeTd = el("td");
+      if (f.field_type === "boolean") typeTd.appendChild(el("span", { class: "badge ok" }, "Boolean"));
+      else if (f.field_type === "numeric") typeTd.appendChild(el("span", { class: "badge" }, "Numeric"));
+      else typeTd.appendChild(el("span", { class: "muted" }, "Enum"));
+      tr.appendChild(typeTd);
       tr.appendChild(el("td", { class: "num" }, fmtInt(f.cardinality)));
       tr.appendChild(el("td", { class: "mono clip", title: fmtAny(f.min) }, fmtAny(f.min)));
       tr.appendChild(el("td", { class: "mono clip", title: fmtAny(f.max) }, fmtAny(f.max)));
@@ -1042,8 +1077,10 @@ _APP_JS = r"""
       metaBox.textContent = "No observed values in current filter.";
       return;
     }
+    const typeLabel = field.field_type === "boolean" ? "Boolean" : field.field_type === "numeric" ? "Numeric" : "Enum";
     metaBox.textContent =
-      field.key + " — Min: " + fmtAny(field.min) + " | Max: " + fmtAny(field.max) +
+      field.key + " [" + typeLabel + "] — Min: " + fmtAny(field.min) + " | Max: " + fmtAny(field.max) +
+      (field.is_boolean && field.true_pct !== null ? " | True rate: " + fmtPct(field.true_pct) : "") +
       (field.is_numeric ? " | Weighted Mean: " + fmtNum(field.weighted_mean) + " | Weighted Median: " + fmtNum(field.weighted_median) : "") +
       " (click any bar or row to filter)";
 
@@ -1070,7 +1107,16 @@ _APP_JS = r"""
     const rest = sortedVals.slice(MAX_BARS);
     const labels = chartItems.map(v => v.value.length > 36 ? v.value.slice(0, 33) + "..." : v.value);
     const values = chartItems.map(v => isObs ? Number((v.weight_pct || 0).toFixed(2)) : Number((v.skit_pct || 0).toFixed(2)));
-    const colors = chartItems.map((v, i) => (activeSet && activeSet.has(v.value)) ? "#3fb950" : PALETTE[i % PALETTE.length]);
+    const colors = chartItems.map((v, i) => {
+      if (activeSet && activeSet.has(v.value)) return "#bc8cff";
+      if (field.is_boolean) {
+        const b = asBool(v.value);
+        if (b === true) return "#3fb950";
+        if (b === false) return "#58a6ff";
+        return "#6e7681";
+      }
+      return PALETTE[i % PALETTE.length];
+    });
     if (rest.length) {
       labels.push("Other (" + rest.length + " values)");
       const restPct = rest.reduce((s, r) => s + (isObs ? (r.weight_pct || 0) : (r.skit_pct || 0)), 0);
