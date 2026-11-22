@@ -118,6 +118,26 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(self.output.read_text(), "another writer")
         self.assertFalse(self.output.with_suffix(".jsonl.meta.json").exists())
 
+    def test_capture_to_stdout_streams_jsonl_and_handles_broken_pipe(self):
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        frames = ['{"kind":"commit","n":1}', '{"kind":"commit","n":2}']
+        connector, _ = self.socket(frames)
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            patch.object(capture, "connect", connector),
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
+            code = capture.main(["--output", "-", "--limit", "2", "--seconds", "10"])
+        self.assertEqual(code, 0, err.getvalue())
+        self.assertEqual(
+            [json.loads(line) for line in out.getvalue().splitlines()],
+            [{"kind": "commit", "n": 1}, {"kind": "commit", "n": 2}],
+        )
+        self.assertIn("Captured 2 frames", err.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

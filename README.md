@@ -114,21 +114,24 @@ f5189272  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
 ## Usage
 
 ```
-sketch merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [-j N] [--force-profile]
+sketch merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [-j N] [--max-events N] [--max-seconds S] [--force-profile]
 ```
 
 | Option | Meaning |
 |---|---|
 | `-p`, `--profile PROFILE` | YAML profile (below). Required. |
 | `-s`, `--sketch SKETCH` | Sketch to merge into. Created if missing, **updated in place**. Required. |
-| `EVENTS` | JSONL file; `-` or omitted reads stdin. |
+| `EVENTS` | JSONL file; `-` or omitted reads stdin line-by-line as events arrive. |
 | `-o`, `--output OUTPUT` | Write the merged sketch here instead; `SKETCH` is left unchanged. |
-| `-j`, `--jobs N` | Worker processes that fold the events (default: all cores). `-j 1`, or input of up to 5,000 lines, folds in-process. |
+| `-j`, `--jobs N` | Worker processes that fold the events (default: all cores). `-j 1`, streaming input, or files up to 5,000 lines fold in-process. |
+| `--max-events N` | Stop reading after `N` valid events have been folded, then save the sketch. |
+| `--max-seconds S` | Stop reading after `S` seconds have elapsed (including idle waits on pipes), then save the sketch. |
 | `--force-profile` | Merge even though `SKETCH` was built with a different profile. |
 
 ```sh
-# read from a pipe
-tail -n 1000 app.jsonl | sketch merge -p profile.yaml -s app.sketch.yaml -
+# stream from a live producer, stopping after 60 seconds or 1,000 events
+tail -f app.jsonl | sketch merge -p profile.yaml -s app.sketch.yaml --max-seconds 60 -
+tail -f app.jsonl | sketch merge -p profile.yaml -s app.sketch.yaml --max-events 1000 -
 
 # trial run: see the result without touching the sketch
 sketch merge -p profile.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.jsonl

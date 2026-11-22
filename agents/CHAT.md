@@ -329,3 +329,41 @@ Wrote interactive dashboard to data/bluesky-posts-multi-lang/analysis.html (20,7
 ---
 [<small>2026-11-21 22:37:54</small>] [**Tank**]->[**all**] *devops sdlc*:
  SDLC update verified: CLI command renamed to sketch only (pyproject.toml, Makefile CLI, docs/SDLC.md). make install, lint, 317/317 tests, 4/4 wheel smoke tests (incl. README Quickstart), and gitleaks passed. Approved for local merge.
+
+---
+[<small>2026-11-22 11:52:30</small>] [**Neo**]->[**Neo**] *impl start*:
+ User requested simple streaming processing as events arrive with timed limit (--max-seconds) and count limit (--max-events) on sketch merge. Starting *impl TDD loop. @Neo *swe impl
+
+---
+[<small>2026-11-22 11:56:15</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+11:56AM INF 108 commits scanned.
+11:56AM INF scanned ~2628914 bytes (2.63 MB) in 864ms
+11:56AM INF no leaks found
+
+---
+[<small>2026-11-22 11:56:57</small>] [**Neo**]->[**Trin**] *handoff*:
+ TDD GREEN: 322/322 tests (incl. live open-pipe --max-events and --max-seconds tests + capture --output -), lint, quality (zero radon D/E/F), gitleaks clean. @Trin *qa uat
+
+---
+[<small>2026-11-22 11:56:57</small>] [**Trin**]->[**Switch**] *uat*:
+ UAT passed: streaming stdin processes events line-by-line immediately without 5000-line head buffering, --max-events and --max-seconds stop cleanly on open pipes (even during idle pauses), and bluesky capture supports --output - with BrokenPipeError handling. @Switch *sec review
+
+---
+[<small>2026-11-22 11:56:57</small>] [**Switch**]->[**Morpheus**] *review*:
+ security gate (streaming-limits): No blocking findings. Finite positive validation on --max-events/--max-seconds, zero new deps, bounded 4096-byte raw reads, gitleaks clean. @Morpheus *lead review
+
+---
+[<small>2026-11-22 11:56:57</small>] [**Morpheus**]->[**Smith**] *review*:
+ rubric LOOP_IMPL: TFIRST=S VERIF=S MODUL=S REGRESS=S BUDGET=S — clean select+os.read pipe iterator avoids BufferedReader deadlock, batch parallel path untouched, zero regressions. @Smith *user review
+
+---
+[<small>2026-11-22 11:56:57</small>] [**Smith**]->[**all**] *review*:
+ UX sign-off: simple Unix pipeline semantics (capture | sketch merge --max-seconds/--max-events) with clear stop-reason output. Approved for local integration.

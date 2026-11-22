@@ -133,11 +133,66 @@ def capture(
     return metadata
 
 
+def capture_stream(
+    stream: Any,
+    *,
+    seconds: float = 60,
+    limit: int = 100_000,
+    endpoint: str = DEFAULT_ENDPOINT,
+) -> dict[str, Any]:
+    """Stream validated JSONL frames directly to `stream`, flushing each line as it arrives."""
+    _validate(seconds, limit, endpoint)
+    started = datetime.now(UTC).isoformat()
+    deadline = time.monotonic() + seconds
+    received = 0
+    reason = "seconds"
+    protocol = ["xrpc.v1.json"] if "/xrpc/" in urlsplit(endpoint).path else None
+    with connect(
+        endpoint,
+        subprotocols=protocol,
+        open_timeout=min(seconds, 10),
+        close_timeout=2,
+        max_size=MAX_FRAME_BYTES,
+        max_queue=4,
+    ) as websocket:
+        while received < limit:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                frame = websocket.recv(timeout=remaining)
+            except TimeoutError:
+                break
+            record = _frame_record(frame)
+            try:
+                stream.write(json.dumps(record, ensure_ascii=True, separators=(",", ":")) + "\n")
+                stream.flush()
+            except BrokenPipeError:
+                reason = "pipe_closed"
+                break
+            received += 1
+        if received == limit:
+            reason = "limit"
+    return {
+        "endpoint": endpoint,
+        "started": started,
+        "finished": datetime.now(UTC).isoformat(),
+        "seconds_limit": seconds,
+        "record_limit": limit,
+        "received": received,
+        "stop_reason": reason,
+        "scope": "Public Jetstream observation window; not a complete network snapshot",
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI for capturing metadata; exit nonzero without publishing partial data on failure."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--output", type=Path, required=True, help="New JSONL file (never overwritten)"
+        "--output",
+        type=Path,
+        required=True,
+        help="New JSONL file (never overwritten), or '-' to stream JSONL to stdout",
     )
     parser.add_argument(
         "--seconds", type=float, default=60, help="Time budget in seconds (default 60)"
@@ -147,10 +202,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT, help="Public WSS endpoint")
     args = parser.parse_args(argv)
+    to_stdout = str(args.output) == "-"
     try:
-        metadata = capture(
-            args.output, seconds=args.seconds, limit=args.limit, endpoint=args.endpoint
-        )
+        if to_stdout:
+            metadata = capture_stream(
+                sys.stdout, seconds=args.seconds, limit=args.limit, endpoint=args.endpoint
+            )
+        else:
+            metadata = capture(
+                args.output, seconds=args.seconds, limit=args.limit, endpoint=args.endpoint
+            )
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"Capture failed: {ascii(str(exc))}", file=sys.stderr)
         return 2
@@ -158,10 +219,18 @@ def main(argv: list[str] | None = None) -> int:
         # Optional websockets exception classes must not require the dependency for --help.
         print(f"Capture failed: {type(exc).__name__}: {ascii(str(exc))}", file=sys.stderr)
         return 2
-    reason = "frame limit" if metadata["stop_reason"] == "limit" else "time limit"
-    print(f"Captured {metadata['received']} frames; stopped at {reason}.")
-    print(f"JSONL: {ascii(str(args.output))}")
-    print(f"Provenance: {ascii(str(args.output) + '.meta.json')}")
+    reason_map = {
+        "limit": "frame limit",
+        "pipe_closed": "downstream closed",
+        "seconds": "time limit",
+    }
+    reason = reason_map.get(metadata["stop_reason"], metadata["stop_reason"])
+    if to_stdout:
+        print(f"Captured {metadata['received']} frames; stopped at {reason}.", file=sys.stderr)
+    else:
+        print(f"Captured {metadata['received']} frames; stopped at {reason}.")
+        print(f"JSONL: {ascii(str(args.output))}")
+        print(f"Provenance: {ascii(str(args.output) + '.meta.json')}")
     return 0
 
 

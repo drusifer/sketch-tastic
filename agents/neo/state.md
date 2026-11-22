@@ -150,3 +150,8 @@ Next Steps: commit/local integrate reviewed single change; no push/release. Use 
 - **Context:** Renamed installed CLI script from `sketchtastic` / `skt` to `sketch` only in `pyproject.toml`, `Makefile`, `src/sketchtastic/{cli,reporting,dashboard}.py`, `smoke/test_smoke.py`, `tests/{test_cli,test_analyze_cli}.py`, `README.md`, `examples/`, and `docs/SDLC.md` (distribution `sketch-tastic` and Python package `sketchtastic` unchanged).
 - **Current Task:** Complete (100%) — `make install`, `make lint`, `make test` (317/317), `make smoke` (wheel build + installed `sketch` + README Quickstart), `make run ARGS="--version"`, and `gitleaks` passed.
 - **Next Steps:** Commit on `fix/cli-command-sketch`, local `--no-ff` merge to `main`, delete branch; await user direction on push.
+
+## `*impl` streaming line-by-line + `--max-events` / `--max-seconds` complete — 2026-11-22
+- **Context:** Added immediate line-by-line streaming ingestion on stdin (`-`) and `--max-events N` / `--max-seconds S` stop limits in `src/sketchtastic/cli.py` (using `select.select` + raw `os.read` on non-seekable pipes so idle pauses still exit cleanly on deadline, without eager 5,001-line buffering), plus `--output -` stdout streaming in `examples/bluesky/capture.py`, tests in `tests/test_cli.py` and `tests/test_bluesky_capture.py`, and docs in `README.md`.
+- **Current Task:** Complete (100%) — TDD RED confirmed, GREEN (`322/322` tests including live open-pipe tests), `make lint`, `make quality` (no radon D/E/F), and `gitleaks` passed.
+- **Next Steps:** Commit on `fix/streaming-limits`, local `--no-ff` merge to `main`, delete branch; await user direction on push.
