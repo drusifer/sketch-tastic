@@ -140,3 +140,8 @@ Next Steps: commit/local integrate reviewed single change; no push/release. Use 
 - **Context:** Added mergeable per-event `HISTOGRAM` aggregator (`mode: "log"` sparse log-decimal 1-1.5-2-3-5-7 bins and `mode: "fixed"` explicit strictly-increasing `buckets: [...]`) across `profile.schema.json`, `aggregators.py`, `analysis.py`, `dashboard.py`, `examples/bluesky/profile.yaml`, and `README.md`. Live dashboard merges per-skit histograms across any filter slice and displays interpolated p50/p90/p95/p99 badges + cumulative % curve (`#av=events`).
 - **Current Task:** Complete (100%) — TDD RED confirmed on `test_aggregators`, GREEN (`317/317` tests incl. `node --check`, CSP, XSS), `make lint`, `make quality` (max radon C(18)), `make security-scan-secrets` (gitleaks clean). Rebuilt Bluesky dataset with histograms at `data/bluesky-posts-histograms/` and verified visually in Chromium.
 - **Next Steps:** Commit on `fix/histogram-aggregator`, local `--no-ff` merge to `main`, delete branch; do not push unless owner asks.
+
+## Bluesky `is_multi_lang` update complete — 2026-11-21
+- **Context:** Replaced `is_english` with `is_multi_lang` (`path: "$.langs[1]"`, `modifier: IS_PRESENT`, true iff `langs` array has size > 1) in `examples/bluesky/profile.yaml`, `examples/bluesky/README.md`, and `tests/test_bluesky_profile.py`. Rebuilt Bluesky capture into `data/bluesky-posts-multi-lang/` and generated `analysis.html`.
+- **Current Task:** Complete (100%) — `317/317` tests green, lint clean.
+- **Next Steps:** Commit on `fix/bluesky-is-multi-lang`, local `--no-ff` merge to `main`, delete branch; await user direction on push.
