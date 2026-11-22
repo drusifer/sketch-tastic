@@ -125,3 +125,8 @@ Next Steps: commit/local integrate reviewed single change; no push/release. Use 
 - **Context:** Added optional top-level profile `event_time` (JSONPath) in `profile.schema.json`, `profile.py`, `builtin.yaml`, `sketch.py`, `cli.py`, `analysis.py`, `dashboard.py`, `examples/bluesky/demo.py`, and `README.md`.
 - **Current Task:** Complete (100%) — TDD RED confirmed (`test_event_time`), then GREEN (`6/6` new tests, `305/305` full suite, lint & gitleaks clean), merged locally to `main`.
 - **Next Steps:** Context is healthy; ready for next user request or push if requested.
+
+## `*impl` correlations & Sankey complete — 2026-11-21
+- **Context:** Promoted correlated value clusters, directional Theil's U / symmetric Cramér's V field matrix, redundancy diagnostics (`≡` / `←` badges on All Fields), and 2–3 field Alluvial / Sankey flow explorer into `src/sketchtastic/analysis.py`, `src/sketchtastic/dashboard.py`, `tests/test_analysis.py`, `tests/test_dashboard.py`, and `README.md`.
+- **Current Task:** Complete (100%) — TDD RED confirmed (`KeyError: 'correlations'`), GREEN (`310/310` tests incl. `node --check`, CSP, XSS, Chart.js integrity), `make lint`, `make quality` (max radon C(15)), `make security-scan-secrets` (gitleaks clean), Chromium visual verification clean (`consoleMessages: []`), Bluesky dashboard regenerated at `data/bluesky-posts-is-english/analysis.html`.
+- **Next Steps:** Commit on `fix/correlations-and-sankey`, local `--no-ff` merge to `main`, delete branch; do not push unless owner asks.

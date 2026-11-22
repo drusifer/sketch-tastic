@@ -362,6 +362,63 @@ class AnalysisStatsAndDistributionsTests(unittest.TestCase):
             Sketch(profile_id="empty").save(str(sketch_path))
             data = analyze_sketch(sketch_path)
             self.assertEqual(data["ablation"], [])
+            self.assertEqual(data["correlations"]["fields"], [])
+            self.assertEqual(data["correlations"]["edges"], [])
+
+    def test_correlations_cramers_v_asymmetric_theils_u_redundancy_and_phi_lift(self) -> None:
+        profile = Profile(
+            fields=(
+                Field("embed", "$.embed"),
+                Field("has_img", "$.img", modifier="IS_PRESENT"),
+                Field("img_mirror", "$.img", modifier="IS_PRESENT"),
+                Field("reply", "$.reply", modifier="IS_PRESENT"),
+            ),
+        )
+        # embed determines has_img 100% (images -> TRUE, else FALSE), but not vice versa
+        # has_img and img_mirror are 1:1 mutually locked (V=1, U=1 both ways)
+        # reply strongly anti-correlates with images (negative phi)
+        events = [
+            *[{"embed": "images", "img": 1} for _ in range(10)],
+            *[{"embed": "video"} for _ in range(10)],
+            *[{"embed": "none", "reply": 1} for _ in range(10)],
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            sketch_path = Path(tmp) / "corr.sketch.yaml"
+            _write_sketch(sketch_path, profile, events)
+            data = analyze_sketch(sketch_path)
+
+            corr = data["correlations"]
+            # Mutual 1:1 lock between has_img and img_mirror
+            self.assertAlmostEqual(corr["cramers"]["has_img"]["img_mirror"], 1.0, places=3)
+            self.assertAlmostEqual(corr["theils"]["has_img"]["img_mirror"], 1.0, places=3)
+            self.assertAlmostEqual(corr["theils"]["img_mirror"]["has_img"], 1.0, places=3)
+
+            # One-way lock: embed completely determines has_img, not vice versa
+            self.assertAlmostEqual(corr["theils"]["embed"]["has_img"], 1.0, places=3)
+            self.assertLess(corr["theils"]["has_img"]["embed"], 0.7)
+
+            # Redundancy diagnostics reported on fields
+            fields = {f["key"]: f for f in data["fields"]}
+            self.assertIn("img_mirror", fields["has_img"]["redundant_with"])
+            self.assertIn("embed", fields["has_img"]["determined_by"])
+
+            # Value-level edges capture positive lock and negative anti-correlation
+            edge_map = {(e["a"], e["b"]): e for e in corr["edges"]}
+            edge_map.update({(e["b"], e["a"]): e for e in corr["edges"]})
+            pos_edge = edge_map[("embed=images", "has_img=TRUE")]
+            self.assertAlmostEqual(pos_edge["phi"], 1.0, places=3)
+            self.assertAlmostEqual(pos_edge["lift"], 3.0, places=2)
+            self.assertEqual(pos_edge["n11"], 10)
+
+            # reply=TRUE and embed=none co-occur 100% (phi=+1.0)
+            rep_none = edge_map[("embed=none", "reply=TRUE")]
+            self.assertAlmostEqual(rep_none["phi"], 1.0, places=3)
+
+            # Zero co-occurrence anti-correlation: reply=TRUE and has_img=TRUE (phi=-0.5)
+            neg_edge = edge_map[("has_img=TRUE", "reply=TRUE")]
+            self.assertAlmostEqual(neg_edge["phi"], -0.5, places=3)
+            self.assertEqual(neg_edge["n11"], 0)
+            self.assertAlmostEqual(neg_edge["lift"], 0.0, places=3)
 
 
 class AnalysisHistoryDriftTests(unittest.TestCase):

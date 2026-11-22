@@ -6,7 +6,9 @@ payload used by the interactive offline HTML dashboard.
 
 from __future__ import annotations
 
+import math
 import os
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -19,6 +21,8 @@ from sketchtastic.sketch import Sketch, SketchError, Skit, _read_set_file
 CONCENTRATION_TARGETS = (50, 80, 90, 95, 99)
 MAX_DRIFT_ITEMS = 20
 MAX_OUTLIERS = 10
+MAX_CORRELATION_EDGES = 250
+REDUNDANCY_THRESHOLD = 0.99
 HIGH_CARDINALITY_MIN = 20
 HIGH_CARDINALITY_RATIO = 0.5
 AVG_KEYS = frozenset({"avg", "sum", "count"})
@@ -315,6 +319,163 @@ def _analyze_ablation(rows: list[tuple[str, Skit]]) -> list[dict[str, Any]]:
         key=lambda item: (-item["skits_collapsed"], -item["singletons_removed"], item["key"])
     )
     return results
+
+
+def _entropy(counts: Counter[Any]) -> float:
+    total = sum(counts.values())
+    if total <= 0:
+        return 0.0
+    return -sum((c / total) * math.log2(c / total) for c in counts.values() if c > 0)
+
+
+def _pair_association(
+    f1: str,
+    f2: str,
+    rows: list[tuple[str, Skit]],
+    marginals: dict[str, Counter[str]],
+    entropies: dict[str, float],
+    total: int,
+) -> tuple[float, float, float]:
+    """Return (cramers_v, theils_u_f2_given_f1, theils_u_f1_given_f2)."""
+    joint: Counter[tuple[str, str]] = Counter()
+    for _, skit in rows:
+        joint[(skit.tokens.get(f1, "NULL"), skit.tokens.get(f2, "NULL"))] += skit.meta["count"]
+    m1, m2 = marginals[f1], marginals[f2]
+    chi2 = sum((obs * obs) / ((m1[v1] * m2[v2]) / total) for (v1, v2), obs in joint.items()) - total
+    chi2 = max(0.0, chi2)
+    denom_k = min(len(m1), len(m2)) - 1
+    v = math.sqrt(chi2 / (total * denom_k)) if denom_k > 0 and total > 0 else 0.0
+    mi = max(0.0, entropies[f1] + entropies[f2] - _entropy(joint))
+    u12 = min(1.0, mi / entropies[f2]) if entropies[f2] > 1e-12 else 0.0
+    u21 = min(1.0, mi / entropies[f1]) if entropies[f1] > 1e-12 else 0.0
+    return round(min(1.0, v), 4), round(u12, 4), round(u21, 4)
+
+
+def _field_matrices(
+    fields: list[str], rows: list[tuple[str, Skit]], marginals: dict[str, Counter[str]], total: int
+) -> tuple[
+    dict[str, dict[str, float]],
+    dict[str, dict[str, float]],
+    dict[str, list[str]],
+    dict[str, list[str]],
+]:
+    entropies = {f: _entropy(marginals[f]) for f in fields}
+    cramers: dict[str, dict[str, float]] = {f: {f: 1.0} for f in fields}
+    theils: dict[str, dict[str, float]] = {f: {f: 1.0} for f in fields}
+    for i, f1 in enumerate(fields):
+        for f2 in fields[i + 1 :]:
+            v, u12, u21 = _pair_association(f1, f2, rows, marginals, entropies, total)
+            cramers[f1][f2] = cramers[f2][f1] = v
+            theils[f1][f2] = u12
+            theils[f2][f1] = u21
+
+    redundant_with: dict[str, list[str]] = {f: [] for f in fields}
+    determined_by: dict[str, list[str]] = {f: [] for f in fields}
+    for f1 in fields:
+        if entropies[f1] <= 1e-12:
+            continue
+        for f2 in fields:
+            if f1 == f2 or entropies[f2] <= 1e-12:
+                continue
+            if theils[f2][f1] >= REDUNDANCY_THRESHOLD:
+                if theils[f1][f2] >= REDUNDANCY_THRESHOLD:
+                    redundant_with[f1].append(f2)
+                else:
+                    determined_by[f1].append(f2)
+    return cramers, theils, redundant_with, determined_by
+
+
+def _value_cooccurrence(
+    fields: list[str], rows: list[tuple[str, Skit]], marginals: dict[str, Counter[str]], total: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    min_support = 5 if total >= 500 else (2 if total >= 10 else 1)
+    active: list[tuple[str, str, int]] = [
+        (f, v, cnt)
+        for f in fields
+        for v, cnt in marginals[f].items()
+        if v not in ("NULL", "FALSE") and cnt >= min_support
+    ]
+    skit_maps: dict[tuple[str, str], dict[int, int]] = {}
+    for f, v, _ in active:
+        skit_maps[(f, v)] = {
+            idx: sk.meta["count"]
+            for idx, (_, sk) in enumerate(rows)
+            if sk.tokens.get(f, "NULL") == v
+        }
+
+    edges: list[dict[str, Any]] = []
+    for i, (fa, va, ca) in enumerate(active):
+        sa = skit_maps[(fa, va)]
+        for fb, vb, cb in active[i + 1 :]:
+            if fa == fb:
+                continue
+            sb = skit_maps[(fb, vb)]
+            n11 = sum(c for idx, c in sa.items() if idx in sb)
+            n10, n01 = ca - n11, cb - n11
+            n00 = total - ca - cb + n11
+            denom = math.sqrt(ca * (total - ca) * cb * (total - cb))
+            phi = (n11 * n00 - n10 * n01) / denom if denom > 0 else 0.0
+            lift = (n11 * total) / (ca * cb) if ca > 0 and cb > 0 else 0.0
+            keep_pos = n11 >= min_support and (abs(phi) >= 0.05 or lift >= 1.5)
+            keep_neg = n11 == 0 and abs(phi) >= 0.10
+            if not (keep_pos or keep_neg):
+                continue
+            edges.append(
+                {
+                    "a": f"{fa}={va}",
+                    "b": f"{fb}={vb}",
+                    "fa": fa,
+                    "va": va,
+                    "fb": fb,
+                    "vb": vb,
+                    "n11": n11,
+                    "support_pct": round(100.0 * n11 / total, 2),
+                    "conf_ab": round(100.0 * n11 / ca, 1),
+                    "conf_ba": round(100.0 * n11 / cb, 1),
+                    "lift": round(lift, 2),
+                    "phi": round(phi, 4),
+                }
+            )
+    edges.sort(key=lambda e: (-abs(e["phi"]), -e["n11"], e["a"], e["b"]))
+    items = [
+        {
+            "id": f"{f}={v}",
+            "field": f,
+            "value": v,
+            "count": cnt,
+            "pct": round(100.0 * cnt / total, 2),
+        }
+        for f, v, cnt in active
+    ]
+    return items, edges[:MAX_CORRELATION_EDGES]
+
+
+def _analyze_correlations(
+    rows: list[tuple[str, Skit]], total: int
+) -> tuple[dict[str, Any], dict[str, list[str]], dict[str, list[str]]]:
+    """Compute Cramér's V, directional Theil's U, redundancy locks, and value co-occurrence."""
+    if not rows or total <= 0:
+        return {"fields": [], "cramers": {}, "theils": {}, "items": [], "edges": []}, {}, {}
+    fields = list(dict.fromkeys(k for _, skit in rows for k in skit.tokens))
+    marginals: dict[str, Counter[str]] = {}
+    for f in fields:
+        counts: Counter[str] = Counter()
+        for _, skit in rows:
+            counts[skit.tokens.get(f, "NULL")] += skit.meta["count"]
+        marginals[f] = counts
+    cramers, theils, redundant_with, determined_by = _field_matrices(fields, rows, marginals, total)
+    items, edges = _value_cooccurrence(fields, rows, marginals, total)
+    return (
+        {
+            "fields": fields,
+            "cramers": cramers,
+            "theils": theils,
+            "items": items,
+            "edges": edges,
+        },
+        redundant_with,
+        determined_by,
+    )
 
 
 def _is_avg_dict(value: Any) -> bool:
@@ -794,6 +955,10 @@ def analyze_sketch(
 
     field_summaries = _analyze_fields(rows, total)
     ablation = _analyze_ablation(rows)
+    correlations, redundant_with, determined_by = _analyze_correlations(rows, total)
+    for summary in field_summaries:
+        summary["redundant_with"] = redundant_with.get(summary["key"], [])
+        summary["determined_by"] = determined_by.get(summary["key"], [])
     agg_summaries, time_axes, skit_bounds = _analyze_aggregates(rows)
     seen_axis, seen_bounds = _build_seen_time_axis(rows)
     if seen_axis is not None:
@@ -846,6 +1011,7 @@ def analyze_sketch(
         },
         "fields": field_summaries,
         "ablation": ablation,
+        "correlations": correlations,
         "aggregates": agg_summaries,
         "time_axes": time_axes,
         "history": history,

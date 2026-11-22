@@ -290,11 +290,13 @@ tr.selected { background: rgba(88, 166, 255, 0.14); }
 .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
 .mono { font-family: var(--mono); }
 .clip {
-  max-width: 190px;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+#fields-table th, #fields-table td { padding: 6px 8px; font-size: 12px; }
+#fields-table td:last-child { white-space: nowrap; }
 .muted { color: var(--muted); }
 .note {
   background: var(--surface-2);
@@ -350,6 +352,47 @@ pre.json-pre {
 .pager { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px; flex-wrap: wrap; }
 .empty-state { padding: 24px; text-align: center; color: var(--muted); }
 .cov-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.sub-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.sub-panel { display: none; }
+.sub-panel.active { display: block; }
+.inspector {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  min-height: 46px;
+}
+.clusters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cluster-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.cluster-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.ctrl-inline { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 10px; font-size: 12px; }
+.svg-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px; overflow-x: auto; }
+.svg-wrap svg text { user-select: none; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); margin-top: 8px; align-items: center; }
+.leg-line { display: inline-block; width: 18px; height: 2px; vertical-align: middle; margin-right: 5px; }
+.leg-line.pos { background: var(--accent); }
+.leg-line.neg { border-top: 2px dashed var(--danger); height: 0; }
 """
 
 
@@ -383,6 +426,13 @@ _APP_JS = r"""
     pageSize: 25,
     expandedIds: new Set(),
     driftIdx: DATA.history.drift.length ? DATA.history.drift.length - 1 : 0,
+    corrTab: "network", // network | heatmap | clusters
+    corrMinPhi: 0.14,
+    corrSign: "all", // all | pos | neg
+    corrHideLocks: true,
+    corrSelectedNode: null,
+    corrMatMetric: "theils", // theils | cramers
+    sankeyFields: [],
     charts: {}
   };
 
@@ -1044,9 +1094,19 @@ _APP_JS = r"""
       tr.appendChild(el("td", { class: "num" }, f.is_numeric ? fmtNum(f.weighted_median) : "-"));
       tr.appendChild(el("td", { class: "num" }, fmtPct(f.null_pct)));
       const diagTd = el("td");
-      if (f.is_constant) diagTd.appendChild(el("span", { class: "badge warn" }, "Constant"));
-      if (f.is_high_cardinality) diagTd.appendChild(el("span", { class: "badge danger" }, "High-Card"));
-      if (!f.is_constant && !f.is_high_cardinality) diagTd.appendChild(el("span", { class: "muted" }, "OK"));
+      let anyDiag = false;
+      if (f.is_constant) { diagTd.appendChild(el("span", { class: "badge warn" }, "Constant")); anyDiag = true; }
+      if (f.is_high_cardinality) { diagTd.appendChild(el("span", { class: "badge danger" }, "High-Card")); anyDiag = true; }
+      if (f.redundant_with && f.redundant_with.length) {
+        const list = f.redundant_with.join(", ");
+        diagTd.appendChild(el("span", { class: "badge warn", title: "1:1 locked (Theil's U >= 0.99 both ways) with: " + list }, "≡ " + f.redundant_with[0] + (f.redundant_with.length > 1 ? " +" + (f.redundant_with.length - 1) : "")));
+        anyDiag = true;
+      } else if (f.determined_by && f.determined_by.length) {
+        const list = f.determined_by.join(", ");
+        diagTd.appendChild(el("span", { class: "badge", title: "Determined (Theil's U >= 0.99) by: " + list }, "← " + f.determined_by[0]));
+        anyDiag = true;
+      }
+      if (!anyDiag) diagTd.appendChild(el("span", { class: "muted" }, "OK"));
       tr.appendChild(diagTd);
       tbody.appendChild(tr);
     }
@@ -1664,6 +1724,696 @@ _APP_JS = r"""
     });
   }
 
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  function svgEl(tag, attrs, text) {
+    const node = document.createElementNS(SVG_NS, tag);
+    if (attrs) {
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+    }
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
+  }
+
+  function shortTokenLabel(f, v) {
+    if (v === "TRUE") return f.replace("media_", "m_").replace("_present", ":pres").replace("_any", ":any").replace("_multiple", ":2+");
+    let sv = String(v).replace("app.bsky.embed.", "").replace(/app\.bsky\.richtext\.facet#/g, "#").replace("recordWithMedia", "quote+media");
+    if (sv.length > 20) sv = sv.slice(0, 18) + "...";
+    if (f === "embed_type") return "embed:" + sv;
+    if (f === "media_type") return "media:" + sv;
+    if (f === "facet_types") return "facet:" + sv;
+    if (f === "labels") return "label:" + sv;
+    return f + ":" + sv;
+  }
+
+  function shortFieldName(f) {
+    const s = f
+      .replace("media_images_", "m_img_")
+      .replace("media_gallery_", "m_gal_")
+      .replace("images_", "img_")
+      .replace("gallery_", "gal_")
+      .replace("embed_type", "embed")
+      .replace("media_type", "media")
+      .replace("facet_types", "facets")
+      .replace("_present", "_p")
+      .replace("_multiple", "_2+");
+    return s.length > 14 ? s.slice(0, 13) + "." : s;
+  }
+
+  function entropyMap(countsMap) {
+    let total = 0;
+    for (const c of countsMap.values()) total += c;
+    if (total <= 0) return 0;
+    let h = 0;
+    for (const c of countsMap.values()) {
+      if (c > 0) {
+        const p = c / total;
+        h -= p * Math.log2(p);
+      }
+    }
+    return h;
+  }
+
+  function computeCorrelations(skits, totalObs) {
+    const keys = DATA.fields.map(f => f.key);
+    if (!skits.length || !totalObs || keys.length < 2) {
+      return { fields: [], cramers: new Map(), theils: new Map(), redundant_with: new Map(), determined_by: new Map(), items: [], edges: [] };
+    }
+    const marginals = new Map();
+    const ent = new Map();
+    for (const f of keys) {
+      const m = new Map();
+      for (const s of skits) {
+        const v = Object.prototype.hasOwnProperty.call(s.tokens, f) ? s.tokens[f] : "NULL";
+        m.set(v, (m.get(v) || 0) + s.count);
+      }
+      marginals.set(f, m);
+      ent.set(f, entropyMap(m));
+    }
+    const cramers = new Map();
+    const theils = new Map();
+    for (const f of keys) {
+      cramers.set(f, new Map([[f, 1]]));
+      theils.set(f, new Map([[f, 1]]));
+    }
+    for (let i = 0; i < keys.length; i++) {
+      const f1 = keys[i], m1 = marginals.get(f1), e1 = ent.get(f1);
+      for (let j = i + 1; j < keys.length; j++) {
+        const f2 = keys[j], m2 = marginals.get(f2), e2 = ent.get(f2);
+        const joint = new Map();
+        for (const s of skits) {
+          const v1 = Object.prototype.hasOwnProperty.call(s.tokens, f1) ? s.tokens[f1] : "NULL";
+          const v2 = Object.prototype.hasOwnProperty.call(s.tokens, f2) ? s.tokens[f2] : "NULL";
+          const jk = v1.length + ":" + v1 + "|" + v2;
+          joint.set(jk, [v1, v2, (joint.has(jk) ? joint.get(jk)[2] : 0) + s.count]);
+        }
+        let chi2 = -totalObs;
+        const jCounts = new Map();
+        for (const [jk, [v1, v2, obs]] of joint.entries()) {
+          const exp = (m1.get(v1) * m2.get(v2)) / totalObs;
+          if (exp > 0) chi2 += (obs * obs) / exp;
+          jCounts.set(jk, obs);
+        }
+        chi2 = Math.max(0, chi2);
+        const k = Math.min(m1.size, m2.size) - 1;
+        const v = k > 0 ? Math.min(1, Math.sqrt(chi2 / (totalObs * k))) : 0;
+        const mi = Math.max(0, e1 + e2 - entropyMap(jCounts));
+        const u12 = e2 > 1e-12 ? Math.min(1, mi / e2) : 0;
+        const u21 = e1 > 1e-12 ? Math.min(1, mi / e1) : 0;
+        cramers.get(f1).set(f2, v); cramers.get(f2).set(f1, v);
+        theils.get(f1).set(f2, u12); theils.get(f2).set(f1, u21);
+      }
+    }
+    const redundant_with = new Map();
+    const determined_by = new Map();
+    for (const f1 of keys) {
+      const rw = [], db = [];
+      if (ent.get(f1) > 1e-12) {
+        for (const f2 of keys) {
+          if (f1 === f2 || ent.get(f2) <= 1e-12) continue;
+          if (theils.get(f2).get(f1) >= 0.99) {
+            if (theils.get(f1).get(f2) >= 0.99) rw.push(f2);
+            else db.push(f2);
+          }
+        }
+      }
+      redundant_with.set(f1, rw);
+      determined_by.set(f1, db);
+    }
+
+    const minSup = totalObs >= 500 ? 5 : (totalObs >= 10 ? 2 : 1);
+    const items = [];
+    const skitMaps = new Map();
+    for (const f of keys) {
+      for (const [v, cnt] of marginals.get(f).entries()) {
+        if (v === "NULL" || v === "FALSE" || cnt < minSup) continue;
+        const id = f + "=" + v;
+        items.push({ id, field: f, value: v, count: cnt, pct: (100 * cnt) / totalObs });
+        const sm = new Map();
+        for (let idx = 0; idx < skits.length; idx++) {
+          const sv = Object.prototype.hasOwnProperty.call(skits[idx].tokens, f) ? skits[idx].tokens[f] : "NULL";
+          if (sv === v) sm.set(idx, skits[idx].count);
+        }
+        skitMaps.set(id, sm);
+      }
+    }
+    const edges = [];
+    for (let i = 0; i < items.length; i++) {
+      const a = items[i], sa = skitMaps.get(a.id);
+      for (let j = i + 1; j < items.length; j++) {
+        const b = items[j];
+        if (a.field === b.field) continue;
+        const sb = skitMaps.get(b.id);
+        let n11 = 0;
+        for (const [idx, c] of sa.entries()) { if (sb.has(idx)) n11 += c; }
+        const n10 = a.count - n11, n01 = b.count - n11, n00 = totalObs - a.count - b.count + n11;
+        const denom = Math.sqrt(a.count * (totalObs - a.count) * b.count * (totalObs - b.count));
+        const phi = denom > 0 ? (n11 * n00 - n10 * n01) / denom : 0;
+        const lift = (a.count > 0 && b.count > 0) ? (n11 * totalObs) / (a.count * b.count) : 0;
+        const keepPos = n11 >= minSup && (Math.abs(phi) >= 0.05 || lift >= 1.5);
+        const keepNeg = n11 === 0 && Math.abs(phi) >= 0.10;
+        if (!keepPos && !keepNeg) continue;
+        edges.push({
+          a: a.id, b: b.id, fa: a.field, va: a.value, fb: b.field, vb: b.value,
+          n11, support_pct: (100 * n11) / totalObs,
+          conf_ab: (100 * n11) / a.count, conf_ba: (100 * n11) / b.count,
+          lift, phi
+        });
+      }
+    }
+    edges.sort((x, y) => (Math.abs(y.phi) - Math.abs(x.phi)) || (y.n11 - x.n11));
+    return { fields: keys, cramers, theils, redundant_with, determined_by, items, edges: edges.slice(0, 250) };
+  }
+
+  function filterCorrEdges(corr) {
+    return corr.edges.filter(e => {
+      const ap = Math.abs(e.phi);
+      if (ap < state.corrMinPhi) return false;
+      if (state.corrHideLocks && ap >= 0.95) return false;
+      if (state.corrSign === "pos" && e.phi < 0) return false;
+      if (state.corrSign === "neg" && e.phi > 0) return false;
+      return true;
+    });
+  }
+
+  function findPositiveClusters(edges) {
+    const adj = new Map();
+    for (const e of edges) {
+      if (e.phi <= 0) continue;
+      if (!adj.has(e.a)) adj.set(e.a, []);
+      if (!adj.has(e.b)) adj.set(e.b, []);
+      adj.get(e.a).push(e.b);
+      adj.get(e.b).push(e.a);
+    }
+    const seen = new Set();
+    const clusters = [];
+    for (const node of adj.keys()) {
+      if (seen.has(node)) continue;
+      const comp = [], q = [node];
+      seen.add(node);
+      while (q.length) {
+        const cur = q.shift();
+        comp.push(cur);
+        for (const nb of (adj.get(cur) || [])) {
+          if (!seen.has(nb)) { seen.add(nb); q.push(nb); }
+        }
+      }
+      const cSet = new Set(comp);
+      const cEdges = edges.filter(e => e.phi > 0 && cSet.has(e.a) && cSet.has(e.b));
+      clusters.push({
+        nodes: comp,
+        edges: cEdges,
+        maxPhi: Math.max(...cEdges.map(e => e.phi)),
+        maxLift: Math.max(...cEdges.map(e => e.lift))
+      });
+    }
+    clusters.sort((a, b) => (b.nodes.length - a.nodes.length) || (b.maxPhi - a.maxPhi));
+    return clusters;
+  }
+
+  function renderCorrNetwork(corr) {
+    const svg = document.getElementById("corr-net-svg");
+    clear(svg);
+    const edges = filterCorrEdges(corr);
+    const itemMap = new Map(corr.items.map(it => [it.id, it]));
+    const nodeIds = new Set();
+    for (const e of edges) { nodeIds.add(e.a); nodeIds.add(e.b); }
+    const clusters = findPositiveClusters(edges);
+    const clusterOf = new Map();
+    clusters.forEach((c, idx) => c.nodes.forEach(n => clusterOf.set(n, idx)));
+
+    const ordered = [];
+    clusters.forEach(c => c.nodes.forEach(n => ordered.push(n)));
+    for (const n of nodeIds) { if (!clusterOf.has(n)) ordered.push(n); }
+
+    document.getElementById("corr-net-summary").textContent =
+      ordered.length + " active tokens · " + edges.length + " links · " + clusters.length + " positive cluster(s)";
+
+    if (!ordered.length) {
+      svg.appendChild(svgEl("text", { x: 460, y: 210, "text-anchor": "middle", fill: "var(--muted)", "font-size": 13 },
+        "No token pairs pass the current |φ| threshold. Lower the slider or uncheck Hide 1:1 locks."));
+      return;
+    }
+
+    const cx = 460, cy = 210, rx = 310, ry = 148;
+    const negDeg = new Map();
+    for (const e of edges) {
+      if (e.phi < 0) {
+        negDeg.set(e.a, (negDeg.get(e.a) || 0) + 1);
+        negDeg.set(e.b, (negDeg.get(e.b) || 0) + 1);
+      }
+    }
+    const hubs = ordered.filter(n => !clusterOf.has(n) && (negDeg.get(n) || 0) >= 3);
+    const ring = ordered.filter(n => !hubs.includes(n));
+    const pos = new Map();
+    hubs.forEach((n, i) => {
+      const a = (2 * Math.PI * i) / Math.max(1, hubs.length);
+      pos.set(n, { x: cx + (hubs.length > 1 ? 45 * Math.cos(a) : 0), y: cy + (hubs.length > 1 ? 45 * Math.sin(a) : 0) });
+    });
+    ring.forEach((n, i) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(1, ring.length);
+      pos.set(n, { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle), angle });
+    });
+
+    const sel = state.corrSelectedNode && nodeIds.has(state.corrSelectedNode) ? state.corrSelectedNode : null;
+    const connected = new Set();
+    if (sel) {
+      connected.add(sel);
+      for (const e of edges) {
+        if (e.a === sel) connected.add(e.b);
+        if (e.b === sel) connected.add(e.a);
+      }
+    }
+
+    function showEdgeInspector(e) {
+      const box = document.getElementById("corr-net-inspector");
+      clear(box);
+      const top = el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap" });
+      top.appendChild(el("strong", { class: "mono" }, e.a + (e.phi >= 0 ? "  <->  " : "  (repels)  ") + e.b));
+      const fBtn = el("button", { type: "button", class: "small" }, "Filter dashboard to pair");
+      fBtn.addEventListener("click", () => {
+        state.fieldFilters.set(e.fa, new Set([e.va]));
+        state.fieldFilters.set(e.fb, new Set([e.vb]));
+        state.page = 1;
+        render();
+      });
+      top.appendChild(fBtn);
+      box.appendChild(top);
+      const row = el("div", { style: "margin-top:6px;display:flex;flex-wrap:wrap;gap:6px" });
+      row.appendChild(el("span", { class: "badge " + (e.phi >= 0 ? "ok" : "danger") }, "φ = " + (e.phi >= 0 ? "+" : "") + e.phi.toFixed(3)));
+      row.appendChild(el("span", { class: "badge" }, "Lift " + e.lift.toFixed(2) + "x"));
+      row.appendChild(el("span", { class: "badge" }, "Support " + fmtInt(e.n11) + " (" + e.support_pct.toFixed(1) + "%)"));
+      row.appendChild(el("span", { class: "badge" }, "P(B|A) " + e.conf_ab.toFixed(1) + "%"));
+      row.appendChild(el("span", { class: "badge" }, "P(A|B) " + e.conf_ba.toFixed(1) + "%"));
+      box.appendChild(row);
+    }
+
+    function showNodeInspector(nId) {
+      const info = itemMap.get(nId);
+      const links = edges.filter(e => e.a === nId || e.b === nId).sort((a, b) => Math.abs(b.phi) - Math.abs(a.phi));
+      const box = document.getElementById("corr-net-inspector");
+      clear(box);
+      const top = el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap" });
+      top.appendChild(el("strong", { class: "mono" }, nId + (info ? " — " + fmtInt(info.count) + " obs (" + fmtPct(info.pct) + ")" : "")));
+      if (info) {
+        const fBtn = el("button", { type: "button", class: "small" }, "Toggle filter: " + shortTokenLabel(info.field, info.value));
+        fBtn.addEventListener("click", () => toggleFieldFilter(info.field, info.value));
+        top.appendChild(fBtn);
+      }
+      box.appendChild(top);
+      const row = el("div", { style: "margin-top:6px;display:flex;flex-wrap:wrap;gap:6px" });
+      for (const e of links.slice(0, 8)) {
+        const other = e.a === nId ? e.b : e.a;
+        const of = e.a === nId ? e.fb : e.fa;
+        const ov = e.a === nId ? e.vb : e.va;
+        const conf = e.a === nId ? e.conf_ab : e.conf_ba;
+        row.appendChild(el("span", { class: "badge " + (e.phi >= 0 ? "ok" : "danger") },
+          (e.phi >= 0 ? "+" : "") + e.phi.toFixed(2) + " " + shortTokenLabel(of, ov) + " (Lift " + e.lift.toFixed(1) + "x, " + conf.toFixed(0) + "%)"));
+      }
+      box.appendChild(row);
+    }
+
+    for (const e of edges) {
+      const p1 = pos.get(e.a), p2 = pos.get(e.b);
+      if (!p1 || !p2) continue;
+      const isHi = !sel || (e.a === sel || e.b === sel);
+      const mx = (p1.x + p2.x) / 2 * 0.78 + cx * 0.22;
+      const my = (p1.y + p2.y) / 2 * 0.78 + cy * 0.22;
+      const cIdx = clusterOf.has(e.a) ? clusterOf.get(e.a) % PALETTE.length : 0;
+      const stroke = e.phi >= 0 ? PALETTE[cIdx] : "#f85149";
+      const sw = Math.max(1.3, Math.min(5.5, Math.abs(e.phi) * 6.5));
+      const path = svgEl("path", {
+        d: "M " + p1.x.toFixed(1) + " " + p1.y.toFixed(1) + " Q " + mx.toFixed(1) + " " + my.toFixed(1) + " " + p2.x.toFixed(1) + " " + p2.y.toFixed(1),
+        fill: "none", stroke, "stroke-width": sw.toFixed(1),
+        "stroke-opacity": isHi ? (sel ? "0.9" : "0.62") : "0.10",
+        "stroke-dasharray": e.phi < 0 ? "5 4" : "none",
+        style: "cursor:pointer"
+      });
+      path.addEventListener("mouseenter", () => showEdgeInspector(e));
+      path.addEventListener("click", () => showEdgeInspector(e));
+      svg.appendChild(path);
+    }
+
+    for (const n of ordered) {
+      const p = pos.get(n);
+      const info = itemMap.get(n);
+      const r = Math.max(6, Math.min(18, 3.5 + Math.log10((info ? info.count : 10) + 1) * 3.4));
+      const cIdx = clusterOf.has(n) ? clusterOf.get(n) % PALETTE.length : null;
+      const fill = cIdx !== null ? PALETTE[cIdx] : "#f85149";
+      const isHi = !sel || connected.has(n);
+      const g = svgEl("g", { style: "cursor:pointer", opacity: isHi ? "1" : "0.22" });
+      g.appendChild(svgEl("circle", {
+        cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: r.toFixed(1),
+        fill, stroke: sel === n ? "var(--text)" : "var(--surface)",
+        "stroke-width": sel === n ? "2.5" : "1.8"
+      }));
+      const lbl = info ? shortTokenLabel(info.field, info.value) : n;
+      let lx = p.x, ly = p.y - r - 6, anchor = "middle";
+      if (p.angle !== undefined) {
+        const ca = Math.cos(p.angle), sa = Math.sin(p.angle);
+        lx = p.x + ca * (r + 8);
+        ly = p.y + sa * (r + 10) + 3;
+        anchor = ca > 0.25 ? "start" : ca < -0.25 ? "end" : "middle";
+      }
+      g.appendChild(svgEl("text", {
+        x: lx.toFixed(1), y: ly.toFixed(1), "text-anchor": anchor,
+        fill: "var(--text)", "font-size": 11, "font-family": "monospace"
+      }, lbl));
+      g.addEventListener("click", () => {
+        state.corrSelectedNode = state.corrSelectedNode === n ? null : n;
+        renderCorrNetwork(corr);
+        showNodeInspector(n);
+      });
+      g.addEventListener("mouseenter", () => { if (!state.corrSelectedNode) showNodeInspector(n); });
+      svg.appendChild(g);
+    }
+  }
+
+  function renderCorrHeatmap(corr) {
+    const svg = document.getElementById("corr-heat-svg");
+    clear(svg);
+    const fields = corr.fields;
+    if (fields.length < 2) {
+      svg.appendChild(svgEl("text", { x: 300, y: 80, fill: "var(--muted)", "font-size": 13 }, "Need at least 2 fields for a correlation matrix."));
+      return;
+    }
+    const n = fields.length;
+    const cell = Math.max(18, Math.min(28, Math.floor(540 / n)));
+    const leftPad = 120, topPad = 100;
+    const width = leftPad + n * cell + 24;
+    const height = topPad + n * cell + 16;
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.style.height = Math.min(540, height) + "px";
+
+    const mat = state.corrMatMetric === "theils" ? corr.theils : corr.cramers;
+    const tc = themeColors();
+
+    for (let i = 0; i < n; i++) {
+      svg.appendChild(svgEl("text", {
+        x: leftPad - 6, y: topPad + i * cell + cell * 0.68,
+        "text-anchor": "end", fill: "var(--muted)", "font-size": 10.5, "font-family": "monospace"
+      }, shortFieldName(fields[i])));
+      const tx = leftPad + i * cell + cell * 0.55;
+      const ty = topPad - 6;
+      svg.appendChild(svgEl("text", {
+        x: tx, y: ty, transform: "rotate(-45 " + tx + " " + ty + ")",
+        "text-anchor": "start", fill: "var(--muted)", "font-size": 10.5, "font-family": "monospace"
+      }, shortFieldName(fields[i])));
+    }
+
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const f1 = fields[r], f2 = fields[c];
+        const val = mat.get(f1).get(f2);
+        const isDiag = r === c;
+        const rect = svgEl("rect", {
+          x: leftPad + c * cell + 1, y: topPad + r * cell + 1,
+          width: cell - 2, height: cell - 2, rx: 3,
+          fill: isDiag ? "var(--surface-2)" : (val >= 0.95 ? tc.accent2 : tc.accent),
+          "fill-opacity": isDiag ? "1" : Math.max(0.06, val).toFixed(2),
+          stroke: "var(--border)", "stroke-width": 0.5, style: "cursor:pointer"
+        });
+        rect.addEventListener("mouseenter", () => {
+          const box = document.getElementById("corr-heat-inspector");
+          clear(box);
+          box.appendChild(el("strong", { class: "mono" }, f1 + "  ->  " + f2));
+          const row = el("div", { style: "margin-top:6px;display:flex;flex-wrap:wrap;gap:6px" });
+          row.appendChild(el("span", { class: "badge" }, "Cramér's V = " + corr.cramers.get(f1).get(f2).toFixed(3)));
+          row.appendChild(el("span", { class: "badge ok" }, "Theil's U(" + f2 + " | " + f1 + ") = " + corr.theils.get(f1).get(f2).toFixed(3)));
+          row.appendChild(el("span", { class: "badge" }, "Theil's U(" + f1 + " | " + f2 + ") = " + corr.theils.get(f2).get(f1).toFixed(3)));
+          box.appendChild(row);
+        });
+        svg.appendChild(rect);
+        if (!isDiag && val >= 0.2) {
+          svg.appendChild(svgEl("text", {
+            x: leftPad + c * cell + cell / 2, y: topPad + r * cell + cell * 0.68,
+            "text-anchor": "middle", fill: val >= 0.55 ? "#0f1117" : "var(--text)",
+            "font-size": 9, "font-family": "monospace", "pointer-events": "none"
+          }, val >= 0.995 ? "1" : val.toFixed(1).replace("0.", ".")));
+        }
+      }
+    }
+  }
+
+  function renderCorrClustersTab(corr) {
+    const edges = filterCorrEdges(corr);
+    const itemMap = new Map(corr.items.map(it => [it.id, it]));
+    const clusters = findPositiveClusters(edges);
+    const grid = document.getElementById("corr-clusters-grid");
+    clear(grid);
+    if (!clusters.length) {
+      grid.appendChild(el("div", { class: "empty-state" }, "No positive clusters at current |φ| threshold."));
+    }
+    clusters.forEach((c, idx) => {
+      const card = el("div", { class: "cluster-card", style: "border-left-color:" + PALETTE[idx % PALETTE.length] });
+      const hdr = el("div", { class: "cluster-hdr" });
+      hdr.appendChild(el("span", null, "Cluster " + (idx + 1) + " (" + c.nodes.length + " tokens · max φ +" + c.maxPhi.toFixed(2) + ")"));
+      const fBtn = el("button", { type: "button", class: "small" }, "Filter");
+      fBtn.addEventListener("click", () => {
+        for (const n of c.nodes) {
+          const it = itemMap.get(n);
+          if (it) {
+            let s = state.fieldFilters.get(it.field);
+            if (!s) { s = new Set(); state.fieldFilters.set(it.field, s); }
+            s.add(it.value);
+          }
+        }
+        state.page = 1;
+        render();
+      });
+      hdr.appendChild(fBtn);
+      card.appendChild(hdr);
+      for (const n of c.nodes) {
+        const it = itemMap.get(n);
+        const pctLbl = it ? (it.pct > 0 && it.pct < 0.1 ? "<0.1%" : it.pct.toFixed(1) + "%") : "";
+        const pill = el("span", { class: "token-pill", style: "cursor:pointer", title: n },
+          (it ? shortTokenLabel(it.field, it.value) + " (" + pctLbl + ")" : n));
+        if (it) pill.addEventListener("click", () => toggleFieldFilter(it.field, it.value));
+        card.appendChild(pill);
+      }
+      grid.appendChild(card);
+    });
+
+    const tb = document.getElementById("corr-pairs-tbody");
+    clear(tb);
+    if (!edges.length) {
+      const tr = el("tr");
+      tr.appendChild(el("td", { colspan: "7", class: "empty-state" }, "No correlated pairs at current threshold."));
+      tb.appendChild(tr);
+      return;
+    }
+    for (const e of edges.slice(0, 40)) {
+      const tr = el("tr", { class: "clickable" });
+      tr.addEventListener("click", () => {
+        state.fieldFilters.set(e.fa, new Set([e.va]));
+        state.fieldFilters.set(e.fb, new Set([e.vb]));
+        state.page = 1;
+        render();
+      });
+      tr.appendChild(el("td", { class: "mono" }, shortTokenLabel(e.fa, e.va)));
+      tr.appendChild(el("td", { class: "mono" }, shortTokenLabel(e.fb, e.vb)));
+      tr.appendChild(el("td", { class: "num" }, (e.phi >= 0 ? "+" : "") + e.phi.toFixed(3)));
+      tr.appendChild(el("td", { class: "num" }, e.lift.toFixed(2) + "x"));
+      tr.appendChild(el("td", { class: "num" }, fmtInt(e.n11) + " (" + e.support_pct.toFixed(1) + "%)"));
+      tr.appendChild(el("td", { class: "num" }, e.conf_ab.toFixed(1) + "%"));
+      tr.appendChild(el("td", { class: "num" }, e.conf_ba.toFixed(1) + "%"));
+      tb.appendChild(tr);
+    }
+  }
+
+  function renderCorrelations(corr) {
+    if (state.corrTab === "network") renderCorrNetwork(corr);
+    else if (state.corrTab === "heatmap") renderCorrHeatmap(corr);
+    else renderCorrClustersTab(corr);
+  }
+
+  function pickDefaultSankeyFields(fields, ablation) {
+    const nonConst = fields.filter(f => !f.is_constant);
+    const ranked = ablation.map(a => a.key).filter(k => nonConst.some(f => f.key === k));
+    const chosen = [];
+    for (const k of ranked) {
+      const f = fields.find(x => x.key === k);
+      if (f && f.redundant_with && f.redundant_with.some(r => chosen.includes(r))) continue;
+      chosen.push(k);
+      if (chosen.length === 3) break;
+    }
+    for (const f of nonConst) {
+      if (!chosen.includes(f.key) && chosen.length < 3) chosen.push(f.key);
+    }
+    return chosen;
+  }
+
+  function syncSankeySelectors(fields, ablation) {
+    const keys = fields.map(f => f.key);
+    if (!state.sankeyFields.length || !state.sankeyFields.every(k => !k || keys.includes(k))) {
+      const defs = pickDefaultSankeyFields(fields, ablation);
+      state.sankeyFields = [defs[0] || "", defs[1] || "", defs[2] || ""];
+    }
+    const ids = ["sankey-f1", "sankey-f2", "sankey-f3"];
+    ids.forEach((id, idx) => {
+      const sel = document.getElementById(id);
+      clear(sel);
+      if (idx === 2) sel.appendChild(el("option", { value: "" }, "(None — 2 stages)"));
+      for (const f of fields) {
+        const opt = el("option", { value: f.key }, f.key + " (" + f.cardinality + ")");
+        if (state.sankeyFields[idx] === f.key) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    });
+  }
+
+  function renderSankey(skits, totalObs) {
+    const svg = document.getElementById("sankey-svg");
+    clear(svg);
+    const stages = state.sankeyFields.filter(Boolean);
+    const uniqueStages = [];
+    for (const s of stages) { if (!uniqueStages.includes(s)) uniqueStages.push(s); }
+    if (uniqueStages.length < 2 || !skits.length || !totalObs) {
+      svg.appendChild(svgEl("text", { x: 460, y: 170, "text-anchor": "middle", fill: "var(--muted)", "font-size": 13 },
+        "Select at least 2 distinct fields with observations to render a Sankey flow."));
+      return;
+    }
+
+    const MAX_NODES = 8;
+    const W = 920, H = 360, topY = 34, botPad = 18, usableH = H - topY - botPad;
+    const nodeW = 16, gap = 7;
+    const colXs = uniqueStages.length === 2 ? [150, 750] : [130, 452, 774];
+
+    // Roll up each stage to top MAX_NODES values + Other
+    const stageTopSets = [];
+    const stageNodes = [];
+    for (let si = 0; si < uniqueStages.length; si++) {
+      const fk = uniqueStages[si];
+      const counts = new Map();
+      for (const s of skits) {
+        const v = Object.prototype.hasOwnProperty.call(s.tokens, fk) ? s.tokens[fk] : "NULL";
+        counts.set(v, (counts.get(v) || 0) + s.count);
+      }
+      const sorted = Array.from(counts.entries()).sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
+      const top = sorted.slice(0, MAX_NODES);
+      const rest = sorted.slice(MAX_NODES);
+      const topSet = new Set(top.map(x => x[0]));
+      stageTopSets.push(topSet);
+      const list = top.map(([v, c]) => ({ key: v, label: v, count: c, isOther: false }));
+      if (rest.length) {
+        list.push({ key: "__OTHER__", label: "Other (" + rest.length + ")", count: rest.reduce((a, x) => a + x[1], 0), isOther: true });
+      }
+      stageNodes.push(list);
+    }
+
+    // Position nodes vertically in each column
+    const nodePos = [];
+    for (let si = 0; si < uniqueStages.length; si++) {
+      const list = stageNodes[si];
+      const totalGap = Math.max(0, list.length - 1) * gap;
+      const availH = Math.max(60, usableH - totalGap);
+      let y = topY;
+      const posMap = new Map();
+      list.forEach((n, idx) => {
+        const h = Math.max(4, (n.count / totalObs) * availH);
+        posMap.set(n.key, {
+          field: uniqueStages[si], key: n.key, label: n.label, count: n.count, isOther: n.isOther,
+          x: colXs[si], y, h, outOff: 0, inOff: 0, color: PALETTE[(si * 3 + idx) % PALETTE.length]
+        });
+        y += h + gap;
+      });
+      nodePos.push(posMap);
+    }
+
+    // Column headers
+    uniqueStages.forEach((fk, si) => {
+      svg.appendChild(svgEl("text", {
+        x: colXs[si] + nodeW / 2, y: 18, "text-anchor": "middle",
+        fill: "var(--muted)", "font-size": 12, "font-weight": 600, "font-family": "monospace"
+      }, fk));
+    });
+
+    // Draw curved ribbons between adjacent stages
+    for (let si = 0; si < uniqueStages.length - 1; si++) {
+      const fA = uniqueStages[si], fB = uniqueStages[si + 1];
+      const topA = stageTopSets[si], topB = stageTopSets[si + 1];
+      const flows = new Map();
+      for (const s of skits) {
+        const rawA = Object.prototype.hasOwnProperty.call(s.tokens, fA) ? s.tokens[fA] : "NULL";
+        const rawB = Object.prototype.hasOwnProperty.call(s.tokens, fB) ? s.tokens[fB] : "NULL";
+        const kA = topA.has(rawA) ? rawA : "__OTHER__";
+        const kB = topB.has(rawB) ? rawB : "__OTHER__";
+        const fk = kA.length + ":" + kA + "|" + kB;
+        flows.set(fk, [kA, kB, (flows.has(fk) ? flows.get(fk)[2] : 0) + s.count]);
+      }
+      const flowList = Array.from(flows.values()).sort((a, b) => b[2] - a[2]);
+      const pMapA = nodePos[si], pMapB = nodePos[si + 1];
+
+      for (const [kA, kB, cnt] of flowList) {
+        const nA = pMapA.get(kA), nB = pMapB.get(kB);
+        if (!nA || !nB || cnt <= 0) continue;
+        const hA = (cnt / nA.count) * nA.h;
+        const hB = (cnt / nB.count) * nB.h;
+        const x0 = nA.x + nodeW, x1 = nB.x;
+        const mx = (x0 + x1) / 2;
+        const y0t = nA.y + nA.outOff, y0b = y0t + hA;
+        const y1t = nB.y + nB.inOff, y1b = y1t + hB;
+        nA.outOff += hA;
+        nB.inOff += hB;
+        const d =
+          "M " + x0 + " " + y0t.toFixed(1) +
+          " C " + mx + " " + y0t.toFixed(1) + ", " + mx + " " + y1t.toFixed(1) + ", " + x1 + " " + y1t.toFixed(1) +
+          " L " + x1 + " " + y1b.toFixed(1) +
+          " C " + mx + " " + y1b.toFixed(1) + ", " + mx + " " + y0b.toFixed(1) + ", " + x0 + " " + y0b.toFixed(1) + " Z";
+        const rib = svgEl("path", {
+          d, fill: nA.color, "fill-opacity": "0.34", style: "cursor:pointer"
+        });
+        rib.addEventListener("mouseenter", () => {
+          rib.setAttribute("fill-opacity", "0.68");
+          const box = document.getElementById("sankey-inspector");
+          clear(box);
+          box.appendChild(el("strong", { class: "mono" }, fA + "=" + nA.label + "  ->  " + fB + "=" + nB.label));
+          const row = el("div", { style: "margin-top:5px;display:flex;gap:6px;flex-wrap:wrap" });
+          row.appendChild(el("span", { class: "badge ok" }, fmtInt(cnt) + " obs (" + fmtPct((100 * cnt) / totalObs) + " of filtered)"));
+          row.appendChild(el("span", { class: "badge" }, fmtPct((100 * cnt) / nA.count) + " of " + nA.label));
+          row.appendChild(el("span", { class: "badge" }, fmtPct((100 * cnt) / nB.count) + " of " + nB.label));
+          box.appendChild(row);
+        });
+        rib.addEventListener("mouseleave", () => rib.setAttribute("fill-opacity", "0.34"));
+        rib.addEventListener("click", () => {
+          if (!nA.isOther) state.fieldFilters.set(fA, new Set([nA.key]));
+          if (!nB.isOther) state.fieldFilters.set(fB, new Set([nB.key]));
+          state.page = 1;
+          render();
+        });
+        svg.appendChild(rib);
+      }
+    }
+
+    // Draw nodes and labels
+    for (let si = 0; si < uniqueStages.length; si++) {
+      for (const n of nodePos[si].values()) {
+        const rect = svgEl("rect", {
+          x: n.x, y: n.y.toFixed(1), width: nodeW, height: n.h.toFixed(1), rx: 3,
+          fill: n.color, stroke: "var(--surface)", "stroke-width": 1, style: "cursor:pointer"
+        });
+        rect.addEventListener("click", () => { if (!n.isOther) toggleFieldFilter(n.field, n.key); });
+        rect.addEventListener("mouseenter", () => {
+          const box = document.getElementById("sankey-inspector");
+          clear(box);
+          box.appendChild(el("strong", { class: "mono" }, n.field + "=" + n.label + " — " + fmtInt(n.count) + " obs (" + fmtPct((100 * n.count) / totalObs) + ")"));
+        });
+        svg.appendChild(rect);
+        const isRight = si === uniqueStages.length - 1;
+        const lbl = n.label.replace("app.bsky.embed.", "").replace(/app\.bsky\.richtext\.facet#/g, "#");
+        const clipped = lbl.length > 18 ? lbl.slice(0, 16) + ".." : lbl;
+        const txtX = isRight ? n.x + nodeW + 6 : (si === 0 ? n.x - 6 : n.x + nodeW + 6);
+        const anchor = si === 0 ? "end" : "start";
+        if (n.h >= 10) {
+          svg.appendChild(svgEl("text", {
+            x: txtX, y: (n.y + n.h / 2 + 3.5).toFixed(1), "text-anchor": anchor,
+            fill: "var(--text)", "font-size": 10.5, "font-family": "monospace"
+          }, clipped + " (" + ((100 * n.count) / totalObs).toFixed(0) + "%)"));
+        }
+      }
+    }
+  }
+
   function render() {
     updateSliderUI();
     renderChips();
@@ -1672,12 +2422,20 @@ _APP_JS = r"""
     const conc = computeConcentration(skits, totalObs);
     const fields = computeFields(skits, totalObs);
     const ablation = computeAblation(skits);
+    const corr = computeCorrelations(skits, totalObs);
+    for (const f of fields) {
+      f.redundant_with = corr.redundant_with.get(f.key) || [];
+      f.determined_by = corr.determined_by.get(f.key) || [];
+    }
     const aggs = computeAggregates(skits);
 
     renderKPIs(skits, totalObs, conc);
     renderPareto(skits, totalObs);
     renderFieldsSection(fields);
     renderAblationSection(ablation, fields);
+    renderCorrelations(corr);
+    syncSankeySelectors(fields, ablation);
+    renderSankey(skits, totalObs);
     renderAggregatesSection(aggs);
     renderExplorer(skits, totalObs);
   }
@@ -1834,6 +2592,64 @@ _APP_JS = r"""
       state.driftIdx = Number(e.target.value);
       renderHistorySection();
     });
+
+    // Correlation explorer controls
+    document.querySelectorAll("[data-corr-tab]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-corr-tab]").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".corr-sub-panel").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        state.corrTab = btn.dataset.corrTab;
+        document.getElementById("corr-panel-" + state.corrTab).classList.add("active");
+        render();
+      });
+    });
+    const phiSlider = document.getElementById("corr-phi-slider");
+    phiSlider.addEventListener("input", () => {
+      state.corrMinPhi = Number(phiSlider.value);
+      document.getElementById("corr-phi-val").textContent = state.corrMinPhi.toFixed(2);
+      render();
+    });
+    document.querySelectorAll("[data-corr-sign]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-corr-sign]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.corrSign = btn.dataset.corrSign;
+        render();
+      });
+    });
+    document.getElementById("corr-hide-locks").addEventListener("change", e => {
+      state.corrHideLocks = e.target.checked;
+      render();
+    });
+    document.querySelectorAll("[data-corr-preset]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.corrSelectedNode = null;
+        const p = btn.dataset.corrPreset;
+        if (p === "behavioral") { state.corrMinPhi = 0.14; state.corrHideLocks = true; state.corrSign = "all"; }
+        else if (p === "schema") { state.corrMinPhi = 0.35; state.corrHideLocks = false; state.corrSign = "pos"; }
+        else if (p === "replies") { state.corrMinPhi = 0.10; state.corrHideLocks = true; state.corrSign = "neg"; }
+        phiSlider.value = String(state.corrMinPhi);
+        document.getElementById("corr-phi-val").textContent = state.corrMinPhi.toFixed(2);
+        document.getElementById("corr-hide-locks").checked = state.corrHideLocks;
+        document.querySelectorAll("[data-corr-sign]").forEach(b => b.classList.toggle("active", b.dataset.corrSign === state.corrSign));
+        render();
+      });
+    });
+    document.querySelectorAll("[data-corr-mat]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-corr-mat]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.corrMatMetric = btn.dataset.corrMat;
+        render();
+      });
+    });
+    ["sankey-f1", "sankey-f2", "sankey-f3"].forEach((id, idx) => {
+      document.getElementById(id).addEventListener("change", e => {
+        state.sankeyFields[idx] = e.target.value;
+        render();
+      });
+    });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -1957,11 +2773,11 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
       </div>
       <h3 style="margin-top:16px">All Fields — Min, Max, Weighted Mean / Median &amp; Diagnostics</h3>
       <div class="table-wrap">
-        <table>
+        <table id="fields-table">
           <thead>
             <tr>
-              <th>Field</th><th>Type</th><th class="num">Cardinality</th><th>Min</th><th>Max</th>
-              <th>Mode (Obs %)</th><th class="num">Weighted Mean</th><th class="num">Weighted Median</th>
+              <th>Field</th><th>Type</th><th class="num">Card.</th><th>Min</th><th>Max</th>
+              <th>Mode (Obs %)</th><th class="num">Wtd Mean</th><th class="num">Wtd Median</th>
               <th class="num">NULL %</th><th>Diagnostics</th>
             </tr>
           </thead>
@@ -1993,6 +2809,95 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
           <tbody id="ablation-tbody"></tbody>
         </table>
       </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Correlated Value Clusters &amp; Field Associations</h2>
+          <div class="muted" style="font-size:12px">Exact observation-weighted Cramér's V, directional Theil's U, and token co-occurrence φ / Lift. Recomputes live on slider and filter changes.</div>
+        </div>
+      </div>
+      <div class="sub-tabs" role="tablist">
+        <button type="button" class="small active" data-corr-tab="network">1. Value Cluster Graph</button>
+        <button type="button" class="small" data-corr-tab="heatmap">2. Field Matrix (Theil's U / Cramér's V)</button>
+        <button type="button" class="small" data-corr-tab="clusters">3. Discovered Clusters &amp; Rules</button>
+      </div>
+
+      <div id="corr-panel-network" class="sub-panel corr-sub-panel active">
+        <div class="ctrl-inline">
+          <label class="muted">Min |φ|:
+            <input id="corr-phi-slider" type="range" min="0.05" max="0.95" step="0.01" value="0.14" style="vertical-align:middle">
+            <span id="corr-phi-val" class="mono">0.14</span>
+          </label>
+          <div class="hdr-actions">
+            <button type="button" class="small active" data-corr-sign="all">All (±)</button>
+            <button type="button" class="small" data-corr-sign="pos">Positive (+)</button>
+            <button type="button" class="small" data-corr-sign="neg">Anti (−)</button>
+          </div>
+          <label style="cursor:pointer"><input id="corr-hide-locks" type="checkbox" checked> Hide 1:1 schema locks (|φ|≥0.95)</label>
+          <div class="hdr-actions">
+            <button type="button" class="small" data-corr-preset="behavioral">Behavioral Signals</button>
+            <button type="button" class="small" data-corr-preset="schema">Schema Locks</button>
+            <button type="button" class="small" data-corr-preset="replies">Anti-Correlations</button>
+          </div>
+          <span id="corr-net-summary" class="muted" style="margin-left:auto"></span>
+        </div>
+        <div class="svg-wrap">
+          <svg id="corr-net-svg" viewBox="0 0 920 420" style="width:100%;height:420px;display:block"></svg>
+        </div>
+        <div class="legend-row">
+          <span><span class="leg-line pos"></span>Positive correlation (+φ, co-occur)</span>
+          <span><span class="leg-line neg"></span>Negative correlation (−φ, repel)</span>
+          <span>Node size = log(observations) · Color = positive cluster · Click node or link to inspect &amp; cross-filter</span>
+        </div>
+        <div id="corr-net-inspector" class="inspector">Click or hover any node or edge to inspect Support, Lift, φ, and directional Confidence P(B|A), or click to cross-filter the dashboard.</div>
+      </div>
+
+      <div id="corr-panel-heatmap" class="sub-panel corr-sub-panel">
+        <div class="ctrl-inline">
+          <button type="button" class="small active" data-corr-mat="theils">Theil's U(col | row) — Directional</button>
+          <button type="button" class="small" data-corr-mat="cramers">Cramér's V — Symmetric</button>
+          <span class="muted">Row X predicts Column Y (1.00 = knowing X completely determines Y).</span>
+        </div>
+        <div class="svg-wrap">
+          <svg id="corr-heat-svg" viewBox="0 0 600 460" style="width:100%;height:460px;display:block"></svg>
+        </div>
+        <div id="corr-heat-inspector" class="inspector">Hover any cell to compare Cramér's V against directional Theil's U(col|row) and U(row|col).</div>
+      </div>
+
+      <div id="corr-panel-clusters" class="sub-panel corr-sub-panel">
+        <div id="corr-clusters-grid" class="clusters-grid"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Token A</th><th>Token B</th><th class="num">φ</th><th class="num">Lift</th>
+                <th class="num">Support</th><th class="num">P(B|A)</th><th class="num">P(A|B)</th>
+              </tr>
+            </thead>
+            <tbody id="corr-pairs-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Alluvial / Sankey Flow Explorer (2–3 Fields)</h2>
+          <div class="muted" style="font-size:12px">Traces exact observation volume flowing between correlated field buckets. Click any node or ribbon to cross-filter the dashboard.</div>
+        </div>
+        <div class="hdr-actions">
+          <label class="muted" style="font-size:12px">Stage 1: <select id="sankey-f1" aria-label="Sankey stage 1"></select></label>
+          <label class="muted" style="font-size:12px">Stage 2: <select id="sankey-f2" aria-label="Sankey stage 2"></select></label>
+          <label class="muted" style="font-size:12px">Stage 3: <select id="sankey-f3" aria-label="Sankey stage 3"></select></label>
+        </div>
+      </div>
+      <div class="svg-wrap">
+        <svg id="sankey-svg" viewBox="0 0 920 360" style="width:100%;height:360px;display:block"></svg>
+      </div>
+      <div id="sankey-inspector" class="inspector">Hover any node or ribbon to inspect exact observation flow and conditional share; click to filter.</div>
     </section>
 
     <section class="card">
