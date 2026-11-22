@@ -1,8 +1,8 @@
 """Command-line interface.
 
-    sketchtastic merge --profile P --sketch S [EVENTS|-]
-    sketchtastic check PROFILE [PROFILE ...]
-    sketchtastic show [--sort KEY] SKETCH
+    sketch merge --profile P --sketch S [EVENTS|-]
+    sketch check PROFILE [PROFILE ...]
+    sketch show [--sort KEY] SKETCH
 
 Folds a stream of JSONL events into a sketch that grows across runs.
 Knows nothing about where the events came from.
@@ -51,13 +51,13 @@ _MERGE_DESCRIPTION = (
 _MERGE_EPILOG = """\
 example:
   # first run creates web.sketch.yaml; every later run merges into it
-  sketchtastic merge -p access_log.yaml -s web.sketch.yaml access_log.jsonl
+  sketch merge -p access_log.yaml -s web.sketch.yaml access_log.jsonl
 
   # read events from a pipe
-  tail -n 1000 app.jsonl | sketchtastic merge -p app.yaml -s app.sketch.yaml -
+  tail -n 1000 app.jsonl | sketch merge -p app.yaml -s app.sketch.yaml -
 
   # trial run: write the merged result elsewhere, leave the sketch untouched
-  sketchtastic merge -p app.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.jsonl
+  sketch merge -p app.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.jsonl
 
 The SKETCH file is updated in place (atomically) unless --output is given.
 
@@ -73,7 +73,7 @@ history:
   that saw them. Every run that updates SKETCH also writes just that run's
   skits, with a 'run:' header (id, times, source, counts), to
   <SKETCH without extension>.history/<run id>.yaml, e.g.
-  web.sketch.history/261015-0003.yaml; 'sketchtastic show' reads it.
+  web.sketch.history/261015-0003.yaml; 'sketch show' reads it.
   A run with --output writes no history and uses up no run id.
 
 duplicate protection:
@@ -106,12 +106,12 @@ exit status:
 
 _SHOW_EPILOG = """\
 examples:
-  sketchtastic show web.sketch.yaml
-  sketchtastic show web.sketch.yaml | less -S    # long values: scroll sideways
-  sketchtastic show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail
+  sketch show web.sketch.yaml
+  sketch show web.sketch.yaml | less -S    # long values: scroll sideways
+  sketch show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail
 
 ID is the start of the skit ID; FIRST RUN and LAST RUN are the ids of
-the first and last run that saw it (see 'sketchtastic merge --help'); '-' means
+the first and last run that saw it (see 'sketch merge --help'); '-' means
 no value.
 Each % column is the skit's share of the sketch total: COUNT % of all
 events, and one value and % column per SUM or COUNT aggregate (key.FN when
@@ -140,9 +140,8 @@ def _say(message: str) -> None:
 
 
 def _prog() -> str:
-    """The command as invoked (`sketchtastic` or `skt`); `sketchtastic` for `python -m`."""
-    name = os.path.basename(sys.argv[0]) if sys.argv else ""
-    return name if name in ("sketchtastic", "skt") else "sketchtastic"
+    """The CLI command name (`sketch`, including when invoked via `python -m sketchtastic`)."""
+    return "sketch"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -370,7 +369,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     try:
         sketch.load(args.sketch_path)
     except (SketchError, OSError) as exc:
-        _say(f"sketchtastic: cannot use sketch file: {exc}")
+        _say(f"sketch: cannot use sketch file: {exc}")
         return EXIT_NOT_WRITTEN
     records = [(fid, sketch.get(fid)) for fid in sketch]
     if not records:
@@ -379,7 +378,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     try:
         table = _show_table(records, args.sort, args.sketch_path)
     except _NoColumn as exc:
-        _say(f"sketchtastic: {exc}")
+        _say(f"sketch: {exc}")
         return EXIT_NOT_WRITTEN
     print(table)
     return EXIT_OK
@@ -441,7 +440,7 @@ def _sequencer(profile: Profile, sketch: Sketch) -> _Sequencer | None:
     mark = stored.get("max")
     if stored and stored.get("path") != profile.sequence.text:
         _say(
-            f"sketchtastic: sequence path changed ({stored.get('path')} -> "
+            f"sketch: sequence path changed ({stored.get('path')} -> "
             f"{profile.sequence.text}); previous mark ignored"
         )
         mark = None
@@ -489,7 +488,7 @@ def _fold_lines(
         sequence = sequencer.check(event) if sequencer else 0
         if sequence is None:  # duplicate detection must be exact, so the whole run fails
             raise _NotWritten(
-                f"sketchtastic: line {lineno}: no usable sequence at {sequencer.path.text} "
+                f"sketch: line {lineno}: no usable sequence at {sequencer.path.text} "
                 "(missing, several values, or not a number)\n"
                 "  nothing written: the profile declares a sequence, so every event needs one"
             )
@@ -542,7 +541,7 @@ def _get(queue: Queue, stalled: Callable[[], bool]) -> Any:
         except Empty:
             if stalled():
                 raise _NotWritten(
-                    "sketchtastic: a worker process stopped unexpectedly; nothing written"
+                    "sketch: a worker process stopped unexpectedly; nothing written"
                 ) from None
 
 
@@ -617,9 +616,9 @@ def _fold_stream(
         if sequencer and part_sequencer is not sequencer:
             sequencer.absorb(part_sequencer)
     for lineno, reason in sorted(warnings)[:_MAX_LINE_WARNINGS]:
-        _say(f"sketchtastic: line {lineno}: {reason} - skipped")
+        _say(f"sketch: line {lineno}: {reason} - skipped")
     if stats["skipped_lines"] > _MAX_LINE_WARNINGS:
-        _say("sketchtastic: further skipped lines are counted but not listed")
+        _say("sketch: further skipped lines are counted but not listed")
     assert run is not None  # every path yields at least one fold
     return run, {**stats, **(sequencer.stats() if sequencer else {})}
 
@@ -632,8 +631,8 @@ def _load_profile(path: str) -> Profile:
     try:
         return load_profile(path)
     except ProfileError as exc:
-        lines = [f"sketchtastic: {problem}" for problem in exc.problems]
-        lines.append(f"  nothing written; 'sketchtastic check {path}' lists the same problems")
+        lines = [f"sketch: {problem}" for problem in exc.problems]
+        lines.append(f"  nothing written; 'sketch check {path}' lists the same problems")
         raise _NotWritten("\n".join(lines)) from exc
 
 
@@ -645,12 +644,12 @@ def _open_sketch(args: argparse.Namespace, profile: Profile) -> Sketch:
         sketch.load(args.sketch_path, force=args.force_profile)
     except ProfileMismatchError as exc:
         raise _NotWritten(
-            f"sketchtastic: {exc}.\n"
+            f"sketch: {exc}.\n"
             "  Fingerprints from different profiles are not comparable, so nothing was merged.\n"
             "  Use a separate --sketch file for this profile, or pass --force-profile to merge anyway."
         ) from exc
     except (SketchError, OSError) as exc:
-        raise _NotWritten(f"sketchtastic: cannot use sketch file: {exc}") from exc
+        raise _NotWritten(f"sketch: cannot use sketch file: {exc}") from exc
     return sketch
 
 
@@ -660,14 +659,12 @@ def _open_events(args: argparse.Namespace) -> AbstractContextManager[IO[bytes] |
             return open(args.events, "rb")  # noqa: SIM115 - decoded per line, errors replaced
         except OSError as exc:
             reason = exc.strerror or exc
-            raise _NotWritten(
-                f"sketchtastic: cannot read events from {args.events}: {reason}"
-            ) from exc
+            raise _NotWritten(f"sketch: cannot read events from {args.events}: {reason}") from exc
     if sys.stdin.isatty():
         raise _NotWritten(
-            "sketchtastic: no events to read. Name a JSONL file, or pipe events in:\n"
-            f"  sketchtastic merge -p {args.profile} -s {args.sketch_path} events.jsonl\n"
-            f"  some-command | sketchtastic merge -p {args.profile} -s {args.sketch_path} -"
+            "sketch: no events to read. Name a JSONL file, or pipe events in:\n"
+            f"  sketch merge -p {args.profile} -s {args.sketch_path} events.jsonl\n"
+            f"  some-command | sketch merge -p {args.profile} -s {args.sketch_path} -"
         )
     return nullcontext(getattr(sys.stdin, "buffer", sys.stdin))
 
@@ -730,7 +727,7 @@ def _report(
     source = _source(args)
     destination = args.output or args.sketch_path
     verb = "updated" if existed and not args.output else "wrote"
-    _say(f"sketchtastic: {stats['events']} events read from {source}")
+    _say(f"sketch: {stats['events']} events read from {source}")
     _say(f"  skits: {stats['new']} new, {stats['updated']} updated, {len(sketch)} total in sketch")
     _say(
         f"  skipped: {stats['skipped_lines']} malformed lines, "
@@ -752,9 +749,7 @@ def _record_history(
     try:
         _say(f"  history: {_write_history(args, run, run_id, stats, started)}")
     except OSError as exc:
-        _say(
-            f"sketchtastic: {args.sketch_path} updated, but history not written: {exc.strerror or exc}"
-        )
+        _say(f"sketch: {args.sketch_path} updated, but history not written: {exc.strerror or exc}")
         return EXIT_HISTORY_NOT_WRITTEN
     return EXIT_OK
 
@@ -780,14 +775,12 @@ def _cmd_merge(args: argparse.Namespace) -> int:
         try:
             sketch.save(destination)
         except OSError as exc:
-            raise _NotWritten(
-                f"sketchtastic: cannot write {destination}: {exc.strerror or exc}"
-            ) from exc
+            raise _NotWritten(f"sketch: cannot write {destination}: {exc.strerror or exc}") from exc
     except _NotWritten as exc:
         _say(str(exc))
         return EXIT_NOT_WRITTEN
     except KeyboardInterrupt:
-        _say(f"sketchtastic: interrupted - {destination} was not modified")
+        _say(f"sketch: interrupted - {destination} was not modified")
         return 130
     _report(args, stats, sketch, profile, existed=existed)
     status = EXIT_LINES_SKIPPED if stats["skipped_lines"] else EXIT_OK

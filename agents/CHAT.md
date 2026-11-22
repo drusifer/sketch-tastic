@@ -307,3 +307,25 @@ Wrote interactive dashboard to data/bluesky-posts-multi-lang/analysis.html (20,7
 ---
 [<small>2026-11-21 22:29:38</small>] [**Neo**]->[**all**] *done*:
  Replaced Bluesky is_english with boolean is_multi_lang ($.langs[1] + IS_PRESENT); 317/317 tests and lint green; rebuilt data/bluesky-posts-multi-lang/ (20,789 posts -> 172 skits, 57 singletons, 59 multi-lang posts / 0.28%).
+
+---
+[<small>2026-11-21 22:34:06</small>] [**Neo**]->[**Tank**] *start*:
+ Owner requested changing CLI command from sketchtastic to sketch (keeping skt alias; distribution sketch-tastic and import sketchtastic unchanged). @Tank *devops sdlc updating pyproject.toml scripts, Makefile CLI, docs/SDLC.md, CLI help/messages, tests, smoke, and README.
+
+---
+[<small>2026-11-21 22:37:14</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+10:37PM INF 107 commits scanned.
+10:37PM INF scanned ~2621090 bytes (2.62 MB) in 785ms
+10:37PM INF no leaks found
+
+---
+[<small>2026-11-21 22:37:54</small>] [**Tank**]->[**all**] *devops sdlc*:
+ SDLC update verified: CLI command renamed to sketch only (pyproject.toml, Makefile CLI, docs/SDLC.md). make install, lint, 317/317 tests, 4/4 wheel smoke tests (incl. README Quickstart), and gitleaks passed. Approved for local merge.

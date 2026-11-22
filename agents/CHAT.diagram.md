@@ -13,7 +13,8 @@ sequenceDiagram
     participant Morpheus
     participant Switch
     participant Smith
-    Note over User,Smith: 📅 2026-11-21
+    participant Tank
+    Note over User,Tank: 📅 2026-11-21
     User->>All: "request"
     Note right of User: "*nit add Boolean type<br/>support (distinct from<br/>enum)"
     Neo->>All: "swe init"
@@ -108,4 +109,8 @@ sequenceDiagram
     Note right of Smith: "UX sign-off: Aggregates<br/>table fits cleanly at<br/>1280px without<br/>horizontal clipping,<br/>Per-Event Histogram with<br/>quantile badges and<br/>cumulative %…"
     Neo->>All: "done"
     Note right of Neo: "Replaced Bluesky<br/>is_english with boolean<br/>is_multi_lang<br/>($.langs[1] +<br/>IS_PRESENT), 317/317<br/>tests and lint green,<br/>rebuilt data/bluesky-<br/>posts-…"
+    Neo->>Tank: "start"
+    Note right of Neo: "Owner requested changing<br/>CLI command from<br/>sketchtastic to sketch<br/>(keeping skt alias,<br/>distribution sketch-<br/>tastic and import<br/>sketchtastic unc…"
+    Tank->>All: "devops sdlc"
+    Note right of Tank: "SDLC update verified:<br/>CLI command renamed to<br/>sketch only<br/>(pyproject.toml,<br/>Makefile CLI,<br/>docs/SDLC.md). make<br/>install, lint, 317/317<br/>tests, 4…"
 ```

@@ -3497,7 +3497,7 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
       </div>
       <div id="history-warnings" class="warn-box" style="display:none"></div>
       <div id="history-empty" class="empty-state">
-        No run history directory found. History files are written automatically by <code>sketchtastic merge</code> under <code>&lt;sketch&gt;.history/</code>, or supply <code>--history DIR</code>.
+        No run history directory found. History files are written automatically by <code>sketch merge</code> under <code>&lt;sketch&gt;.history/</code>, or supply <code>--history DIR</code>.
       </div>
       <div id="history-content" style="display:none">
         <div class="chart-wrap"><canvas id="chart-history"></canvas></div>

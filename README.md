@@ -2,7 +2,7 @@
 
 Mergeable sketches of JSONL event streams for regression testing and flow analysis.
 
-`sketchtastic` reads events — logs, traces, audit records, anything with one JSON object per
+`sketch` reads events — logs, traces, audit records, anything with one JSON object per
 line — and reduces each to a **skit**: a stable ID for "this shape of event". It keeps a
 **sketch** (the data-sketch term for a compact, mergeable summary of a stream) with one entry per
 skit: how often it was seen, statistics you ask for, and a sample. The sketch is a file that
@@ -20,8 +20,7 @@ A million near-identical log lines become a handful of entries you can actually 
 pip install sketch-tastic
 ```
 
-Python 3.14 or newer. Installs the `sketchtastic` command and its short alias `skt` (also
-runnable as `python -m sketchtastic`).
+Python 3.14 or newer. Installs the `sketch` command (also runnable as `python -m sketchtastic`).
 
 Moved from [drusifer/fingerling](https://github.com/drusifer/fingerling), where it was
 `fingerprint-sampler`. While the version is 0.x, releases may break profiles and sketch files
@@ -50,11 +49,11 @@ cat > events.jsonl <<'JSONL'
 {"level": "INFO", "logger": "http", "msg": "GET /health", "took_ms": 0.4}
 JSONL
 
-sketchtastic merge -p profile.yaml -s app.sketch.yaml events.jsonl
+sketch merge -p profile.yaml -s app.sketch.yaml events.jsonl
 ```
 
 ```
-sketchtastic: 4 events read from events.jsonl
+sketch: 4 events read from events.jsonl
   skits: 3 new, 0 updated, 3 total in sketch
   skipped: 0 malformed lines, 0 unusable aggregate values
   wrote app.sketch.yaml (profile 3f0dd0d9f280ba32064a891dcd3b17cb)
@@ -103,7 +102,7 @@ skits:
         count: 50.0
 ```
 
-To read a sketch without the YAML, print it as a table with `sketchtastic show app.sketch.yaml`:
+To read a sketch without the YAML, print it as a table with `sketch show app.sketch.yaml`:
 
 ```
 ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
@@ -115,7 +114,7 @@ f5189272  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
 ## Usage
 
 ```
-sketchtastic merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [-j N] [--force-profile]
+sketch merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [-j N] [--force-profile]
 ```
 
 | Option | Meaning |
@@ -129,10 +128,10 @@ sketchtastic merge -p PROFILE -s SKETCH [EVENTS|-] [-o OUTPUT] [-j N] [--force-p
 
 ```sh
 # read from a pipe
-tail -n 1000 app.jsonl | sketchtastic merge -p profile.yaml -s app.sketch.yaml -
+tail -n 1000 app.jsonl | sketch merge -p profile.yaml -s app.sketch.yaml -
 
 # trial run: see the result without touching the sketch
-sketchtastic merge -p profile.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.jsonl
+sketch merge -p profile.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.jsonl
 ```
 
 The summary goes to stderr and stdout stays empty. Exit status: `0` sketch written and every line
@@ -164,7 +163,7 @@ web.sketch.history/
 ```
 
 So `last_seen: 261014-0002` points straight at the file for that run. A run file is a sketch
-(counts, aggregates and shares from that run only), so `sketchtastic show` reads it. It starts
+(counts, aggregates and shares from that run only), so `sketch show` reads it. It starts
 with a `run:` header: `id`, `started`, `finished` (UTC), `source`, `events`, `skipped_lines` and
 `sketch`. A new run's number is one past the highest in the sketch and its history, so a rebuilt sketch
 never overwrites an old run file. History is always on; a run with `-o`, or one that writes
@@ -197,7 +196,7 @@ the old mark and say so.
 ### Check a profile
 
 ```
-sketchtastic check PROFILE [PROFILE ...]
+sketch check PROFILE [PROFILE ...]
 ```
 
 Checks profiles without reading any events and lists **every** problem, one per line, with the
@@ -225,7 +224,7 @@ completes modifier names:
 ### Show a sketch
 
 ```
-sketchtastic show [--sort KEY] SKETCH
+sketch show [--sort KEY] SKETCH
 ```
 
 Prints one row per skit, least frequent first: the first 8 characters of its ID, its count
@@ -236,7 +235,7 @@ shares existed shows `-` until its next merge. A sketch with no skits prints
 `SKETCH: no skits`. Long values are not cut; pipe to `less -S` to scroll sideways.
 
 `--sort KEY` orders the rows by the column headed KEY, in any case, lowest first (default
-`COUNT`), so the largest are at the end: `sketchtastic show --sort 'payload_bytes.SUM %'
+`COUNT`), so the largest are at the end: `sketch show --sort 'payload_bytes.SUM %'
 gh.sketch.yaml | tail` shows the heaviest skits. `-` sorts first, numbers before text, and
 equal values keep file order. Exit status: `0` printed · `2` the sketch file could not be read,
 or KEY is not one of its columns (the message says why, and lists the columns).
@@ -247,16 +246,16 @@ The profile defines each kind of event (a skit). Use the generic CLI to locate r
 export regression data, and measure how much of an observed baseline that data represents:
 
 ```sh
-sketchtastic report baseline.sketch.yaml --limit 20
-sketchtastic export baseline.sketch.yaml --output regression.jsonl
-sketchtastic coverage baseline.sketch.yaml -p profile.yaml regression.jsonl
-sketchtastic analyze baseline.sketch.yaml -o analysis.html
+sketch report baseline.sketch.yaml --limit 20
+sketch export baseline.sketch.yaml --output regression.jsonl
+sketch coverage baseline.sketch.yaml -p profile.yaml regression.jsonl
+sketch analyze baseline.sketch.yaml -o analysis.html
 ```
 
 ### Interactive HTML analysis dashboard
 
 ```
-sketchtastic analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--weight KEY] [--force]
+sketch analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--weight KEY] [--force]
 ```
 
 Generates a single, 100% offline HTML dashboard bundling Chart.js (MIT) with a strict Content
@@ -448,7 +447,7 @@ aggregates:
 `op` and `type` cannot be combined on one aggregate. Like any aggregate change, adding an `op`
 keeps the profile id, so existing sketches keep merging.
 
-`merge` checks the profile before reading any event; run `sketchtastic check` (above) to see
+`merge` checks the profile before reading any event; run `sketch check` (above) to see
 every problem at once.
 
 ## The sketch
@@ -495,7 +494,7 @@ sketch.save("app.sketch.yaml")
 ```
 
 `load_profile` and `parse_profile` raise `ProfileError`; its `problems` attribute lists every
-problem, located, in the same form `sketchtastic check` prints. `check_profile(data, source)`
+problem, located, in the same form `sketch check` prints. `check_profile(data, source)`
 returns `(profile_or_None, problems)` without raising.
 
 Without a profile file, build the pieces directly. `Field` and `Aggregate` take the same keys

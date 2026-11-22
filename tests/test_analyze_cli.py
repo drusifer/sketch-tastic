@@ -1,4 +1,4 @@
-"""CLI tests for `sketchtastic analyze` (STORY-SKT-12, STORY-SKT-14)."""
+"""CLI tests for `sketch analyze` (STORY-SKT-12, STORY-SKT-14)."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ class AnalyzeCliTests(unittest.TestCase):
             out_path = Path(tmp) / "out.html"
             code, _, err = _run_cli("analyze", str(Path(tmp) / "missing.yaml"), "-o", str(out_path))
             self.assertEqual(code, 2)
-            self.assertTrue(err.startswith("sketchtastic:"))
+            self.assertTrue(err.startswith("sketch:"))
             self.assertFalse(out_path.exists())
 
             sketch_path = Path(tmp) / "app.sketch.yaml"

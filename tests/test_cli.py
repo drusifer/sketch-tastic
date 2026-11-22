@@ -405,7 +405,7 @@ class CheckTests(CliTestCase):
             "merge", "-p", bad, "-s", self.sketch_path, self.write_events("e.jsonl", EVENTS)
         )
         self.assertEqual(code, 2)
-        self.assertIn(f"sketchtastic: {bad}: fields[0] (key 's') → modifier:", err)
+        self.assertIn(f"sketch: {bad}: fields[0] (key 's') → modifier:", err)
         self.assertIn(f"check {bad}' lists the same problems", err)
         self.assertFalse(os.path.exists(self.sketch_path))
 
@@ -520,7 +520,7 @@ class EntryPointTests(unittest.TestCase):
     def test_help_has_worked_example_and_in_place_warning(self):
         result = self.run_module("merge", "--help")
         self.assertEqual(result.returncode, 0)
-        self.assertIn("usage: sketchtastic merge", result.stdout)
+        self.assertIn("usage: sketch merge", result.stdout)
         self.assertIn("example:", result.stdout)
         self.assertIn("updated in place", result.stdout)
         self.assertIn("--force-profile", result.stdout)
@@ -542,9 +542,8 @@ class EntryPointTests(unittest.TestCase):
 
     def test_help_names_the_command_it_was_run_as(self):
         for argv0, prog in (
-            ("/usr/bin/skt", "skt"),
-            ("/x/sketchtastic", "sketchtastic"),
-            ("/x/__main__.py", "sketchtastic"),
+            ("/usr/bin/sketch", "sketch"),
+            ("/x/__main__.py", "sketch"),
         ):
             with self.subTest(argv0=argv0), mock.patch.object(sys, "argv", [argv0]):
                 out = io.StringIO()
@@ -671,7 +670,7 @@ class ShowTests(CliTestCase):
             with self.subTest(path=path):
                 code, out, err = self.run_cli("show", path)
                 self.assertEqual((code, out), (2, ""))
-                self.assertTrue(err.startswith("sketchtastic: cannot use sketch file: "), err)
+                self.assertTrue(err.startswith("sketch: cannot use sketch file: "), err)
                 self.assertIn(os.path.basename(path), err)
         with open(not_a_set) as f:
             self.assertEqual(f.read(), "just: text\n")
@@ -679,9 +678,9 @@ class ShowTests(CliTestCase):
     def test_help_describes_show_with_an_example(self):
         code, out, _ = self.run_cli("show", "--help")
         self.assertEqual(code, 0)
-        self.assertIn("sketchtastic show web.sketch.yaml", out)
+        self.assertIn("sketch show web.sketch.yaml", out)
         self.assertIn("--sort KEY", out)
-        self.assertIn("sketchtastic show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail", out)
+        self.assertIn("sketch show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail", out)
         self.assertIn("KEY is not one of its columns", out)
         _, out, _ = self.run_cli("--help")
         self.assertIn("show", out)
@@ -753,7 +752,7 @@ class ShowSortTests(CliTestCase):
         self.assertEqual((code, out), (2, ""))
         self.assertEqual(
             err,
-            f"sketchtastic: column 'Count' is ambiguous in {self.sketch_path}: COUNT, count\n",
+            f"sketch: column 'Count' is ambiguous in {self.sketch_path}: COUNT, count\n",
         )
 
     def test_unknown_key_lists_the_columns(self):
@@ -762,7 +761,7 @@ class ShowSortTests(CliTestCase):
         self.assertEqual((code, out), (2, ""))
         self.assertEqual(
             err,
-            f"sketchtastic: no column 'bytes' in {self.sketch_path}; columns: "
+            f"sketch: no column 'bytes' in {self.sketch_path}; columns: "
             "ID, COUNT, COUNT %, FIRST RUN, LAST RUN, size, size %, kind\n",
         )
 
@@ -838,7 +837,7 @@ class HistoryTests(CliTestCase):
         events = self.write("mixed.jsonl", json.dumps(EVENTS[0]) + "\nnot json\n")
         code, _, err = self.fingerprint(events)
         self.assertEqual(code, 3)  # takes precedence over 1 (a line was skipped)
-        self.assertIn(f"sketchtastic: {self.sketch_path} updated, but history not written: ", err)
+        self.assertIn(f"sketch: {self.sketch_path} updated, but history not written: ", err)
         self.assertEqual(len(self.load_set()["skits"]), 1)
 
     def test_run_ids_number_on_from_the_set_and_its_history(self):
@@ -932,7 +931,7 @@ class SequenceTests(CliTestCase):
                 lines = [{"id": 7, "kind": "a"}, bad, {"id": 8, "kind": "a"}]
                 code, _, err = self.fingerprint(self.write_events("bad.jsonl", lines))
                 self.assertEqual(code, 2)
-                self.assertIn("sketchtastic: line 2: no usable sequence at $.id", err)
+                self.assertIn("sketch: line 2: no usable sequence at $.id", err)
                 self.assertIn("nothing written", err)
                 with open(self.sketch_path) as f:
                     self.assertEqual(f.read(), before)  # set untouched, mark included
@@ -945,9 +944,7 @@ class SequenceTests(CliTestCase):
         with open(self.sketch_path, "w") as f:
             yaml.safe_dump(data, f)
         _, _, err = self.fingerprint(self.events("two.jsonl", [2]))
-        self.assertIn(
-            "sketchtastic: sequence path changed ($.old -> $.id); previous mark ignored", err
-        )
+        self.assertIn("sketch: sequence path changed ($.old -> $.id); previous mark ignored", err)
         self.assertEqual(self.load_set()["sequence"], {"path": "$.id", "max": 2})
 
     def test_profile_without_sequence_keeps_the_mark_and_drops_nothing(self):

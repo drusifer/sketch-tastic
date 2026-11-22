@@ -62,7 +62,7 @@ targets as `bobp make <target>`.
 | `build` | `uv build --out-dir dist`, then runs the built wheel's command in a clean environment | wheel + sdist in `dist/` (gitignored) |
 | `release-check` | compares `TAG=v<x.y.z>` with the package version | used by the publish workflow |
 | `check` | `python -m compileall -q` over `src`, `tests`, `smoke` | syntax check only |
-| `run` | `.venv/bin/sketchtastic $(ARGS)` | the CLI |
+| `run` | `.venv/bin/sketch $(ARGS)` | the CLI |
 | `gharchive` | downloads one GH Archive hour (`GH_HOUR`) into `data/` once, then merges it with `examples/gharchive.yaml` into `data/gharchive/` | example at scale; needs network and `curl` |
 | `profile` | same hour, merged into fresh sketches in `build/profile/`: wall time with all cores and with `-j 1`, a short hash of the `-j 1` sketch (deterministic), then a cProfile run (`PROFILE_ARGS`, default `-j 1`; `PROFILE_ARGS=` profiles a parallel run's parent) with the top 25 functions in `build/profile/profile.txt` | the only way to measure speed (owner, Sprint 3); the hash shows output is unchanged on the same day |
 | `clean` | removes `__pycache__`, `.ruff_cache`, `dist`, `data` | keeps `.venv` |
@@ -224,8 +224,8 @@ Run by Tank at sprint close (`*devops sdlc-check`):
 
 ## 11. Agreed changes not yet built
 
-None. The Sprint 1 renames (distribution `sketch-tastic`, import `sketchtastic`, commands
-`sketchtastic` and `skt`; sketch and skit vocabulary) were built in Sprint 1.
+None. Distribution `sketch-tastic`, Python import `sketchtastic`, CLI command `sketch` (renamed
+from `sketchtastic`/`skt` per owner request; sketch and skit vocabulary preserved).
 
 ---
 *Last verified: 2026-11-21 by Tank at Sprint 7 close (`*devops sdlc-check`). From-clean
