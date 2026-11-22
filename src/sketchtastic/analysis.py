@@ -944,8 +944,89 @@ def _extract_sample_record(skit: Skit, slot: str) -> Any:
     return None
 
 
+def _extract_additive_weight(raw: Any) -> tuple[float | int | None, str | None]:
+    """Return `(value, source)` if an aggregate entry is additive, else `(None, None)`."""
+    if _is_multi_fn_dict(raw):
+        if "SUM" in raw and _is_number(raw["SUM"]):
+            return raw["SUM"], "SUM"
+        if "AVG" in raw and _is_avg_dict(raw["AVG"]) and _is_number(raw["AVG"].get("sum")):
+            return raw["AVG"]["sum"], "AVG.sum"
+        if "COUNT" in raw and _is_number(raw["COUNT"]):
+            return raw["COUNT"], "COUNT"
+        return None, None
+    if _is_avg_dict(raw) and _is_number(raw.get("sum")):
+        return raw["sum"], "AVG.sum"
+    if _is_number(raw):
+        return raw, "VALUE"
+    return None, None
+
+
+def _discover_weightings(
+    rows: list[tuple[str, Skit]],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, float | int]]]:
+    """Auto-discover non-negative additive aggregates eligible as dashboard weights."""
+    if not rows:
+        return [], {}
+    agg_order = list(dict.fromkeys(k for _, skit in rows for k in skit.aggregates))
+    weightings: list[dict[str, Any]] = []
+    skit_weights: dict[str, dict[str, float | int]] = {fid: {} for fid, _ in rows}
+    total_skits = len(rows)
+
+    for key in agg_order:
+        per_skit: dict[str, float | int] = {}
+        source: str | None = None
+        total_w: float | int = 0
+        active = 0
+        eligible = True
+        for fid, skit in rows:
+            raw = skit.aggregates.get(key)
+            if raw is None:
+                per_skit[fid] = 0
+                continue
+            val, src = _extract_additive_weight(raw)
+            if val is None or not math.isfinite(val) or val < 0:
+                eligible = False
+                break
+            if source is None and src is not None:
+                source = src
+            per_skit[fid] = val
+            total_w += val
+            if val > 0:
+                active += 1
+        if not eligible or source is None or total_w <= 0:
+            continue
+        weightings.append(
+            {
+                "key": key,
+                "source": source,
+                "total": total_w,
+                "active_skits": active,
+                "total_skits": total_skits,
+            }
+        )
+        for fid, val in per_skit.items():
+            skit_weights[fid][key] = val
+    return weightings, skit_weights
+
+
+def _resolve_default_weighting(default_weight: str | None, weightings: list[dict[str, Any]]) -> str:
+    """Validate optional default weighting key and normalize to `'count'` or `'agg:<key>'`."""
+    if default_weight is None or default_weight == "count":
+        return "count"
+    candidate = default_weight[4:] if default_weight.startswith("agg:") else default_weight
+    valid_keys = [w["key"] for w in weightings]
+    if candidate in valid_keys:
+        return f"agg:{candidate}"
+    options = ", ".join(["count", *valid_keys])
+    raise ValueError(
+        f"Unknown or ineligible weighting {default_weight!r}; available weightings: {options}"
+    )
+
+
 def analyze_sketch(
-    sketch_path: Path | str, history_dir: Path | str | None = None
+    sketch_path: Path | str,
+    history_dir: Path | str | None = None,
+    default_weight: str | None = None,
 ) -> dict[str, Any]:
     """Load and analyze a sketch file (and optional history) into a JSON-safe dict."""
     raw_header = _read_set_file(str(sketch_path))
@@ -960,6 +1041,8 @@ def analyze_sketch(
         summary["redundant_with"] = redundant_with.get(summary["key"], [])
         summary["determined_by"] = determined_by.get(summary["key"], [])
     agg_summaries, time_axes, skit_bounds = _analyze_aggregates(rows)
+    weightings, skit_weights = _discover_weightings(rows)
+    resolved_weight = _resolve_default_weighting(default_weight, weightings)
     seen_axis, seen_bounds = _build_seen_time_axis(rows)
     if seen_axis is not None:
         time_axes.insert(0, seen_axis)
@@ -989,6 +1072,7 @@ def analyze_sketch(
                 "last_seen": _json_safe(skit.meta.get("last_seen")),
                 "tokens": dict(skit.tokens),
                 "aggregates": _json_safe(skit.aggregates),
+                "weights": skit_weights.get(fid, {}),
                 "time_bounds": skit_bounds.get(fid, {}),
                 "first_record": first_rec,
                 "last_record": last_rec,
@@ -1008,10 +1092,12 @@ def analyze_sketch(
             "singleton_observations": singletons,
             "singleton_pct": round(100.0 * singletons / total, 2) if total else None,
             "concentration": _concentration(rows, total),
+            "default_weighting": resolved_weight,
         },
         "fields": field_summaries,
         "ablation": ablation,
         "correlations": correlations,
+        "weightings": weightings,
         "aggregates": agg_summaries,
         "time_axes": time_axes,
         "history": history,

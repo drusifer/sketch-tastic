@@ -125,6 +125,26 @@ class AnalyzeCliTests(unittest.TestCase):
             self.assertIn("1 history runs", out)
             self.assertIn("261121-0001", out_path.read_text("utf-8"))
 
+    def test_analyze_weight_flag_selects_default_weighting_and_rejects_ineligible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sketch_path = Path(tmp) / "app.sketch.yaml"
+            out_path = Path(tmp) / "weighted.html"
+            self._make_sketch(sketch_path)
+
+            code, _, err = _run_cli(
+                "analyze", str(sketch_path), "-o", str(out_path), "--weight", "ms"
+            )
+            self.assertEqual(code, 0, err)
+            self.assertIn('"default_weighting":"agg:ms"', out_path.read_text("utf-8"))
+
+            bad_out = Path(tmp) / "bad.html"
+            code, _, err = _run_cli(
+                "analyze", str(sketch_path), "-o", str(bad_out), "--weight", "ts"
+            )
+            self.assertEqual(code, 2)
+            self.assertIn("weighting", err.lower())
+            self.assertFalse(bad_out.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -406,8 +406,11 @@ _APP_JS = r"""
     "#39c5cf", "#ffa657", "#ff7b72", "#79c0ff", "#56d364"
   ];
 
+  const DEFAULT_WEIGHTING = (DATA.meta && DATA.meta.default_weighting) ? DATA.meta.default_weighting : "count";
+
   const state = {
     theme: "dark",
+    weighting: DEFAULT_WEIGHTING, // "count" | "agg:<key>"
     axisId: DATA.time_axes.length ? DATA.time_axes[0].id : "",
     sliderLo: 0,
     sliderHi: 1000,
@@ -419,7 +422,7 @@ _APP_JS = r"""
     selectedAgg: DATA.aggregates.length ? DATA.aggregates[0].key : "",
     aggView: "outliers", // outliers | histogram
     paretoTop: 40,
-    sortBy: "count",
+    sortBy: "weight",
     sortDir: "desc",
     showAllTokens: false,
     page: 1,
@@ -433,8 +436,51 @@ _APP_JS = r"""
     corrSelectedNode: null,
     corrMatMetric: "theils", // theils | cramers
     sankeyFields: [],
+    sankeyCustom: false,
     charts: {}
   };
+
+  function activeWeightMeta() {
+    if (state.weighting && state.weighting.startsWith("agg:")) {
+      const k = state.weighting.slice(4);
+      const found = (DATA.weightings || []).find(w => w.key === k);
+      if (found) {
+        return {
+          id: "agg:" + found.key,
+          key: found.key,
+          label: found.key,
+          shortLabel: found.key,
+          source: found.source,
+          totalAll: found.total,
+          isCount: false
+        };
+      }
+    }
+    return {
+      id: "count",
+      key: "count",
+      label: "Observations",
+      shortLabel: "obs",
+      source: "COUNT",
+      totalAll: DATA.meta.total_observations,
+      isCount: true
+    };
+  }
+
+  function skitWeight(skit, wm) {
+    const m = wm || activeWeightMeta();
+    if (m.isCount) return skit.count;
+    if (skit.weights && Object.prototype.hasOwnProperty.call(skit.weights, m.key)) {
+      const v = Number(skit.weights[m.key]);
+      return Number.isFinite(v) && v > 0 ? v : 0;
+    }
+    return 0;
+  }
+
+  function fmtWeight(n, wm) {
+    const m = wm || activeWeightMeta();
+    return m.isCount ? fmtInt(n) : fmtNum(n);
+  }
 
   function el(tag, attrs, text) {
     const node = document.createElement(tag);
@@ -615,15 +661,16 @@ _APP_JS = r"""
     const arr = pairs.filter(p => p[1] > 0).sort((a, b) => a[0] - b[0]);
     const total = arr.reduce((s, p) => s + p[1], 0);
     if (total <= 0) return null;
-    const lowRank = Math.floor((total + 1) / 2);
-    const highRank = total % 2 === 0 ? Math.floor(total / 2) + 1 : lowRank;
-    let run = 0, lo = null, hi = null;
-    for (const [v, w] of arr) {
-      run += w;
-      if (lo === null && run >= lowRank) lo = v;
-      if (hi === null && run >= highRank) { hi = v; break; }
+    const half = total / 2;
+    let run = 0;
+    for (let i = 0; i < arr.length; i++) {
+      run += arr[i][1];
+      if (Math.abs(run - half) <= 1e-12) {
+        return i + 1 < arr.length ? (arr[i][0] + arr[i + 1][0]) / 2 : arr[i][0];
+      }
+      if (run > half) return arr[i][0];
     }
-    return (lo + hi) / 2;
+    return arr[arr.length - 1][0];
   }
 
   function plainMedian(nums) {
@@ -633,7 +680,7 @@ _APP_JS = r"""
     return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
 
-  function computeFields(skits, totalObs) {
+  function computeFields(skits, totalW, wm) {
     const keys = DATA.fields.map(f => f.key);
     const nSkits = skits.length;
     return keys.map(key => {
@@ -641,15 +688,15 @@ _APP_JS = r"""
       for (const s of skits) {
         const val = Object.prototype.hasOwnProperty.call(s.tokens, key) ? s.tokens[key] : "NULL";
         const cur = byVal.get(val) || [0, 0];
-        cur[0] += s.count;
+        cur[0] += skitWeight(s, wm);
         cur[1] += 1;
         byVal.set(val, cur);
       }
-      const entries = Array.from(byVal.entries()).sort((a, b) => (b[1][0] - a[1][0]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+      const entries = Array.from(byVal.entries()).sort((a, b) => (b[1][0] - a[1][0]) || (b[1][1] - a[1][1]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
       const values = entries.map(([value, [count, skit_count]]) => ({
         value,
         count,
-        weight_pct: totalObs ? (100 * count) / totalObs : null,
+        weight_pct: totalW ? (100 * count) / totalW : null,
         skit_count,
         skit_pct: nSkits ? (100 * skit_count) / nSkits : null
       }));
@@ -713,7 +760,7 @@ _APP_JS = r"""
         mode: values.length ? values[0] : null,
         weighted_mean: wMean,
         weighted_median: wMed,
-        null_pct: totalObs ? (100 * nullObs) / totalObs : null,
+        null_pct: totalW ? (100 * nullObs) / totalW : null,
         values
       };
     });
@@ -814,15 +861,15 @@ _APP_JS = r"""
     });
   }
 
-  function computeConcentration(skits, totalObs) {
+  function computeConcentration(skits, totalW, wm) {
     const targets = [50, 80, 90, 95, 99];
-    const ordered = skits.slice().sort((a, b) => (b.count - a.count) || (a.id < b.id ? -1 : 1));
+    const ordered = skits.slice().sort((a, b) => (skitWeight(b, wm) - skitWeight(a, wm)) || (b.count - a.count) || (a.id < b.id ? -1 : 1));
     return targets.map(t => {
-      if (!totalObs || !ordered.length) return { target_pct: t, skits_needed: 0, skit_pct: null };
+      if (!totalW || !ordered.length) return { target_pct: t, skits_needed: 0, skit_pct: null };
       let cum = 0, needed = 0;
-      const cutoff = totalObs * (t / 100);
+      const cutoff = totalW * (t / 100);
       for (const s of ordered) {
-        cum += s.count; needed += 1;
+        cum += skitWeight(s, wm); needed += 1;
         if (cum + 1e-9 >= cutoff) break;
       }
       return { target_pct: t, skits_needed: needed, skit_pct: (100 * needed) / ordered.length };
@@ -874,10 +921,25 @@ _APP_JS = r"""
     fill.style.width = Math.max(0, pHi - pLo) + "%";
   }
 
-  function renderChips() {
+  function renderChips(wm) {
     const wrap = document.getElementById("active-chips");
     clear(wrap);
     let any = false;
+    if (!wm.isCount) {
+      any = true;
+      const chip = el("span", { class: "chip" });
+      chip.appendChild(el("span", null, "weight: " + wm.label + " (" + wm.source + ")"));
+      const btn = el("button", { type: "button", title: "Reset weighting to Observations" }, "×");
+      btn.addEventListener("click", () => {
+        state.weighting = "count";
+        const wSel = document.getElementById("weight-select");
+        if (wSel) wSel.value = "count";
+        state.page = 1;
+        render();
+      });
+      chip.appendChild(btn);
+      wrap.appendChild(chip);
+    }
     for (const [fk, vals] of state.fieldFilters.entries()) {
       for (const v of vals) {
         any = true;
@@ -927,24 +989,41 @@ _APP_JS = r"""
     }
   }
 
-  function renderKPIs(skits, totalObs, conc) {
+  function renderKPIs(skits, totalObs, totalW, conc, wm) {
     const allObs = DATA.meta.total_observations;
     const allSkits = DATA.meta.total_skits;
     const singletons = skits.filter(s => s.count === 1).length;
+    const singletonW = skits.reduce((sum, s) => sum + (s.count === 1 ? skitWeight(s, wm) : 0), 0);
+    const weightedSkits = skits.filter(s => skitWeight(s, wm) > 0).length;
     const status = document.getElementById("filter-status");
-    status.textContent =
-      "Showing " + fmtInt(skits.length) + " / " + fmtInt(allSkits) + " skits (" +
-      fmtInt(totalObs) + " / " + fmtInt(allObs) + " obs" +
-      (allObs ? ", " + fmtPct((100 * totalObs) / allObs) : "") + ")";
+    if (wm.isCount) {
+      status.textContent =
+        "Showing " + fmtInt(skits.length) + " / " + fmtInt(allSkits) + " skits (" +
+        fmtInt(totalObs) + " / " + fmtInt(allObs) + " obs" +
+        (allObs ? ", " + fmtPct((100 * totalObs) / allObs) : "") + ")";
+    } else {
+      status.textContent =
+        "Showing " + fmtInt(skits.length) + " / " + fmtInt(allSkits) + " skits · Weight: " + wm.label + " (" +
+        fmtNum(totalW) + (wm.totalAll ? ", " + fmtPct((100 * totalW) / wm.totalAll) : "") + ")";
+    }
 
     const grid = document.getElementById("kpi-grid");
     clear(grid);
-    const top1 = skits.length && totalObs ? (100 * skits[0].count) / totalObs : null;
+    const ordered = skits.slice().sort((a, b) => (skitWeight(b, wm) - skitWeight(a, wm)) || (b.count - a.count));
+    const topSkit = ordered.length ? ordered[0] : null;
+    const topW = topSkit ? skitWeight(topSkit, wm) : 0;
+    const top1 = topSkit && totalW ? (100 * topW) / totalW : null;
+    const firstCard = wm.isCount
+      ? ["Observations", fmtInt(totalObs), allObs && totalObs !== allObs ? fmtPct((100 * totalObs) / allObs) + " of sketch" : "100% of sketch"]
+      : ["Total " + wm.label, fmtNum(totalW), fmtInt(weightedSkits) + " / " + fmtInt(skits.length) + " skits > 0" + (wm.totalAll && Math.abs(totalW - wm.totalAll) > 1e-9 ? " (" + fmtPct((100 * totalW) / wm.totalAll) + ")" : "")];
+    const secondSub = wm.isCount
+      ? (allSkits && skits.length !== allSkits ? fmtPct((100 * skits.length) / allSkits) + " of kinds" : "profile-defined kinds")
+      : (fmtInt(totalObs) + " observations");
     const cards = [
-      ["Observations", fmtInt(totalObs), allObs && totalObs !== allObs ? fmtPct((100 * totalObs) / allObs) + " of sketch" : "100% of sketch"],
-      ["Distinct Skits", fmtInt(skits.length), allSkits && skits.length !== allSkits ? fmtPct((100 * skits.length) / allSkits) + " of kinds" : "profile-defined kinds"],
-      ["Singletons (count = 1)", fmtInt(singletons), totalObs ? fmtPct((100 * singletons) / totalObs) + " of obs" : "N/A"],
-      ["Top Skit Share", fmtPct(top1), skits.length ? skits[0].id.slice(0, 10) + " (" + fmtInt(skits[0].count) + ")" : "No skits"],
+      firstCard,
+      ["Distinct Skits", fmtInt(skits.length), secondSub],
+      ["Singletons (count = 1)", fmtInt(singletons), totalW ? fmtPct((100 * singletonW) / totalW) + " of " + wm.shortLabel : "N/A"],
+      ["Top Skit Share", fmtPct(top1), topSkit ? topSkit.id.slice(0, 10) + " (" + fmtWeight(topW, wm) + ")" : "No skits"],
       ["Fields / Aggregates", DATA.fields.length + " / " + DATA.aggregates.length, "History runs: " + DATA.history.runs.length]
     ];
     for (const [label, val, sub] of cards) {
@@ -958,17 +1037,17 @@ _APP_JS = r"""
     const strip = document.getElementById("cov-strip");
     clear(strip);
     for (const c of conc) {
-      const label = c.target_pct + "% obs -> " + fmtInt(c.skits_needed) + " skits" +
+      const label = c.target_pct + "% " + wm.shortLabel + " -> " + fmtInt(c.skits_needed) + " skits" +
         (c.skit_pct !== null ? " (" + fmtPct(c.skit_pct) + ")" : "");
       strip.appendChild(el("span", { class: "badge" }, label));
     }
   }
 
-  function renderPareto(skits, totalObs) {
+  function renderPareto(skits, totalW, wm) {
     destroyChart("pareto");
     const canvas = document.getElementById("chart-pareto");
     const empty = document.getElementById("pareto-empty");
-    if (!skits.length || !totalObs) {
+    if (!skits.length || !totalW) {
       canvas.style.display = "none";
       empty.style.display = "";
       return;
@@ -976,17 +1055,20 @@ _APP_JS = r"""
     canvas.style.display = "";
     empty.style.display = "none";
 
-    const ordered = skits.slice().sort((a, b) => (b.count - a.count) || (a.id < b.id ? -1 : 1));
+    const ordered = skits
+      .filter(s => wm.isCount || skitWeight(s, wm) > 0)
+      .sort((a, b) => (skitWeight(b, wm) - skitWeight(a, wm)) || (b.count - a.count) || (a.id < b.id ? -1 : 1));
     const slice = ordered.slice(0, state.paretoTop);
     let cum = 0;
     const labels = [];
     const counts = [];
     const cumPcts = [];
     for (const s of slice) {
-      cum += s.count;
+      const w = skitWeight(s, wm);
+      cum += w;
       labels.push(s.id.slice(0, 8));
-      counts.push(s.count);
-      cumPcts.push(Number(((100 * cum) / totalObs).toFixed(2)));
+      counts.push(w);
+      cumPcts.push(Number(((100 * cum) / totalW).toFixed(2)));
     }
     const tc = themeColors();
     state.charts.pareto = new Chart(canvas.getContext("2d"), {
@@ -995,7 +1077,7 @@ _APP_JS = r"""
         labels,
         datasets: [
           {
-            label: "Observations",
+            label: wm.label,
             data: counts,
             backgroundColor: tc.accent + "cc",
             borderRadius: 3,
@@ -1031,7 +1113,7 @@ _APP_JS = r"""
         },
         scales: {
           x: { ticks: { color: tc.muted, maxRotation: 45 }, grid: { color: tc.border + "44" } },
-          y: { beginAtZero: true, ticks: { color: tc.muted }, grid: { color: tc.border + "55" }, title: { display: true, text: "Observations", color: tc.muted } },
+          y: { beginAtZero: true, ticks: { color: tc.muted }, grid: { color: tc.border + "55" }, title: { display: true, text: wm.label, color: tc.muted } },
           y1: { beginAtZero: true, max: 100, position: "right", ticks: { color: tc.muted, callback: v => v + "%" }, grid: { drawOnChartArea: false }, title: { display: true, text: "Cumulative %", color: tc.muted } }
         },
         plugins: {
@@ -1042,7 +1124,7 @@ _APP_JS = r"""
                 const s = slice[items[0].dataIndex];
                 if (!s) return "";
                 const preview = Object.entries(s.tokens).filter(([, v]) => v !== "NULL" && v !== "FALSE").slice(0, 3).map(([k, v]) => k + "=" + v).join(", ");
-                return preview || s.id;
+                return (preview || s.id) + (wm.isCount ? "" : " (" + fmtInt(s.count) + " obs)");
               }
             }
           }
@@ -1051,11 +1133,18 @@ _APP_JS = r"""
     });
   }
 
-  function renderFieldsSection(fields) {
+  function renderFieldsSection(fields, wm) {
+    wm = wm || activeWeightMeta();
     const tbody = document.getElementById("fields-tbody");
     clear(tbody);
     const sel = document.getElementById("field-select");
     clear(sel);
+    const wObsBtn = document.getElementById("weight-obs");
+    if (wObsBtn) wObsBtn.textContent = wm.isCount ? "Observation Weight %" : (wm.label + " Weight %");
+    const colM = document.getElementById("field-col-metric");
+    const colP = document.getElementById("field-col-pct");
+    if (colM) colM.textContent = wm.isCount ? "Observations" : wm.label;
+    if (colP) colP.textContent = wm.isCount ? "Obs %" : "Weight %";
     if (!fields.length) {
       const tr = el("tr");
       const td = el("td", { colspan: "10", class: "empty-state" }, "No fields observed.");
@@ -1077,7 +1166,8 @@ _APP_JS = r"""
       const tr = el("tr", { class: "clickable" + (f.key === state.selectedField ? " selected" : "") });
       tr.addEventListener("click", () => {
         state.selectedField = f.key;
-        renderFieldsSection(fields);
+        renderFieldsSection(fields, wm);
+        syncUrlState();
       });
       tr.appendChild(el("td", { class: "mono" }, f.key));
       const typeTd = el("td");
@@ -1112,7 +1202,7 @@ _APP_JS = r"""
     }
 
     const activeField = fields.find(f => f.key === state.selectedField);
-    renderFieldChartAndValues(activeField);
+    renderFieldChartAndValues(activeField, wm);
   }
 
   function toggleFieldFilter(fieldKey, value) {
@@ -1128,7 +1218,7 @@ _APP_JS = r"""
     render();
   }
 
-  function renderFieldChartAndValues(field) {
+  function renderFieldChartAndValues(field, wm) {
     destroyChart("field");
     const vt = document.getElementById("field-values-tbody");
     clear(vt);
@@ -1142,11 +1232,12 @@ _APP_JS = r"""
       field.key + " [" + typeLabel + "] — Min: " + fmtAny(field.min) + " | Max: " + fmtAny(field.max) +
       (field.is_boolean && field.true_pct !== null ? " | True rate: " + fmtPct(field.true_pct) : "") +
       (field.is_numeric ? " | Weighted Mean: " + fmtNum(field.weighted_mean) + " | Weighted Median: " + fmtNum(field.weighted_median) : "") +
+      (wm.isCount ? "" : " | Weighted by " + wm.label) +
       " (click any bar or row to filter)";
 
     const isObs = state.weightMode === "observations";
     const sortedVals = field.values.slice().sort((a, b) =>
-      isObs ? ((b.count - a.count) || (a.value < b.value ? -1 : 1)) : ((b.skit_count - a.skit_count) || (a.value < b.value ? -1 : 1))
+      isObs ? ((b.count - a.count) || (b.skit_count - a.skit_count) || (a.value < b.value ? -1 : 1)) : ((b.skit_count - a.skit_count) || (a.value < b.value ? -1 : 1))
     );
 
     const activeSet = state.fieldFilters.get(field.key);
@@ -1155,7 +1246,7 @@ _APP_JS = r"""
       const tr = el("tr", { class: "clickable" + (isSel ? " selected" : "") });
       tr.addEventListener("click", () => toggleFieldFilter(field.key, v.value));
       tr.appendChild(el("td", { class: "mono" }, v.value));
-      tr.appendChild(el("td", { class: "num" }, fmtInt(v.count)));
+      tr.appendChild(el("td", { class: "num" }, fmtWeight(v.count, wm)));
       tr.appendChild(el("td", { class: "num" }, fmtPct(v.weight_pct)));
       tr.appendChild(el("td", { class: "num" }, fmtInt(v.skit_count)));
       tr.appendChild(el("td", { class: "num" }, fmtPct(v.skit_pct)));
@@ -1191,7 +1282,7 @@ _APP_JS = r"""
       data: {
         labels,
         datasets: [{
-          label: isObs ? "Observation Weight %" : "Distinct Skit Share %",
+          label: isObs ? (wm.isCount ? "Observation Weight %" : wm.label + " Weight %") : "Distinct Skit Share %",
           data: values,
           backgroundColor: colors,
           borderRadius: 4
@@ -1220,7 +1311,7 @@ _APP_JS = r"""
                 const idx = ctx.dataIndex;
                 if (idx >= chartItems.length) return ctx.raw + "% across " + rest.length + " values";
                 const item = chartItems[idx];
-                return "Obs: " + fmtInt(item.count) + " (" + fmtPct(item.weight_pct) + ") | Skits: " + fmtInt(item.skit_count) + " (" + fmtPct(item.skit_pct) + ")";
+                return wm.label + ": " + fmtWeight(item.count, wm) + " (" + fmtPct(item.weight_pct) + ") | Skits: " + fmtInt(item.skit_count) + " (" + fmtPct(item.skit_pct) + ")";
               }
             }
           }
@@ -1253,6 +1344,7 @@ _APP_JS = r"""
       tr.addEventListener("click", () => {
         state.selectedAgg = a.key;
         renderAggregatesSection(aggs);
+        syncUrlState();
       });
       tr.appendChild(el("td", { class: "mono" }, a.key));
       tr.appendChild(el("td", null, a.kind));
@@ -1469,7 +1561,8 @@ _APP_JS = r"""
     ]);
   }
 
-  function sortKey(skit) {
+  function sortKey(skit, wm) {
+    if (state.sortBy === "weight") return skitWeight(skit, wm);
     if (state.sortBy === "count") return skit.count;
     if (state.sortBy === "first_seen") return skit.first_seen || "";
     if (state.sortBy === "last_seen") return skit.last_seen || "";
@@ -1478,13 +1571,19 @@ _APP_JS = r"""
       const p = extractPrimaryMetric(skit.aggregates ? skit.aggregates[k] : null);
       return p.val === null || p.val === undefined ? -Infinity : p.val;
     }
-    return skit.count;
+    return skitWeight(skit, wm);
   }
 
-  function renderExplorer(skits, totalObs) {
+  function renderExplorer(skits, totalW, wm) {
+    const colHdr = document.getElementById("skits-col-metric");
+    if (colHdr) colHdr.textContent = wm.isCount ? "Count" : wm.label;
+    const sortOpt = document.getElementById("sort-weight-opt");
+    if (sortOpt) sortOpt.textContent = wm.isCount ? "Sort: Weight (Count)" : "Sort: Weight (" + wm.label + ")";
+
     const sorted = skits.slice().sort((a, b) => {
-      const av = sortKey(a), bv = sortKey(b);
+      const av = sortKey(a, wm), bv = sortKey(b, wm);
       let cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      if (cmp === 0) cmp = a.count - b.count;
       if (cmp === 0) cmp = a.id < b.id ? -1 : 1;
       return state.sortDir === "desc" ? -cmp : cmp;
     });
@@ -1501,11 +1600,12 @@ _APP_JS = r"""
       tbody.appendChild(tr);
     }
 
-    let running = sorted.slice(0, start).reduce((s, r) => s + r.count, 0);
+    let running = sorted.slice(0, start).reduce((s, r) => s + skitWeight(r, wm), 0);
     for (const s of pageRows) {
-      running += s.count;
-      const wPct = totalObs ? (100 * s.count) / totalObs : 0;
-      const cPct = totalObs ? (100 * running) / totalObs : 0;
+      const w = skitWeight(s, wm);
+      running += w;
+      const wPct = totalW ? (100 * w) / totalW : 0;
+      const cPct = totalW ? (100 * running) / totalW : 0;
       const tr = el("tr");
 
       const idTd = el("td", { class: "mono", style: "white-space:nowrap" });
@@ -1519,7 +1619,8 @@ _APP_JS = r"""
       idTd.appendChild(cpBtn);
       tr.appendChild(idTd);
 
-      tr.appendChild(el("td", { class: "num" }, fmtInt(s.count)));
+      const metricTd = el("td", { class: "num", title: wm.isCount ? "" : (fmtInt(s.count) + " observations") }, fmtWeight(w, wm));
+      tr.appendChild(metricTd);
       tr.appendChild(el("td", { class: "num" }, fmtPct(wPct)));
       tr.appendChild(el("td", { class: "num" }, fmtPct(cPct)));
       tr.appendChild(el("td", { class: "mono", style: "white-space:nowrap" }, fmtAny(s.first_seen) + " / " + fmtAny(s.last_seen)));
@@ -1542,7 +1643,7 @@ _APP_JS = r"""
       expBtn.addEventListener("click", () => {
         if (state.expandedIds.has(s.id)) state.expandedIds.delete(s.id);
         else state.expandedIds.add(s.id);
-        renderExplorer(skits, totalObs);
+        renderExplorer(skits, totalW, wm);
       });
       actTd.appendChild(expBtn);
       tr.appendChild(actTd);
@@ -1653,6 +1754,7 @@ _APP_JS = r"""
       tr.addEventListener("click", () => {
         state.selectedField = r.key;
         renderFieldsSection(fields);
+        syncUrlState();
         document.getElementById("field-select").scrollIntoView({ behavior: "smooth", block: "center" });
       });
       tr.appendChild(el("td", { class: "mono" }, r.key));
@@ -1703,6 +1805,7 @@ _APP_JS = r"""
           if (row) {
             state.selectedField = row.key;
             renderFieldsSection(fields);
+            syncUrlState();
           }
         },
         scales: {
@@ -1774,9 +1877,9 @@ _APP_JS = r"""
     return h;
   }
 
-  function computeCorrelations(skits, totalObs) {
+  function computeCorrelations(skits, totalW, wm) {
     const keys = DATA.fields.map(f => f.key);
-    if (!skits.length || !totalObs || keys.length < 2) {
+    if (!skits.length || !totalW || keys.length < 2) {
       return { fields: [], cramers: new Map(), theils: new Map(), redundant_with: new Map(), determined_by: new Map(), items: [], edges: [] };
     }
     const marginals = new Map();
@@ -1784,8 +1887,10 @@ _APP_JS = r"""
     for (const f of keys) {
       const m = new Map();
       for (const s of skits) {
+        const w = skitWeight(s, wm);
+        if (w <= 0) continue;
         const v = Object.prototype.hasOwnProperty.call(s.tokens, f) ? s.tokens[f] : "NULL";
-        m.set(v, (m.get(v) || 0) + s.count);
+        m.set(v, (m.get(v) || 0) + w);
       }
       marginals.set(f, m);
       ent.set(f, entropyMap(m));
@@ -1802,21 +1907,23 @@ _APP_JS = r"""
         const f2 = keys[j], m2 = marginals.get(f2), e2 = ent.get(f2);
         const joint = new Map();
         for (const s of skits) {
+          const w = skitWeight(s, wm);
+          if (w <= 0) continue;
           const v1 = Object.prototype.hasOwnProperty.call(s.tokens, f1) ? s.tokens[f1] : "NULL";
           const v2 = Object.prototype.hasOwnProperty.call(s.tokens, f2) ? s.tokens[f2] : "NULL";
           const jk = v1.length + ":" + v1 + "|" + v2;
-          joint.set(jk, [v1, v2, (joint.has(jk) ? joint.get(jk)[2] : 0) + s.count]);
+          joint.set(jk, [v1, v2, (joint.has(jk) ? joint.get(jk)[2] : 0) + w]);
         }
-        let chi2 = -totalObs;
+        let chi2 = -totalW;
         const jCounts = new Map();
         for (const [jk, [v1, v2, obs]] of joint.entries()) {
-          const exp = (m1.get(v1) * m2.get(v2)) / totalObs;
+          const exp = (m1.get(v1) * m2.get(v2)) / totalW;
           if (exp > 0) chi2 += (obs * obs) / exp;
           jCounts.set(jk, obs);
         }
         chi2 = Math.max(0, chi2);
         const k = Math.min(m1.size, m2.size) - 1;
-        const v = k > 0 ? Math.min(1, Math.sqrt(chi2 / (totalObs * k))) : 0;
+        const v = k > 0 ? Math.min(1, Math.sqrt(chi2 / (totalW * k))) : 0;
         const mi = Math.max(0, e1 + e2 - entropyMap(jCounts));
         const u12 = e2 > 1e-12 ? Math.min(1, mi / e2) : 0;
         const u21 = e1 > 1e-12 ? Math.min(1, mi / e1) : 0;
@@ -1841,18 +1948,22 @@ _APP_JS = r"""
       determined_by.set(f1, db);
     }
 
-    const minSup = totalObs >= 500 ? 5 : (totalObs >= 10 ? 2 : 1);
+    const minSup = wm.isCount
+      ? (totalW >= 500 ? 5 : (totalW >= 10 ? 2 : 1))
+      : Math.max(1e-9, totalW * 0.00025);
     const items = [];
     const skitMaps = new Map();
     for (const f of keys) {
       for (const [v, cnt] of marginals.get(f).entries()) {
         if (v === "NULL" || v === "FALSE" || cnt < minSup) continue;
         const id = f + "=" + v;
-        items.push({ id, field: f, value: v, count: cnt, pct: (100 * cnt) / totalObs });
+        items.push({ id, field: f, value: v, count: cnt, pct: (100 * cnt) / totalW });
         const sm = new Map();
         for (let idx = 0; idx < skits.length; idx++) {
+          const w = skitWeight(skits[idx], wm);
+          if (w <= 0) continue;
           const sv = Object.prototype.hasOwnProperty.call(skits[idx].tokens, f) ? skits[idx].tokens[f] : "NULL";
-          if (sv === v) sm.set(idx, skits[idx].count);
+          if (sv === v) sm.set(idx, w);
         }
         skitMaps.set(id, sm);
       }
@@ -1866,16 +1977,16 @@ _APP_JS = r"""
         const sb = skitMaps.get(b.id);
         let n11 = 0;
         for (const [idx, c] of sa.entries()) { if (sb.has(idx)) n11 += c; }
-        const n10 = a.count - n11, n01 = b.count - n11, n00 = totalObs - a.count - b.count + n11;
-        const denom = Math.sqrt(a.count * (totalObs - a.count) * b.count * (totalObs - b.count));
+        const n10 = a.count - n11, n01 = b.count - n11, n00 = totalW - a.count - b.count + n11;
+        const denom = Math.sqrt(Math.max(0, a.count * (totalW - a.count) * b.count * (totalW - b.count)));
         const phi = denom > 0 ? (n11 * n00 - n10 * n01) / denom : 0;
-        const lift = (a.count > 0 && b.count > 0) ? (n11 * totalObs) / (a.count * b.count) : 0;
+        const lift = (a.count > 0 && b.count > 0) ? (n11 * totalW) / (a.count * b.count) : 0;
         const keepPos = n11 >= minSup && (Math.abs(phi) >= 0.05 || lift >= 1.5);
         const keepNeg = n11 === 0 && Math.abs(phi) >= 0.10;
         if (!keepPos && !keepNeg) continue;
         edges.push({
           a: a.id, b: b.id, fa: a.field, va: a.value, fb: b.field, vb: b.value,
-          n11, support_pct: (100 * n11) / totalObs,
+          n11, support_pct: (100 * n11) / totalW,
           conf_ab: (100 * n11) / a.count, conf_ba: (100 * n11) / b.count,
           lift, phi
         });
@@ -1931,7 +2042,7 @@ _APP_JS = r"""
     return clusters;
   }
 
-  function renderCorrNetwork(corr) {
+  function renderCorrNetwork(corr, wm) {
     const svg = document.getElementById("corr-net-svg");
     clear(svg);
     const edges = filterCorrEdges(corr);
@@ -1947,7 +2058,8 @@ _APP_JS = r"""
     for (const n of nodeIds) { if (!clusterOf.has(n)) ordered.push(n); }
 
     document.getElementById("corr-net-summary").textContent =
-      ordered.length + " active tokens · " + edges.length + " links · " + clusters.length + " positive cluster(s)";
+      ordered.length + " active tokens · " + edges.length + " links · " + clusters.length + " positive cluster(s)" +
+      (wm.isCount ? "" : " · weighted by " + wm.label);
 
     if (!ordered.length) {
       svg.appendChild(svgEl("text", { x: 460, y: 210, "text-anchor": "middle", fill: "var(--muted)", "font-size": 13 },
@@ -2002,7 +2114,7 @@ _APP_JS = r"""
       const row = el("div", { style: "margin-top:6px;display:flex;flex-wrap:wrap;gap:6px" });
       row.appendChild(el("span", { class: "badge " + (e.phi >= 0 ? "ok" : "danger") }, "φ = " + (e.phi >= 0 ? "+" : "") + e.phi.toFixed(3)));
       row.appendChild(el("span", { class: "badge" }, "Lift " + e.lift.toFixed(2) + "x"));
-      row.appendChild(el("span", { class: "badge" }, "Support " + fmtInt(e.n11) + " (" + e.support_pct.toFixed(1) + "%)"));
+      row.appendChild(el("span", { class: "badge" }, "Support " + fmtWeight(e.n11, wm) + " (" + e.support_pct.toFixed(1) + "%)"));
       row.appendChild(el("span", { class: "badge" }, "P(B|A) " + e.conf_ab.toFixed(1) + "%"));
       row.appendChild(el("span", { class: "badge" }, "P(A|B) " + e.conf_ba.toFixed(1) + "%"));
       box.appendChild(row);
@@ -2014,7 +2126,7 @@ _APP_JS = r"""
       const box = document.getElementById("corr-net-inspector");
       clear(box);
       const top = el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap" });
-      top.appendChild(el("strong", { class: "mono" }, nId + (info ? " — " + fmtInt(info.count) + " obs (" + fmtPct(info.pct) + ")" : "")));
+      top.appendChild(el("strong", { class: "mono" }, nId + (info ? " — " + fmtWeight(info.count, wm) + " " + wm.shortLabel + " (" + fmtPct(info.pct) + ")" : "")));
       if (info) {
         const fBtn = el("button", { type: "button", class: "small" }, "Toggle filter: " + shortTokenLabel(info.field, info.value));
         fBtn.addEventListener("click", () => toggleFieldFilter(info.field, info.value));
@@ -2023,7 +2135,6 @@ _APP_JS = r"""
       box.appendChild(top);
       const row = el("div", { style: "margin-top:6px;display:flex;flex-wrap:wrap;gap:6px" });
       for (const e of links.slice(0, 8)) {
-        const other = e.a === nId ? e.b : e.a;
         const of = e.a === nId ? e.fb : e.fa;
         const ov = e.a === nId ? e.vb : e.va;
         const conf = e.a === nId ? e.conf_ab : e.conf_ba;
@@ -2057,7 +2168,7 @@ _APP_JS = r"""
     for (const n of ordered) {
       const p = pos.get(n);
       const info = itemMap.get(n);
-      const r = Math.max(6, Math.min(18, 3.5 + Math.log10((info ? info.count : 10) + 1) * 3.4));
+      const r = Math.max(6, Math.min(18, 4.5 + Math.sqrt((info ? info.pct : 1)) * 1.45));
       const cIdx = clusterOf.has(n) ? clusterOf.get(n) % PALETTE.length : null;
       const fill = cIdx !== null ? PALETTE[cIdx] : "#f85149";
       const isHi = !sel || connected.has(n);
@@ -2081,7 +2192,7 @@ _APP_JS = r"""
       }, lbl));
       g.addEventListener("click", () => {
         state.corrSelectedNode = state.corrSelectedNode === n ? null : n;
-        renderCorrNetwork(corr);
+        renderCorrNetwork(corr, wm);
         showNodeInspector(n);
       });
       g.addEventListener("mouseenter", () => { if (!state.corrSelectedNode) showNodeInspector(n); });
@@ -2155,7 +2266,7 @@ _APP_JS = r"""
     }
   }
 
-  function renderCorrClustersTab(corr) {
+  function renderCorrClustersTab(corr, wm) {
     const edges = filterCorrEdges(corr);
     const itemMap = new Map(corr.items.map(it => [it.id, it]));
     const clusters = findPositiveClusters(edges);
@@ -2214,17 +2325,17 @@ _APP_JS = r"""
       tr.appendChild(el("td", { class: "mono" }, shortTokenLabel(e.fb, e.vb)));
       tr.appendChild(el("td", { class: "num" }, (e.phi >= 0 ? "+" : "") + e.phi.toFixed(3)));
       tr.appendChild(el("td", { class: "num" }, e.lift.toFixed(2) + "x"));
-      tr.appendChild(el("td", { class: "num" }, fmtInt(e.n11) + " (" + e.support_pct.toFixed(1) + "%)"));
+      tr.appendChild(el("td", { class: "num" }, fmtWeight(e.n11, wm) + " (" + e.support_pct.toFixed(1) + "%)"));
       tr.appendChild(el("td", { class: "num" }, e.conf_ab.toFixed(1) + "%"));
       tr.appendChild(el("td", { class: "num" }, e.conf_ba.toFixed(1) + "%"));
       tb.appendChild(tr);
     }
   }
 
-  function renderCorrelations(corr) {
-    if (state.corrTab === "network") renderCorrNetwork(corr);
+  function renderCorrelations(corr, wm) {
+    if (state.corrTab === "network") renderCorrNetwork(corr, wm);
     else if (state.corrTab === "heatmap") renderCorrHeatmap(corr);
-    else renderCorrClustersTab(corr);
+    else renderCorrClustersTab(corr, wm);
   }
 
   function pickDefaultSankeyFields(fields, ablation) {
@@ -2262,15 +2373,15 @@ _APP_JS = r"""
     });
   }
 
-  function renderSankey(skits, totalObs) {
+  function renderSankey(skits, totalW, wm) {
     const svg = document.getElementById("sankey-svg");
     clear(svg);
     const stages = state.sankeyFields.filter(Boolean);
     const uniqueStages = [];
     for (const s of stages) { if (!uniqueStages.includes(s)) uniqueStages.push(s); }
-    if (uniqueStages.length < 2 || !skits.length || !totalObs) {
+    if (uniqueStages.length < 2 || !skits.length || !totalW) {
       svg.appendChild(svgEl("text", { x: 460, y: 170, "text-anchor": "middle", fill: "var(--muted)", "font-size": 13 },
-        "Select at least 2 distinct fields with observations to render a Sankey flow."));
+        "Select at least 2 distinct fields with positive weight to render a Sankey flow."));
       return;
     }
 
@@ -2286,8 +2397,10 @@ _APP_JS = r"""
       const fk = uniqueStages[si];
       const counts = new Map();
       for (const s of skits) {
+        const w = skitWeight(s, wm);
+        if (w <= 0) continue;
         const v = Object.prototype.hasOwnProperty.call(s.tokens, fk) ? s.tokens[fk] : "NULL";
-        counts.set(v, (counts.get(v) || 0) + s.count);
+        counts.set(v, (counts.get(v) || 0) + w);
       }
       const sorted = Array.from(counts.entries()).sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
       const top = sorted.slice(0, MAX_NODES);
@@ -2310,7 +2423,7 @@ _APP_JS = r"""
       let y = topY;
       const posMap = new Map();
       list.forEach((n, idx) => {
-        const h = Math.max(4, (n.count / totalObs) * availH);
+        const h = Math.max(4, (n.count / totalW) * availH);
         posMap.set(n.key, {
           field: uniqueStages[si], key: n.key, label: n.label, count: n.count, isOther: n.isOther,
           x: colXs[si], y, h, outOff: 0, inOff: 0, color: PALETTE[(si * 3 + idx) % PALETTE.length]
@@ -2334,12 +2447,14 @@ _APP_JS = r"""
       const topA = stageTopSets[si], topB = stageTopSets[si + 1];
       const flows = new Map();
       for (const s of skits) {
+        const w = skitWeight(s, wm);
+        if (w <= 0) continue;
         const rawA = Object.prototype.hasOwnProperty.call(s.tokens, fA) ? s.tokens[fA] : "NULL";
         const rawB = Object.prototype.hasOwnProperty.call(s.tokens, fB) ? s.tokens[fB] : "NULL";
         const kA = topA.has(rawA) ? rawA : "__OTHER__";
         const kB = topB.has(rawB) ? rawB : "__OTHER__";
         const fk = kA.length + ":" + kA + "|" + kB;
-        flows.set(fk, [kA, kB, (flows.has(fk) ? flows.get(fk)[2] : 0) + s.count]);
+        flows.set(fk, [kA, kB, (flows.has(fk) ? flows.get(fk)[2] : 0) + w]);
       }
       const flowList = Array.from(flows.values()).sort((a, b) => b[2] - a[2]);
       const pMapA = nodePos[si], pMapB = nodePos[si + 1];
@@ -2369,7 +2484,7 @@ _APP_JS = r"""
           clear(box);
           box.appendChild(el("strong", { class: "mono" }, fA + "=" + nA.label + "  ->  " + fB + "=" + nB.label));
           const row = el("div", { style: "margin-top:5px;display:flex;gap:6px;flex-wrap:wrap" });
-          row.appendChild(el("span", { class: "badge ok" }, fmtInt(cnt) + " obs (" + fmtPct((100 * cnt) / totalObs) + " of filtered)"));
+          row.appendChild(el("span", { class: "badge ok" }, fmtWeight(cnt, wm) + " " + wm.shortLabel + " (" + fmtPct((100 * cnt) / totalW) + " of filtered)"));
           row.appendChild(el("span", { class: "badge" }, fmtPct((100 * cnt) / nA.count) + " of " + nA.label));
           row.appendChild(el("span", { class: "badge" }, fmtPct((100 * cnt) / nB.count) + " of " + nB.label));
           box.appendChild(row);
@@ -2396,7 +2511,7 @@ _APP_JS = r"""
         rect.addEventListener("mouseenter", () => {
           const box = document.getElementById("sankey-inspector");
           clear(box);
-          box.appendChild(el("strong", { class: "mono" }, n.field + "=" + n.label + " — " + fmtInt(n.count) + " obs (" + fmtPct((100 * n.count) / totalObs) + ")"));
+          box.appendChild(el("strong", { class: "mono" }, n.field + "=" + n.label + " — " + fmtWeight(n.count, wm) + " " + wm.shortLabel + " (" + fmtPct((100 * n.count) / totalW) + ")"));
         });
         svg.appendChild(rect);
         const isRight = si === uniqueStages.length - 1;
@@ -2408,39 +2523,235 @@ _APP_JS = r"""
           svg.appendChild(svgEl("text", {
             x: txtX, y: (n.y + n.h / 2 + 3.5).toFixed(1), "text-anchor": anchor,
             fill: "var(--text)", "font-size": 10.5, "font-family": "monospace"
-          }, clipped + " (" + ((100 * n.count) / totalObs).toFixed(0) + "%)"));
+          }, clipped + " (" + ((100 * n.count) / totalW).toFixed(0) + "%)"));
         }
       }
     }
   }
 
+  function syncDomFromState() {
+    document.documentElement.setAttribute("data-theme", state.theme);
+    const wSel = document.getElementById("weight-select");
+    if (wSel) wSel.value = state.weighting;
+    const axisSel = document.getElementById("axis-select");
+    if (axisSel && state.axisId) axisSel.value = state.axisId;
+    document.getElementById("range-mode").value = state.rangeMode;
+    document.getElementById("range-lo").value = String(state.sliderLo);
+    document.getElementById("range-hi").value = String(state.sliderHi);
+    document.getElementById("search-input").value = state.search;
+    document.getElementById("pareto-top").value = String(state.paretoTop);
+    document.getElementById("weight-obs").classList.toggle("active", state.weightMode === "observations");
+    document.getElementById("weight-skits").classList.toggle("active", state.weightMode === "skits");
+    document.getElementById("agg-outliers").classList.toggle("active", state.aggView === "outliers");
+    document.getElementById("agg-histogram").classList.toggle("active", state.aggView === "histogram");
+    document.getElementById("sort-select").value = state.sortBy;
+    document.getElementById("sort-dir").textContent = state.sortDir === "desc" ? "Desc" : "Asc";
+    document.getElementById("toggle-all-tokens").checked = state.showAllTokens;
+    document.getElementById("page-size").value = String(state.pageSize);
+    document.querySelectorAll("[data-corr-tab]").forEach(b => b.classList.toggle("active", b.dataset.corrTab === state.corrTab));
+    document.querySelectorAll(".corr-sub-panel").forEach(p => p.classList.toggle("active", p.id === "corr-panel-" + state.corrTab));
+    const phiSlider = document.getElementById("corr-phi-slider");
+    phiSlider.value = String(state.corrMinPhi);
+    document.getElementById("corr-phi-val").textContent = state.corrMinPhi.toFixed(2);
+    document.querySelectorAll("[data-corr-sign]").forEach(b => b.classList.toggle("active", b.dataset.corrSign === state.corrSign));
+    document.getElementById("corr-hide-locks").checked = state.corrHideLocks;
+    document.querySelectorAll("[data-corr-mat]").forEach(b => b.classList.toggle("active", b.dataset.corrMat === state.corrMatMetric));
+  }
+
+  function readUrlState() {
+    let raw = "";
+    try { raw = (window.location.hash || "").replace(/^#/, ""); } catch (_) { return; }
+    if (!raw) return;
+    const p = new URLSearchParams(raw);
+    const fieldSet = new Set(DATA.fields.map(f => f.key));
+    const aggSet = new Set(DATA.aggregates.map(a => a.key));
+    const weightSet = new Set((DATA.weightings || []).map(w => w.key));
+    const axisSet = new Set(DATA.time_axes.map(a => a.id));
+
+    if (p.has("th")) {
+      const th = p.get("th");
+      if (th === "light" || th === "dark") state.theme = th;
+    }
+    if (p.has("w")) {
+      const wv = p.get("w");
+      if (wv === "count") state.weighting = "count";
+      else {
+        const k = wv.startsWith("agg:") ? wv.slice(4) : wv;
+        if (weightSet.has(k)) state.weighting = "agg:" + k;
+      }
+    }
+    if (p.has("ax") && axisSet.has(p.get("ax"))) {
+      state.axisId = p.get("ax");
+      syncSliderLimits();
+    }
+    if (p.has("rm") && ["overlap", "first", "contained"].includes(p.get("rm"))) {
+      state.rangeMode = p.get("rm");
+    }
+    const ax = getAxis();
+    if (ax) {
+      const maxLim = ax.kind === "runs" ? Math.max(0, ax.runs.length - 1) : 1000;
+      if (p.has("lo")) {
+        const lo = Number(p.get("lo"));
+        if (Number.isFinite(lo)) state.sliderLo = Math.max(0, Math.min(maxLim, Math.round(lo)));
+      }
+      if (p.has("hi")) {
+        const hi = Number(p.get("hi"));
+        if (Number.isFinite(hi)) state.sliderHi = Math.max(state.sliderLo, Math.min(maxLim, Math.round(hi)));
+      }
+    }
+    state.fieldFilters.clear();
+    for (const pair of p.getAll("f")) {
+      const idx = pair.indexOf(":");
+      if (idx <= 0) continue;
+      const fk = pair.slice(0, idx), fv = pair.slice(idx + 1);
+      if (!fieldSet.has(fk)) continue;
+      let s = state.fieldFilters.get(fk);
+      if (!s) { s = new Set(); state.fieldFilters.set(fk, s); }
+      s.add(fv);
+    }
+    state.search = p.get("q") || "";
+    if (p.has("fld") && fieldSet.has(p.get("fld"))) state.selectedField = p.get("fld");
+    if (p.has("wm") && (p.get("wm") === "observations" || p.get("wm") === "skits")) state.weightMode = p.get("wm");
+    if (p.has("pt")) {
+      const pt = Number(p.get("pt"));
+      if ([20, 40, 80, 150].includes(pt)) state.paretoTop = pt;
+    }
+    if (p.has("ct") && ["network", "heatmap", "clusters"].includes(p.get("ct"))) state.corrTab = p.get("ct");
+    if (p.has("cphi")) {
+      const phi = Number(p.get("cphi"));
+      if (Number.isFinite(phi) && phi >= 0.05 && phi <= 0.95) state.corrMinPhi = Number(phi.toFixed(2));
+    }
+    if (p.has("cs") && ["all", "pos", "neg"].includes(p.get("cs"))) state.corrSign = p.get("cs");
+    if (p.has("cl")) state.corrHideLocks = p.get("cl") !== "0";
+    if (p.has("cm") && ["theils", "cramers"].includes(p.get("cm"))) state.corrMatMetric = p.get("cm");
+    if (p.has("sk")) {
+      const parts = p.get("sk").split(",").slice(0, 3).map(k => (k && fieldSet.has(k) ? k : ""));
+      if (parts.filter(Boolean).length >= 2) {
+        state.sankeyFields = [parts[0] || "", parts[1] || "", parts[2] || ""];
+        state.sankeyCustom = true;
+      }
+    }
+    if (p.has("agg") && aggSet.has(p.get("agg"))) state.selectedAgg = p.get("agg");
+    if (p.has("av") && ["outliers", "histogram"].includes(p.get("av"))) state.aggView = p.get("av");
+    if (p.has("sort")) {
+      const sv = p.get("sort");
+      if (["weight", "count", "first_seen", "last_seen"].includes(sv) || (sv.startsWith("agg:") && aggSet.has(sv.slice(4)))) {
+        state.sortBy = sv;
+      }
+    }
+    if (p.has("dir") && (p.get("dir") === "asc" || p.get("dir") === "desc")) state.sortDir = p.get("dir");
+    if (p.has("pg")) {
+      const pg = Number(p.get("pg"));
+      if (Number.isInteger(pg) && pg >= 1) state.page = pg;
+    }
+    if (p.has("ps")) {
+      const ps = Number(p.get("ps"));
+      if ([25, 50, 100].includes(ps)) state.pageSize = ps;
+    }
+    if (p.has("tok")) state.showAllTokens = p.get("tok") === "1";
+    syncDomFromState();
+  }
+
+  function syncUrlState() {
+    const p = new URLSearchParams();
+    if (state.theme !== "dark") p.set("th", state.theme);
+    if (state.weighting !== DEFAULT_WEIGHTING) {
+      p.set("w", state.weighting.startsWith("agg:") ? state.weighting.slice(4) : state.weighting);
+    }
+    const defAxis = DATA.time_axes.length ? DATA.time_axes[0].id : "";
+    if (state.axisId && state.axisId !== defAxis) p.set("ax", state.axisId);
+    const ax = getAxis();
+    if (isSliderNarrowed(ax)) {
+      if (state.rangeMode !== "overlap") p.set("rm", state.rangeMode);
+      p.set("lo", String(state.sliderLo));
+      p.set("hi", String(state.sliderHi));
+    }
+    for (const [fk, vals] of state.fieldFilters.entries()) {
+      for (const v of vals) p.append("f", fk + ":" + v);
+    }
+    if (state.search.trim()) p.set("q", state.search.trim());
+    const defField = DATA.fields.length ? DATA.fields[0].key : "";
+    if (state.selectedField && state.selectedField !== defField) p.set("fld", state.selectedField);
+    if (state.weightMode !== "observations") p.set("wm", state.weightMode);
+    if (state.paretoTop !== 40) p.set("pt", String(state.paretoTop));
+    if (state.corrTab !== "network") p.set("ct", state.corrTab);
+    if (Math.abs(state.corrMinPhi - 0.14) > 1e-6) p.set("cphi", state.corrMinPhi.toFixed(2));
+    if (state.corrSign !== "all") p.set("cs", state.corrSign);
+    if (!state.corrHideLocks) p.set("cl", "0");
+    if (state.corrMatMetric !== "theils") p.set("cm", state.corrMatMetric);
+    if (state.sankeyCustom && state.sankeyFields.filter(Boolean).length >= 2) {
+      p.set("sk", state.sankeyFields.join(","));
+    }
+    const defAgg = DATA.aggregates.length ? DATA.aggregates[0].key : "";
+    if (state.selectedAgg && state.selectedAgg !== defAgg) p.set("agg", state.selectedAgg);
+    if (state.aggView !== "outliers") p.set("av", state.aggView);
+    if (state.sortBy !== "weight") p.set("sort", state.sortBy);
+    if (state.sortDir !== "desc") p.set("dir", state.sortDir);
+    if (state.page > 1) p.set("pg", String(state.page));
+    if (state.pageSize !== 25) p.set("ps", String(state.pageSize));
+    if (state.showAllTokens) p.set("tok", "1");
+
+    const qs = p.toString();
+    const targetHash = qs ? "#" + qs : "";
+    try {
+      if (window.location.hash !== targetHash) {
+        const base = window.location.pathname + window.location.search;
+        window.history.replaceState(null, "", targetHash ? base + targetHash : base);
+      }
+    } catch (_) {
+      // Sandboxed iframe / opaque origin: ignore URL update safely
+    }
+  }
+
   function render() {
+    const wm = activeWeightMeta();
     updateSliderUI();
-    renderChips();
+    renderChips(wm);
     const skits = filterSkits();
     const totalObs = skits.reduce((sum, s) => sum + s.count, 0);
-    const conc = computeConcentration(skits, totalObs);
-    const fields = computeFields(skits, totalObs);
+    const totalW = skits.reduce((sum, s) => sum + skitWeight(s, wm), 0);
+    const conc = computeConcentration(skits, totalW, wm);
+    const fields = computeFields(skits, totalW, wm);
     const ablation = computeAblation(skits);
-    const corr = computeCorrelations(skits, totalObs);
+    const corr = computeCorrelations(skits, totalW, wm);
     for (const f of fields) {
       f.redundant_with = corr.redundant_with.get(f.key) || [];
       f.determined_by = corr.determined_by.get(f.key) || [];
     }
     const aggs = computeAggregates(skits);
 
-    renderKPIs(skits, totalObs, conc);
-    renderPareto(skits, totalObs);
-    renderFieldsSection(fields);
+    renderKPIs(skits, totalObs, totalW, conc, wm);
+    renderPareto(skits, totalW, wm);
+    renderFieldsSection(fields, wm);
     renderAblationSection(ablation, fields);
-    renderCorrelations(corr);
+    renderCorrelations(corr, wm);
     syncSankeySelectors(fields, ablation);
-    renderSankey(skits, totalObs);
+    renderSankey(skits, totalW, wm);
     renderAggregatesSection(aggs);
-    renderExplorer(skits, totalObs);
+    renderExplorer(skits, totalW, wm);
+    syncUrlState();
   }
 
   function initControls() {
+    const weightSel = document.getElementById("weight-select");
+    clear(weightSel);
+    const weightings = DATA.weightings || [];
+    if (!weightings.length) {
+      weightSel.style.display = "none";
+    } else {
+      weightSel.appendChild(el("option", { value: "count" }, "Weight by: Observations (count)"));
+      for (const w of weightings) {
+        const opt = el("option", { value: "agg:" + w.key }, "Weight by: " + w.key + " (" + w.source + ")");
+        if (state.weighting === "agg:" + w.key) opt.selected = true;
+        weightSel.appendChild(opt);
+      }
+      weightSel.addEventListener("change", () => {
+        state.weighting = weightSel.value;
+        state.page = 1;
+        render();
+      });
+    }
+
     const axisSel = document.getElementById("axis-select");
     clear(axisSel);
     if (!DATA.time_axes.length) {
@@ -2490,12 +2801,35 @@ _APP_JS = r"""
       render();
     });
 
+    document.getElementById("copy-link-btn").addEventListener("click", e => {
+      syncUrlState();
+      const btn = e.currentTarget;
+      const url = window.location.href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+          btn.textContent = "View Link Copied";
+          setTimeout(() => { btn.textContent = "Copy View Link"; }, 1400);
+        });
+      }
+    });
+
     document.getElementById("reset-btn").addEventListener("click", () => {
       state.fieldFilters.clear();
       state.search = "";
-      document.getElementById("search-input").value = "";
-      syncSliderLimits();
+      state.weighting = DEFAULT_WEIGHTING;
+      state.sankeyCustom = false;
+      state.sankeyFields = [];
+      state.corrTab = "network";
+      state.corrMinPhi = 0.14;
+      state.corrSign = "all";
+      state.corrHideLocks = true;
+      state.corrSelectedNode = null;
+      state.corrMatMetric = "theils";
+      state.sortBy = "weight";
+      state.sortDir = "desc";
       state.page = 1;
+      syncSliderLimits();
+      syncDomFromState();
       render();
     });
 
@@ -2647,13 +2981,20 @@ _APP_JS = r"""
     ["sankey-f1", "sankey-f2", "sankey-f3"].forEach((id, idx) => {
       document.getElementById(id).addEventListener("change", e => {
         state.sankeyFields[idx] = e.target.value;
+        state.sankeyCustom = true;
         render();
       });
+    });
+
+    window.addEventListener("hashchange", () => {
+      readUrlState();
+      render();
     });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     initControls();
+    readUrlState();
     render();
     renderHistorySection();
   });
@@ -2689,6 +3030,7 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
     </div>
     <div class="hdr-actions">
       <span id="filter-status" class="badge"></span>
+      <button id="copy-link-btn" type="button">Copy View Link</button>
       <button id="theme-btn" type="button">Toggle Light/Dark</button>
       <button id="reset-btn" type="button">Reset Filters</button>
     </div>
@@ -2696,6 +3038,7 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
 
   <section class="filter-bar" aria-label="Dashboard filters">
     <div class="filter-row">
+      <select id="weight-select" aria-label="Weight statistics by"></select>
       <select id="axis-select" aria-label="Time or run axis"></select>
       <select id="range-mode" aria-label="Range match mode">
         <option value="overlap">Overlap window</option>
@@ -2765,7 +3108,7 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Value</th><th class="num">Observations</th><th class="num">Obs %</th><th class="num">Skits</th><th class="num">Skit %</th></tr>
+              <tr><th>Value</th><th id="field-col-metric" class="num">Observations</th><th id="field-col-pct" class="num">Obs %</th><th class="num">Skits</th><th class="num">Skit %</th></tr>
             </thead>
             <tbody id="field-values-tbody"></tbody>
           </table>
@@ -2982,6 +3325,7 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
         <div class="hdr-actions">
           <label class="muted" style="font-size:12px"><input id="toggle-all-tokens" type="checkbox"> Show NULL/FALSE tokens</label>
           <select id="sort-select" aria-label="Sort skits by">
+            <option id="sort-weight-opt" value="weight" selected>Sort: Weight (Count)</option>
             <option value="count">Sort: Count</option>
             <option value="first_seen">Sort: First Seen</option>
             <option value="last_seen">Sort: Last Seen</option>
@@ -2998,7 +3342,7 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
         <table>
           <thead>
             <tr>
-              <th>Skit ID</th><th class="num">Count</th><th class="num">Weight %</th><th class="num">Cum %</th>
+              <th>Skit ID</th><th id="skits-col-metric" class="num">Count</th><th class="num">Weight %</th><th class="num">Cum %</th>
               <th>First / Last Seen</th><th>Tokens (click to filter)</th><th>Sample</th>
             </tr>
           </thead>

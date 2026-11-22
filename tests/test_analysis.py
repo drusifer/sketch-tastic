@@ -39,6 +39,8 @@ class AnalysisEmptyAndValidationTests(unittest.TestCase):
             self.assertEqual(result["skits"], [])
             self.assertEqual(result["fields"], [])
             self.assertEqual(result["aggregates"], [])
+            self.assertEqual(result["weightings"], [])
+            self.assertEqual(result["meta"]["default_weighting"], "count")
             self.assertEqual(result["history"]["runs"], [])
             for item in result["meta"]["concentration"]:
                 self.assertEqual(item["skits_needed"], 0)
@@ -496,6 +498,80 @@ class AnalysisHistoryDriftTests(unittest.TestCase):
             self.assertEqual(len(runs_axis["runs"]), 2)
             self.assertIsNotNone(runs_axis["runs"][0]["started_ms"])
             self.assertLess(runs_axis["runs"][0]["started_ms"], runs_axis["runs"][1]["started_ms"])
+
+    def test_auto_discovers_non_negative_additive_weightings_and_filters_ineligible(self) -> None:
+        profile = Profile(
+            fields=(Field("kind", "$.kind"),),
+            aggregates=(
+                Aggregate("bytes", "$.bytes", ["SUM", "AVG", "MIN", "MAX"]),
+                Aggregate("avg_only", "$.score", "AVG"),
+                Aggregate("items", "$.items[*]", "COUNT"),
+                Aggregate("bounds_only", "$.bytes", ["MIN", "MAX"]),
+                Aggregate("profit", "$.profit", ["SUM", "MIN", "MAX"]),
+                Aggregate("zeros", "$.zero", "SUM"),
+                Aggregate("occurred_at", "$.ts", ["MIN", "MAX"], type="DATETIME"),
+                Aggregate("samples", "$.note", {"name": "LAST", "n": 2}),
+            ),
+        )
+        events = [
+            {
+                "kind": "heavy",
+                "bytes": 500,
+                "score": 10.5,
+                "items": [1, 2, 3],
+                "profit": -20,
+                "zero": 0,
+                "ts": "2026-11-21T10:00:00Z",
+                "note": "a",
+            },
+            {
+                "kind": "light",
+                "bytes": 100,
+                "score": 4.5,
+                "items": [],
+                "profit": 50,
+                "zero": 0,
+                "ts": "2026-11-21T11:00:00Z",
+                "note": "b",
+            },
+            {
+                "kind": "light",
+                "score": 5.0,
+                "items": [1],
+                "profit": 10,
+                "zero": 0,
+                "ts": "2026-11-21T11:05:00Z",
+                "note": "c",
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            sketch_path = Path(tmp) / "weights.sketch.yaml"
+            _write_sketch(sketch_path, profile, events)
+
+            data = analyze_sketch(sketch_path, default_weight="bytes")
+            self.assertEqual(data["meta"]["default_weighting"], "agg:bytes")
+
+            weightings = {w["key"]: w for w in data["weightings"]}
+            self.assertEqual(set(weightings), {"bytes", "avg_only", "items"})
+            self.assertEqual(weightings["bytes"]["source"], "SUM")
+            self.assertEqual(weightings["bytes"]["total"], 600)
+            self.assertEqual(weightings["bytes"]["active_skits"], 2)
+            self.assertEqual(weightings["avg_only"]["source"], "AVG.sum")
+            self.assertAlmostEqual(weightings["avg_only"]["total"], 20.0)
+            self.assertEqual(weightings["items"]["total"], 4)
+
+            by_kind = {s["tokens"]["kind"]: s for s in data["skits"]}
+            self.assertEqual(by_kind["heavy"]["weights"]["bytes"], 500)
+            self.assertEqual(by_kind["light"]["weights"]["bytes"], 100)
+            self.assertAlmostEqual(by_kind["heavy"]["weights"]["avg_only"], 10.5)
+            self.assertAlmostEqual(by_kind["light"]["weights"]["avg_only"], 9.5)
+            self.assertEqual(by_kind["heavy"]["weights"]["items"], 3)
+            self.assertEqual(by_kind["light"]["weights"]["items"], 1)
+
+            # Ineligible or unknown default_weight raises ValueError
+            for bad in ("bounds_only", "profit", "zeros", "occurred_at", "samples", "missing"):
+                with self.assertRaises(ValueError):
+                    analyze_sketch(sketch_path, default_weight=bad)
 
 
 if __name__ == "__main__":

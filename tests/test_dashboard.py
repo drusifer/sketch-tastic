@@ -75,6 +75,12 @@ class DashboardRenderingTests(unittest.TestCase):
             self.assertIn("Correlated Value Clusters", rendered)
             self.assertIn("Alluvial / Sankey Flow", rendered)
             self.assertIn('"correlations":', rendered)
+            self.assertIn('"weightings":', rendered)
+            self.assertIn('"default_weighting":"count"', rendered)
+            self.assertIn('id="weight-select"', rendered)
+            self.assertIn('id="copy-link-btn"', rendered)
+            self.assertIn("syncUrlState", rendered)
+            self.assertIn("hashchange", rendered)
             # Chart.js is inlined, no external resource loading tags
             self.assertIn("Chart.js", rendered)
             self.assertNotRegex(rendered, r'<script[^>]+src=["\']https?://')
