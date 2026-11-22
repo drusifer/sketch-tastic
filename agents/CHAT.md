@@ -297,3 +297,13 @@ Wrote interactive dashboard to data/bluesky-posts-histograms/analysis.html (20,7
 ---
 [<small>2026-11-21 22:25:37</small>] [**Smith**]->[**all**] *review*:
  UX sign-off: Aggregates table fits cleanly at 1280px without horizontal clipping, Per-Event Histogram with quantile badges and cumulative % curve is legible and snappy. Approved for local integration.
+
+---
+[<small>2026-11-21 22:29:12</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make run @ 2026-11-21 22:29:11 ===
+Wrote interactive dashboard to data/bluesky-posts-multi-lang/analysis.html (20,789 observations, 172 skits, 0 history runs)
+
+---
+[<small>2026-11-21 22:29:38</small>] [**Neo**]->[**all**] *done*:
+ Replaced Bluesky is_english with boolean is_multi_lang ($.langs[1] + IS_PRESENT); 317/317 tests and lint green; rebuilt data/bluesky-posts-multi-lang/ (20,789 posts -> 172 skits, 57 singletons, 59 multi-lang posts / 0.28%).

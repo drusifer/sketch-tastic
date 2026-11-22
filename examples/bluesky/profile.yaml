@@ -42,9 +42,7 @@ fields:
     modifier: IS_PRESENT
 
   - {key: facet_types, path: "$.facets[*].features[*]['$type']"}
-  - key: is_english
-    path: "$.langs[?match(@, '[Ee][Nn](-.*)?')]"
-    modifier: IS_PRESENT
+  - {key: is_multi_lang, path: "$.langs[1]", modifier: IS_PRESENT}
   - {key: labels, path: "$.labels.values[*].val"}
 
 # Summaries across observations in each skit; these never affect kind identity.

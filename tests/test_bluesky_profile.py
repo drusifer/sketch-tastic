@@ -100,24 +100,23 @@ class PostProfileTests(unittest.TestCase):
         }
         self.assertEqual(self.profile.tokens(a), self.profile.tokens(b))
         self.assertEqual(self.profile.tokens(a)["facet_types"], "link,tag")
-        self.assertEqual(self.profile.tokens(a)["is_english"], "TRUE")
+        self.assertEqual(self.profile.tokens(a)["is_multi_lang"], "TRUE")
 
-    def test_is_english_boolean_field(self):
+    def test_is_multi_lang_boolean_field(self):
         cases = [
-            ({"langs": ["en"]}, "TRUE"),
-            ({"langs": ["en-US"]}, "TRUE"),
-            ({"langs": ["EN-gb"]}, "TRUE"),
-            ({"langs": ["ja", "en"]}, "TRUE"),
-            ({"langs": ["en", "en-AU"]}, "TRUE"),
-            ({"langs": ["ja", "fr"]}, "FALSE"),
-            ({"langs": ["eng"]}, "FALSE"),
+            ({"langs": ["en", "fr"]}, "TRUE"),
+            ({"langs": ["ja", "en", "es"]}, "TRUE"),
+            ({"langs": ["en", "en"]}, "TRUE"),
+            ({"langs": ["en"]}, "FALSE"),
             ({"langs": []}, "FALSE"),
-            ({"langs": [123, None]}, "FALSE"),
+            ({"langs": "en"}, "FALSE"),
+            ({"langs": {"a": 1, "b": 2}}, "FALSE"),
+            ({"langs": None}, "FALSE"),
             ({}, "FALSE"),
         ]
         for post, expected in cases:
             with self.subTest(post=post):
-                self.assertEqual(self.profile.tokens(post)["is_english"], expected)
+                self.assertEqual(self.profile.tokens(post)["is_multi_lang"], expected)
 
     def test_aggregates_fold_real_posts_without_changing_identity(self):
         a = sample(1)

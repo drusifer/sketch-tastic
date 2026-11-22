@@ -106,4 +106,6 @@ sequenceDiagram
     Note right of Morpheus: "rubric LOOP_IMPL:<br/>TFIRST=S VERIF=S MODUL=S<br/>REGRESS=S BUDGET=S —<br/>associative sparse log-<br/>decimal & fixed-bucket<br/>HISTOGRAM aggregator,<br/>clean p…"
     Smith->>All: "review"
     Note right of Smith: "UX sign-off: Aggregates<br/>table fits cleanly at<br/>1280px without<br/>horizontal clipping,<br/>Per-Event Histogram with<br/>quantile badges and<br/>cumulative %…"
+    Neo->>All: "done"
+    Note right of Neo: "Replaced Bluesky<br/>is_english with boolean<br/>is_multi_lang<br/>($.langs[1] +<br/>IS_PRESENT), 317/317<br/>tests and lint green,<br/>rebuilt data/bluesky-<br/>posts-…"
 ```
