@@ -219,6 +219,7 @@ def analyze_to_html(
     *,
     history_dir: Path | str | None = None,
     title: str | None = None,
+    default_weight: str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
     """Analyze a sketch (and optional history) and atomically write an offline HTML dashboard."""
@@ -235,7 +236,7 @@ def analyze_to_html(
     if not out.parent.is_dir():
         raise FileNotFoundError(f"Output directory does not exist: {out.parent}")
 
-    payload = analyze_sketch(sketch_path, history_dir=history_dir)
+    payload = analyze_sketch(sketch_path, history_dir=history_dir, default_weight=default_weight)
     document = render_dashboard(payload, title=title)
 
     with tempfile.TemporaryDirectory(prefix=".skt-analyze-", dir=out.parent) as staging:
@@ -272,6 +273,7 @@ def _command(args: argparse.Namespace) -> int:
                 args.output,
                 history_dir=args.history,
                 title=args.title,
+                default_weight=args.weight,
                 force=args.force,
             )
             text = (
@@ -319,6 +321,11 @@ def add_commands(commands: argparse._SubParsersAction) -> None:
                 "--title",
                 metavar="TEXT",
                 help="dashboard page title (default: sketch filename)",
+            )
+            parser.add_argument(
+                "--weight",
+                metavar="KEY",
+                help="initial dashboard weighting: 'count' or any additive numeric aggregate key",
             )
             parser.add_argument(
                 "--force",

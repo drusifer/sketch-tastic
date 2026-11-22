@@ -237,3 +237,33 @@ Wrote interactive dashboard to data/bluesky-posts-is-english/analysis.html (20,7
 ---
 [<small>2026-11-21 19:52:48</small>] [**Smith**]->[**all**] *review*:
  UX sign-off: All Fields Diagnostics column fits cleanly at 1280px, radial graph and Sankey flow labels are legible with click-to-filter parity. Approved for local integration.
+
+---
+[<small>2026-11-21 21:39:20</small>] [**Neo**]->[**Neo**] *impl start*:
+ User request: /bloop auto-discovered additive aggregate weightings in dashboard (Weight by selector re-weighting KPIs, Pareto, field distributions, correlations, Sankey, and skit explorer). Starting *impl TDD loop. @Neo *swe impl
+
+---
+[<small>2026-11-21 21:48:07</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make run @ 2026-11-21 21:48:05 ===
+Wrote interactive dashboard to data/bluesky-posts-is-english/analysis.html (20,789 observations, 242 skits, 0 history runs)
+
+---
+[<small>2026-11-21 21:49:13</small>] [**Neo**]->[**Trin**] *handoff*:
+ TDD GREEN: 312/312 tests (incl. weightings discovery, --weight CLI, URL hash state, node --check, CSP, XSS), lint, quality (max radon C(18)), gitleaks clean; Bluesky dashboard regenerated & verified in Chromium (default + #w=images_bytes&f=is_english:TRUE&ct=clusters). @Trin *qa uat
+
+---
+[<small>2026-11-21 21:49:13</small>] [**Trin**]->[**Switch**] *uat*:
+ UAT passed on Bluesky dataset: auto-discovered additive weightings (images_bytes, text_bytes, images_count, facet_features, etc.) re-weight KPIs, Pareto, field distributions, correlations, Sankey, and skit explorer; URL hash captures & restores views cleanly with zero console errors. @Switch *sec review
+
+---
+[<small>2026-11-21 21:49:13</small>] [**Switch**]->[**Morpheus**] *review*:
+ security gate (dashboard-weightings): No blocking findings. Strict offline CSP unchanged, zero external network calls, URL hash params allowlisted against DATA keys (prototype-safe), history.replaceState guarded for opaque origins, gitleaks clean. @Morpheus *lead review
+
+---
+[<small>2026-11-21 21:49:14</small>] [**Morpheus**]->[**Smith**] *review*:
+ rubric LOOP_IMPL: TFIRST=S VERIF=S MODUL=S REGRESS=S BUDGET=S — clean additive weightings discovery (_discover_weightings C(18)), continuous weighted median, bidirectional URL hash capture, zero regressions. @Smith *user review
+
+---
+[<small>2026-11-21 21:49:14</small>] [**Smith**]->[**all**] *review*:
+ UX sign-off: Weight by selector, active weight chip, Copy View Link button, dynamic column/axis labels, and hash restoration verified visually in Chromium. Approved for local integration.

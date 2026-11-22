@@ -256,12 +256,20 @@ sketchtastic analyze baseline.sketch.yaml -o analysis.html
 ### Interactive HTML analysis dashboard
 
 ```
-sketchtastic analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--force]
+sketchtastic analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--weight KEY] [--force]
 ```
 
 Generates a single, 100% offline HTML dashboard bundling Chart.js (MIT) with a strict Content
-Security Policy and zero external network requests. Open `REPORT.html` directly in any browser to
+Security Policy and zero external network requests. All interactive filters, weighting selections,
+tabs, and Sankey stages are captured in the URL hash (`#...`) with a **Copy View Link** button so
+specific report views can be bookmarked or shared. Open `REPORT.html` directly in any browser to
 explore:
+
+- **Auto-discovered additive weightings (`Weight by` / `--weight KEY`):** every non-negative
+  additive aggregate (`SUM`, `AVG.sum`, `COUNT`) in the sketch is automatically available in the
+  dashboard's **Weight by** selector (defaulting to raw observation `count`, or pre-selected with
+  `--weight KEY`). Switching weightings re-weights KPIs, Pareto concentration, field distributions,
+  correlations, Sankey flows, and the skit explorer live.
 
 - **Overview & Pareto concentration curve:** observation totals, distinct skits, singletons, and
   how many skits cover 50%, 80%, 90%, 95%, and 99% of observations.
