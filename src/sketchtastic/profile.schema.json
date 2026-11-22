@@ -381,7 +381,7 @@
       }
     },
     "aggregator": {
-      "description": "SUM, MIN, MAX, AVG or COUNT as a bare name, or a mapping with name (and n for FIRST and LAST).",
+      "description": "SUM, MIN, MAX, AVG, COUNT or HISTOGRAM as a bare name, or a mapping with name (n for FIRST/LAST; optional buckets for HISTOGRAM).",
       "if": {
         "type": "string"
       },
@@ -391,7 +391,8 @@
           "MIN",
           "MAX",
           "AVG",
-          "COUNT"
+          "COUNT",
+          "HISTOGRAM"
         ]
       },
       "else": {
@@ -408,7 +409,8 @@
               "AVG",
               "COUNT",
               "FIRST",
-              "LAST"
+              "LAST",
+              "HISTOGRAM"
             ]
           }
         },
@@ -553,6 +555,32 @@
               "required": [
                 "n"
               ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "name": {
+                  "const": "HISTOGRAM"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "then": {
+              "properties": {
+                "name": true,
+                "buckets": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "strictly increasing finite upper bucket boundaries; omit for automatic sparse log-decimal bins"
+                }
+              },
+              "additionalProperties": false
             }
           }
         ]

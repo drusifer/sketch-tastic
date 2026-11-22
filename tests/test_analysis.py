@@ -573,6 +573,41 @@ class AnalysisHistoryDriftTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     analyze_sketch(sketch_path, default_weight=bad)
 
+    def test_histogram_aggregates_merge_across_skits_and_compute_quantiles(self) -> None:
+        profile = Profile(
+            fields=(Field("kind", "$.kind"),),
+            aggregates=(
+                Aggregate("bytes", "$.bytes", ["SUM", "MIN", "MAX", "AVG", "HISTOGRAM"]),
+                Aggregate("lat", "$.ms", {"name": "HISTOGRAM", "buckets": [10, 50, 100]}),
+            ),
+        )
+        events = [
+            *[{"kind": "a", "bytes": v, "ms": v} for v in (5, 8, 12, 20, 40)],
+            *[{"kind": "b", "bytes": v, "ms": v} for v in (60, 80, 95, 150, 300)],
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            sketch_path = Path(tmp) / "hist.sketch.yaml"
+            _write_sketch(sketch_path, profile, events)
+
+            data = analyze_sketch(sketch_path)
+            aggs = {a["key"]: a for a in data["aggregates"]}
+
+            # Multi-fn aggregate with HISTOGRAM merges across skits and stays eligible as SUM weighting
+            b_hist = aggs["bytes"]["histogram"]
+            self.assertIsNotNone(b_hist)
+            self.assertEqual(b_hist["mode"], "log")
+            self.assertEqual(b_hist["count"], 10)
+            self.assertTrue(30 <= b_hist["quantiles"]["p50"] <= 70)
+            self.assertEqual([w["key"] for w in data["weightings"]], ["bytes"])
+
+            # Standalone fixed-bucket HISTOGRAM merges across skits and is NOT a scalar weighting
+            l_hist = aggs["lat"]["histogram"]
+            self.assertIsNotNone(l_hist)
+            self.assertEqual(l_hist["mode"], "fixed")
+            self.assertEqual(l_hist["count"], 10)
+            self.assertEqual([b["count"] for b in l_hist["bins"]], [2, 3, 3, 2])
+            self.assertAlmostEqual(l_hist["quantiles"]["p50"], 50.0, delta=2.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,7 @@ function name, so changing LAST's `n` keeps the samples already collected.
 
 from __future__ import annotations
 
+import bisect
 import json
 import math
 from dataclasses import dataclass
@@ -24,13 +25,20 @@ __all__ = [
     "Avg",
     "Count",
     "First",
+    "Histogram",
     "Last",
     "Max",
     "Min",
     "Op",
     "Size",
     "Sum",
+    "histogram_bins",
+    "histogram_quantiles",
+    "is_histogram_state",
+    "merge_histogram_states",
 ]
+
+HISTOGRAM_MANTISSAS = (1.0, 1.5, 2.0, 3.0, 5.0, 7.0)
 
 
 SKIP = object()
@@ -189,6 +197,240 @@ class Last(Aggregator):
 
     def merge(self, state: Any, later: Any) -> Any:
         return [*state, *later][-self.n :]
+
+
+def _clean_bound(value: float) -> float:
+    return float(f"{value:.6g}")
+
+
+def _fmt_edge(value: float) -> str:
+    if value == 0:
+        return "0"
+    mag = abs(value)
+    sign = "-" if value < 0 else ""
+    for scale, suffix in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
+        if mag >= scale:
+            num = mag / scale
+            return f"{sign}{num:g}{suffix}"
+    return f"{value:g}"
+
+
+def log_bin_key(value: int | float) -> str:
+    """Map any finite number to a deterministic sparse log-decimal bin key (1, 1.5, 2, 3, 5, 7)."""
+    if value == 0:
+        return "0"
+    sign = "+" if value > 0 else "-"
+    mag = abs(float(value))
+    exp = math.floor(math.log10(mag))
+    mantissa = mag / (10.0**exp)
+    if mantissa >= 10.0:
+        exp += 1
+        mantissa = 1.0
+    step = min(
+        len(HISTOGRAM_MANTISSAS) - 1, max(0, bisect.bisect_right(HISTOGRAM_MANTISSAS, mantissa) - 1)
+    )
+    return f"{sign}{exp * len(HISTOGRAM_MANTISSAS) + step}"
+
+
+def log_bin_bounds(key: str) -> tuple[float, float]:
+    """Decode a log-decimal bin key back to its `(lo, hi)` interval."""
+    if key == "0":
+        return 0.0, 0.0
+    sign = 1 if key[0] == "+" else -1
+    idx = int(key[1:])
+    n_steps = len(HISTOGRAM_MANTISSAS)
+    exp, step = divmod(idx, n_steps)
+    scale = 10.0**exp
+    lo_mag = _clean_bound(HISTOGRAM_MANTISSAS[step] * scale)
+    hi_mag = _clean_bound((HISTOGRAM_MANTISSAS[step + 1] if step + 1 < n_steps else 10.0) * scale)
+    return (lo_mag, hi_mag) if sign > 0 else (-hi_mag, -lo_mag)
+
+
+def is_histogram_state(value: Any) -> bool:
+    """Return True if `value` is a serialized `HISTOGRAM` state dict."""
+    if not isinstance(value, dict):
+        return False
+    mode = value.get("mode")
+    if mode == "log":
+        return isinstance(value.get("bins"), dict) and isinstance(value.get("count"), int)
+    if mode == "fixed":
+        return (
+            isinstance(value.get("bounds"), list)
+            and isinstance(value.get("counts"), list)
+            and isinstance(value.get("count"), int)
+            and len(value["counts"]) == len(value["bounds"]) + 1
+        )
+    return False
+
+
+def merge_histogram_states(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    """Associatively merge two serialized `HISTOGRAM` states."""
+    if left.get("count", 0) == 0:
+        return _copy_histogram_state(right)
+    if right.get("count", 0) == 0:
+        return _copy_histogram_state(left)
+    mode = left.get("mode")
+    if mode != right.get("mode"):
+        raise ValueError(
+            f"Cannot merge histograms of different modes: {mode!r} vs {right.get('mode')!r}"
+        )
+    if mode == "log":
+        merged = dict(left["bins"])
+        for key, cnt in right["bins"].items():
+            merged[key] = merged.get(key, 0) + cnt
+        return {"mode": "log", "count": left["count"] + right["count"], "bins": merged}
+    if left["bounds"] != right["bounds"]:
+        raise ValueError("Cannot merge fixed histograms with different bucket bounds")
+    return {
+        "mode": "fixed",
+        "count": left["count"] + right["count"],
+        "bounds": list(left["bounds"]),
+        "counts": [a + b for a, b in zip(left["counts"], right["counts"])],
+    }
+
+
+def _copy_histogram_state(state: dict[str, Any]) -> dict[str, Any]:
+    if state.get("mode") == "log":
+        return {"mode": "log", "count": state["count"], "bins": dict(state["bins"])}
+    return {
+        "mode": "fixed",
+        "count": state["count"],
+        "bounds": list(state["bounds"]),
+        "counts": list(state["counts"]),
+    }
+
+
+def histogram_bins(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand a serialized `HISTOGRAM` state into ordered bin descriptors."""
+    total = state.get("count", 0)
+    if state.get("mode") == "log":
+        rows: list[tuple[float, float, int]] = []
+        for key, cnt in state.get("bins", {}).items():
+            if cnt > 0:
+                lo, hi = log_bin_bounds(str(key))
+                rows.append((lo, hi, int(cnt)))
+        rows.sort(key=lambda r: (r[0], r[1]))
+        return [
+            {
+                "lo": lo,
+                "hi": hi,
+                "label": "0" if lo == 0 and hi == 0 else f"{_fmt_edge(lo)}–{_fmt_edge(hi)}",
+                "count": cnt,
+                "pct": round(100.0 * cnt / total, 2) if total else 0.0,
+            }
+            for lo, hi, cnt in rows
+        ]
+    bounds = state.get("bounds", [])
+    counts = state.get("counts", [])
+    out: list[dict[str, Any]] = []
+    for idx, cnt in enumerate(counts):
+        lo = None if idx == 0 else bounds[idx - 1]
+        hi = None if idx == len(bounds) else bounds[idx]
+        if lo is None:
+            label = f"≤{_fmt_edge(hi)}"
+        elif hi is None:
+            label = f">{_fmt_edge(lo)}"
+        else:
+            label = f"{_fmt_edge(lo)}–{_fmt_edge(hi)}"
+        out.append(
+            {
+                "lo": lo,
+                "hi": hi,
+                "label": label,
+                "count": int(cnt),
+                "pct": round(100.0 * cnt / total, 2) if total else 0.0,
+            }
+        )
+    return out
+
+
+def histogram_quantiles(
+    state: dict[str, Any], probs: tuple[float, ...] = (0.5, 0.9, 0.95, 0.99)
+) -> dict[str, float | None]:
+    """Estimate quantiles via linear interpolation within histogram bins."""
+    labels = [f"p{int(round(p * 100))}" for p in probs]
+    total = state.get("count", 0)
+    if total <= 0:
+        return {name: None for name in labels}
+    bins = histogram_bins(state)
+    result: dict[str, float | None] = {}
+    for name, prob in zip(labels, probs):
+        rank = prob * total
+        cum = 0
+        est: float | None = None
+        for b in bins:
+            cnt = b["count"]
+            if cnt <= 0:
+                continue
+            if cum + cnt >= rank:
+                frac = max(0.0, min(1.0, (rank - cum) / cnt))
+                lo, hi = b["lo"], b["hi"]
+                if lo is not None and hi is not None:
+                    est = lo + frac * (hi - lo)
+                elif lo is None and hi is not None:
+                    est = (frac * hi) if hi >= 0 else float(hi)
+                elif lo is not None:
+                    est = float(lo)
+                break
+            cum += cnt
+        result[name] = round(est, 4) if est is not None else None
+    return result
+
+
+@dataclass(frozen=True, kw_only=True)
+class Histogram(_Numeric):
+    """Mergeable per-event numeric histogram (sparse log-decimal or explicit fixed buckets)."""
+
+    name = "HISTOGRAM"
+    buckets: tuple[int | float, ...] | None = None
+
+    def check(self) -> None:
+        if self.buckets is None:
+            return
+        if not self.buckets:
+            raise ValueError("HISTOGRAM buckets must not be empty")
+        prev: float | None = None
+        for bound in self.buckets:
+            if (
+                isinstance(bound, bool)
+                or not isinstance(bound, (int, float))
+                or not math.isfinite(bound)
+            ):
+                raise ValueError(f"HISTOGRAM bucket bound must be a finite number: {bound!r}")
+            if prev is not None and bound <= prev:
+                raise ValueError(
+                    f"HISTOGRAM buckets must be strictly increasing ({prev!r} >= {bound!r})"
+                )
+            prev = bound
+
+    def initial(self) -> Any:
+        if self.buckets is None:
+            return {"mode": "log", "count": 0, "bins": {}}
+        return {
+            "mode": "fixed",
+            "count": 0,
+            "bounds": list(self.buckets),
+            "counts": [0] * (len(self.buckets) + 1),
+        }
+
+    def fold(self, state: Any, value: Any) -> Any:
+        if state["mode"] == "log":
+            bins = dict(state["bins"])
+            key = log_bin_key(value)
+            bins[key] = bins.get(key, 0) + 1
+            return {"mode": "log", "count": state["count"] + 1, "bins": bins}
+        bounds = state["bounds"]
+        counts = list(state["counts"])
+        counts[bisect.bisect_left(bounds, value)] += 1
+        return {
+            "mode": "fixed",
+            "count": state["count"] + 1,
+            "bounds": list(bounds),
+            "counts": counts,
+        }
+
+    def merge(self, state: Any, later: Any) -> Any:
+        return merge_histogram_states(state, later)
 
 
 class Op(Rule):

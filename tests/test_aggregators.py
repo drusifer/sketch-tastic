@@ -23,7 +23,7 @@ class BuildTests(unittest.TestCase):
     def test_rejects_with_a_reason(self):
         cases = [
             ("$.d[", "MIN", "Invalid JSONPath"),
-            ("$.d", "LAST(3)", "is not one of ['SUM', 'MIN', 'MAX', 'AVG', 'COUNT']"),
+            ("$.d", "LAST(3)", "is not one of ['SUM', 'MIN', 'MAX', 'AVG', 'COUNT', 'HISTOGRAM']"),
             ("$.d", "min", "is not one of"),
             ("$.d", {"name": "LAST"}, "'n' is a required property"),
             ("$.d", "FIRST", "FIRST needs arguments (n); write it as {name: FIRST, n: ...}"),
@@ -186,3 +186,85 @@ class SizeOpTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             Aggregate("b", "$.v", "SUM", op="BOGUS")
         self.assertIn("'BOGUS' is not one of ['SIZE']", str(ctx.exception))
+
+
+class HistogramAggregatorTests(unittest.TestCase):
+    """Per-event mergeable HISTOGRAM aggregator (auto log-decimal & explicit fixed buckets)."""
+
+    def test_log_histogram_folds_zero_negatives_fractions_and_skips_bad_values(self):
+        entry = Aggregate("v", "$.v", "HISTOGRAM")
+        records = [
+            {"v": 0},
+            {"v": 0.25},
+            {"v": 12},
+            {"v": "14"},
+            {"v": 250},
+            {"v": -12},
+            {"v": "abc"},
+            {"v": True},
+            {"v": None},
+            {"v": "nan"},
+        ]
+        state, skipped = fold(entry, records)
+        self.assertEqual(skipped, 4)
+        self.assertEqual(state["mode"], "log")
+        self.assertEqual(state["count"], 6)
+        self.assertEqual(state["bins"]["0"], 1)
+        self.assertEqual(state["bins"]["+6"], 2)  # 12 and 14 both in [10, 15)
+        self.assertEqual(state["bins"]["-6"], 1)  # -12 in [-15, -10]
+        self.assertEqual(sum(state["bins"].values()), 6)
+
+    def test_fixed_buckets_boundaries_and_validation(self):
+        entry = Aggregate("ms", "$.ms", {"name": "HISTOGRAM", "buckets": [10, 50, 100]})
+        records = [{"ms": -5}, {"ms": 10}, {"ms": 10.1}, {"ms": 50}, {"ms": 100}, {"ms": 250}]
+        state, skipped = fold(entry, records)
+        self.assertEqual(skipped, 0)
+        self.assertEqual(
+            state, {"mode": "fixed", "count": 6, "bounds": [10, 50, 100], "counts": [2, 2, 1, 1]}
+        )
+
+        for bad in (
+            {"name": "HISTOGRAM", "buckets": []},
+            {"name": "HISTOGRAM", "buckets": [10, 10]},
+            {"name": "HISTOGRAM", "buckets": [50, 10]},
+            {"name": "HISTOGRAM", "buckets": [10, True]},
+            {"name": "HISTOGRAM", "unknown": 1},
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                Aggregate("ms", "$.ms", bad)
+
+    def test_histogram_merge_is_associative_and_equals_single_fold(self):
+        for spec in ("HISTOGRAM", {"name": "HISTOGRAM", "buckets": [5, 25, 100]}):
+            entry = Aggregate("x", "$.x", ["SUM", spec])
+            records = [{"x": v} for v in (0, 1, 4.9, 5, 12, 25, 99, 100, 101, 500, -3)]
+            single, _ = fold(entry, records)
+            for cut in range(len(records) + 1):
+                with self.subTest(spec=spec, cut=cut):
+                    left_state, _ = fold(entry, records[:cut])
+                    right_state, _ = fold(entry, records[cut:])
+                    s1 = {"x": left_state}
+                    s2 = {"x": right_state}
+                    entry.merge(s1, s2)
+                    self.assertEqual(s1["x"], single)
+
+    def test_histogram_quantiles_log_and_fixed(self):
+        from sketchtastic.aggregators import histogram_quantiles
+
+        # 100 values uniformly 1..100 -> p50 near 50, p95 near 95
+        entry_log = Aggregate("x", "$.x", "HISTOGRAM")
+        st_log, _ = fold(entry_log, [{"x": i} for i in range(1, 101)])
+        q_log = histogram_quantiles(st_log)
+        self.assertIsNotNone(q_log["p50"])
+        self.assertTrue(40 <= q_log["p50"] <= 60, q_log)
+        self.assertTrue(85 <= q_log["p95"] <= 105, q_log)
+
+        entry_fix = Aggregate("x", "$.x", {"name": "HISTOGRAM", "buckets": [25, 50, 75, 100]})
+        st_fix, _ = fold(entry_fix, [{"x": i} for i in range(1, 101)])
+        q_fix = histogram_quantiles(st_fix)
+        self.assertAlmostEqual(q_fix["p50"], 50.0, delta=2.0)
+        self.assertAlmostEqual(q_fix["p90"], 90.0, delta=2.0)
+
+        empty = entry_log.fn[0].initial()
+        self.assertEqual(
+            histogram_quantiles(empty), {"p50": None, "p90": None, "p95": None, "p99": None}
+        )

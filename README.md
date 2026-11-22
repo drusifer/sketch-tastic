@@ -288,9 +288,11 @@ explore:
 - **Time & run range sliders:** dual-handle sliders automatically populated for `DATETIME`/`DATE`
   aggregates (`MIN`/`MAX`) and `first_seen`/`last_seen` runs (with overlap, first-appeared, and
   fully-contained modes) that dynamically recompute every chart and metric.
-- **Aggregates & outliers:** global SUM, COUNT, MIN, MAX, exact observation-weighted MEAN
-  (`AVG.sum / AVG.count`), clearly labeled across-skit mean/median, and top outlier / histogram
-  charts.
+- **Aggregates, per-event histograms & outliers:** global SUM, COUNT, MIN, MAX, exact
+  observation-weighted MEAN (`AVG.sum / AVG.count`), clearly labeled across-skit mean/median,
+  top outlier / across-skit distribution charts, and — for aggregates configured with `HISTOGRAM`
+  (auto sparse log-decimal bins or explicit `buckets: [...]`) — live-merged per-event histograms
+  with interpolated **p50 / p90 / p95 / p99** quantiles.
 - **Interactive skit explorer & history drift:** searchable, sortable skit table with copyable full
   IDs, expandable retained original JSON samples, and run-over-run drift when
   `<sketch>.history/` is present (or supplied with `--history DIR`).

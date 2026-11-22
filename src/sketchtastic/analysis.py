@@ -14,7 +14,13 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from sketchtastic.aggregators import as_number
+from sketchtastic.aggregators import (
+    as_number,
+    histogram_bins,
+    histogram_quantiles,
+    is_histogram_state,
+    merge_histogram_states,
+)
 from sketchtastic.reporting import _locator, _ranked
 from sketchtastic.sketch import Sketch, SketchError, Skit, _read_set_file
 
@@ -26,7 +32,7 @@ REDUNDANCY_THRESHOLD = 0.99
 HIGH_CARDINALITY_MIN = 20
 HIGH_CARDINALITY_RATIO = 0.5
 AVG_KEYS = frozenset({"avg", "sum", "count"})
-KNOWN_AGG_FUNCTIONS = frozenset({"SUM", "MIN", "MAX", "AVG", "COUNT", "FIRST", "LAST"})
+KNOWN_AGG_FUNCTIONS = frozenset({"SUM", "MIN", "MAX", "AVG", "COUNT", "FIRST", "LAST", "HISTOGRAM"})
 
 
 def _is_number(value: Any) -> bool:
@@ -544,11 +550,31 @@ class _AggAccumulator:
     skit_metrics: list[tuple[str, int, float, dict[str, str]]] = field(default_factory=list)
     skit_time_pairs: list[tuple[str, int, int]] = field(default_factory=list)
     metric_name: str = "VALUE"
+    hist_state: dict[str, Any] | None = None
 
     def record_fn(self, name: str) -> None:
         if name not in self.fn_seen:
             self.fn_seen.add(name)
             self.functions.append(name)
+
+    def fold_histogram(self, raw: dict[str, Any]) -> None:
+        self.kinds.add("numeric")
+        if self.hist_state is None:
+            self.hist_state = merge_histogram_states(
+                {
+                    "mode": raw["mode"],
+                    "count": 0,
+                    "bins": {},
+                    "bounds": raw.get("bounds", []),
+                    "counts": [0] * (len(raw.get("bounds", [])) + 1),
+                },
+                raw,
+            )
+        else:
+            try:
+                self.hist_state = merge_histogram_states(self.hist_state, raw)
+            except ValueError:
+                pass
 
     def fold_avg(self, raw: dict[str, Any]) -> None:
         self.has_avg = True
@@ -572,6 +598,8 @@ class _AggAccumulator:
             self.kinds.add("numeric")
         if "AVG" in raw and _is_avg_dict(raw["AVG"]):
             self.fold_avg(raw["AVG"])
+        if "HISTOGRAM" in raw and is_histogram_state(raw["HISTOGRAM"]):
+            self.fold_histogram(raw["HISTOGRAM"])
 
         mn, mx = raw.get("MIN"), raw.get("MAX")
         for candidate, bucket in ((mn, self.min_candidates), (mx, self.max_candidates)):
@@ -636,6 +664,9 @@ class _AggAccumulator:
             if raw.get("avg") is not None:
                 self.metric_name = "AVG"
                 self.skit_metrics.append((fid, skit.meta["count"], float(raw["avg"]), skit.tokens))
+        elif is_histogram_state(raw):
+            self.record_fn("HISTOGRAM")
+            self.fold_histogram(raw)
         else:
             self.fold_scalar(fid, skit, raw)
 
@@ -686,6 +717,16 @@ def _summarize_aggregate(
             "median": _median(nums),
         },
         "outliers": outliers,
+        "histogram": (
+            {
+                "mode": acc.hist_state["mode"],
+                "count": acc.hist_state["count"],
+                "bins": histogram_bins(acc.hist_state),
+                "quantiles": histogram_quantiles(acc.hist_state),
+            }
+            if acc.hist_state is not None
+            else None
+        ),
     }
     axis = None
     if kind in ("datetime", "date") and acc.skit_time_pairs:

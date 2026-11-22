@@ -54,7 +54,7 @@ aggregates:
     fn: COUNT
   - key: images_bytes
     path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.images'].images[*].image.size"
-    fn: [SUM, MIN, MAX, AVG]
+    fn: [SUM, MIN, MAX, AVG, HISTOGRAM]
   - key: gallery_count
     path: "$[?@ == $.embed && @['$type'] == 'app.bsky.embed.gallery'].items[?@['$type'] == 'app.bsky.embed.gallery#image'].image"
     fn: COUNT
@@ -73,6 +73,6 @@ aggregates:
   - key: media_gallery_bytes
     path: "$.embed[?@ == $.embed.media && $.embed['$type'] == 'app.bsky.embed.recordWithMedia' && @['$type'] == 'app.bsky.embed.gallery'].items[?@['$type'] == 'app.bsky.embed.gallery#image'].image.size"
     fn: [SUM, MIN, MAX, AVG]
-  - {key: text_bytes, path: $.text, op: SIZE, fn: [SUM, MIN, MAX, AVG]}
+  - {key: text_bytes, path: $.text, op: SIZE, fn: [SUM, MIN, MAX, AVG, HISTOGRAM]}
   - {key: facet_features, path: "$.facets[*].features[*]", fn: COUNT}
   - {key: posted_at, path: $.createdAt, type: DATETIME, fn: [MIN, MAX]}
