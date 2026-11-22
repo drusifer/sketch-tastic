@@ -72,6 +72,9 @@ class DashboardRenderingTests(unittest.TestCase):
             self.assertIn("Boolean", rendered)
             self.assertIn("Drop-One Field Ablation", rendered)
             self.assertIn('"ablation":', rendered)
+            self.assertIn("Correlated Value Clusters", rendered)
+            self.assertIn("Alluvial / Sankey Flow", rendered)
+            self.assertIn('"correlations":', rendered)
             # Chart.js is inlined, no external resource loading tags
             self.assertIn("Chart.js", rendered)
             self.assertNotRegex(rendered, r'<script[^>]+src=["\']https?://')

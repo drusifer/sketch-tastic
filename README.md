@@ -272,6 +272,11 @@ explore:
 - **Drop-one field ablation:** ranks every profile field by how many skits and singletons collapse
   when that field is removed alone (plus singleton-only value counts), helping spot cardinality
   drivers to coarsen with modifiers.
+- **Correlated value clusters, field associations & Sankey flow:** interactive correlated-value
+  network graph (live $|\phi|$ slider, positive/anti-correlation filter, 1:1 schema-lock toggle,
+  click-to-filter), Cramér's $V$ and directional Theil's $U$ field heatmap with automatic
+  redundancy badges in *All Fields*, discovered cluster cards & association rules table, and a
+  2–3 field Alluvial / Sankey flow diagram.
 - **Time & run range sliders:** dual-handle sliders automatically populated for `DATETIME`/`DATE`
   aggregates (`MIN`/`MAX`) and `first_seen`/`last_seen` runs (with overlap, first-appeared, and
   fully-contained modes) that dynamically recompute every chart and metric.
