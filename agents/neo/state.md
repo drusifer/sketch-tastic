@@ -145,3 +145,8 @@ Next Steps: commit/local integrate reviewed single change; no push/release. Use 
 - **Context:** Replaced `is_english` with `is_multi_lang` (`path: "$.langs[1]"`, `modifier: IS_PRESENT`, true iff `langs` array has size > 1) in `examples/bluesky/profile.yaml`, `examples/bluesky/README.md`, and `tests/test_bluesky_profile.py`. Rebuilt Bluesky capture into `data/bluesky-posts-multi-lang/` and generated `analysis.html`.
 - **Current Task:** Complete (100%) — `317/317` tests green, lint clean.
 - **Next Steps:** Commit on `fix/bluesky-is-multi-lang`, local `--no-ff` merge to `main`, delete branch; await user direction on push.
+
+## CLI command renamed to `sketch` — 2026-11-21
+- **Context:** Renamed installed CLI script from `sketchtastic` / `skt` to `sketch` only in `pyproject.toml`, `Makefile`, `src/sketchtastic/{cli,reporting,dashboard}.py`, `smoke/test_smoke.py`, `tests/{test_cli,test_analyze_cli}.py`, `README.md`, `examples/`, and `docs/SDLC.md` (distribution `sketch-tastic` and Python package `sketchtastic` unchanged).
+- **Current Task:** Complete (100%) — `make install`, `make lint`, `make test` (317/317), `make smoke` (wheel build + installed `sketch` + README Quickstart), `make run ARGS="--version"`, and `gitleaks` passed.
+- **Next Steps:** Commit on `fix/cli-command-sketch`, local `--no-ff` merge to `main`, delete branch; await user direction on push.

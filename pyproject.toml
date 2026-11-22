@@ -33,8 +33,7 @@ dependencies = [
 Repository = "https://github.com/drusifer/sketch-tastic"
 
 [project.scripts]
-sketchtastic = "sketchtastic.__main__:main"
-skt = "sketchtastic.__main__:main"
+sketch = "sketchtastic.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sketchtastic"]

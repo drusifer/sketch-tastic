@@ -285,7 +285,7 @@ def _command(args: argparse.Namespace) -> int:
         else:
             text = coverage(args.sketch_path, args.profile, args.regression, args.limit)
     except (OSError, ValueError, RecursionError) as exc:
-        print(f"sketchtastic: {safe_text(exc)}", file=sys.stderr)
+        print(f"sketch: {safe_text(exc)}", file=sys.stderr)
         return 2
     print(text)
     return 0

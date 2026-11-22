@@ -17,7 +17,7 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 README = os.path.join(PACKAGE_ROOT, "README.md")
 
 
-def sketchtastic(*args, cwd=None, command="sketchtastic"):
+def sketch(*args, cwd=None, command="sketch"):
     return subprocess.run([command, *args], cwd=cwd, capture_output=True, text=True, timeout=60)
 
 
@@ -50,11 +50,9 @@ class InstalledCommandTests(unittest.TestCase):
     def test_version_matches_the_package_version(self):
         with open(os.path.join(PACKAGE_ROOT, "pyproject.toml"), "rb") as f:
             version = tomllib.load(f)["project"]["version"]
-        for command in ("sketchtastic", "skt"):  # the full name and the short alias
-            with self.subTest(command=command):
-                result = sketchtastic("--version", command=command)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.strip(), f"sketch-tastic {version}")
+        result = sketch("--version")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), f"sketch-tastic {version}")
 
 
 class ReadmeTests(unittest.TestCase):
@@ -99,7 +97,7 @@ class ReadmeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.run_quickstart(tmp)
             out_html = os.path.join(tmp, "dashboard.html")
-            result = sketchtastic("analyze", "app.sketch.yaml", "-o", out_html, cwd=tmp)
+            result = sketch("analyze", "app.sketch.yaml", "-o", out_html, cwd=tmp)
             self.assertEqual(result.returncode, 0, result.stderr)
             with open(out_html, encoding="utf-8") as f:
                 body = f.read()

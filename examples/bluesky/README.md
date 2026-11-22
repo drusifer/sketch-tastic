@@ -44,7 +44,7 @@ The profile also summarizes observations without adding identity fields:
 - `posted_at`: earliest/latest `createdAt` in UTC; these are post timestamps, not capture times.
   The profile also sets top-level `event_time: $.createdAt`, so each skit's built-in
   `meta.first_seen` and `meta.last_seen` track UTC post creation times directly (powering the
-  default *First / Last Seen (Event Time)* slider in `sketchtastic analyze`).
+  default *First / Last Seen (Event Time)* slider in `sketch analyze`).
 
 `meta.count` remains the built-in post count used for regression frequency weighting. `report`
 prints aggregate values below each kind; `show` also exposes them as sortable columns. Rebuild
