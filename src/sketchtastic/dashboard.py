@@ -295,7 +295,7 @@ tr.selected { background: rgba(88, 166, 255, 0.14); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#fields-table th, #fields-table td { padding: 6px 8px; font-size: 12px; }
+#fields-table th, #fields-table td, #aggs-table th, #aggs-table td { padding: 6px 8px; font-size: 12px; }
 #fields-table td:last-child { white-space: nowrap; }
 .muted { color: var(--muted); }
 .note {
@@ -766,6 +766,108 @@ _APP_JS = r"""
     });
   }
 
+  const HIST_MANTISSAS = [1.0, 1.5, 2.0, 3.0, 5.0, 7.0];
+
+  function isHistObj(v) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+    if (v.mode === "log") return v.bins && typeof v.bins === "object" && typeof v.count === "number";
+    if (v.mode === "fixed") {
+      return Array.isArray(v.bounds) && Array.isArray(v.counts) &&
+        typeof v.count === "number" && v.counts.length === v.bounds.length + 1;
+    }
+    return false;
+  }
+
+  function mergeHistStates(acc, next) {
+    if (!next || !next.count) return acc;
+    if (!acc) {
+      if (next.mode === "log") return { mode: "log", count: next.count, bins: Object.assign({}, next.bins) };
+      return { mode: "fixed", count: next.count, bounds: next.bounds.slice(), counts: next.counts.slice() };
+    }
+    if (acc.mode !== next.mode) return acc;
+    if (acc.mode === "log") {
+      acc.count += next.count;
+      for (const [k, cnt] of Object.entries(next.bins)) {
+        if (cnt > 0) acc.bins[k] = (Object.prototype.hasOwnProperty.call(acc.bins, k) ? acc.bins[k] : 0) + cnt;
+      }
+      return acc;
+    }
+    if (acc.bounds.length !== next.bounds.length || acc.bounds.some((b, i) => b !== next.bounds[i])) return acc;
+    acc.count += next.count;
+    for (let i = 0; i < acc.counts.length; i++) acc.counts[i] += next.counts[i];
+    return acc;
+  }
+
+  function fmtBinEdge(v) {
+    if (v === 0) return "0";
+    const mag = Math.abs(v);
+    const sign = v < 0 ? "-" : "";
+    for (const [scale, suffix] of [[1e9, "G"], [1e6, "M"], [1e3, "k"]]) {
+      if (mag >= scale) return sign + Number((mag / scale).toPrecision(4)) + suffix;
+    }
+    return String(Number(v.toPrecision(4)));
+  }
+
+  function logBinBounds(key) {
+    if (key === "0") return [0, 0];
+    const sign = key[0] === "+" ? 1 : -1;
+    const idx = Number(key.slice(1));
+    const n = HIST_MANTISSAS.length;
+    const exp = Math.floor(idx / n);
+    const step = idx - exp * n;
+    const scale = Math.pow(10, exp);
+    const loMag = Number((HIST_MANTISSAS[step] * scale).toPrecision(6));
+    const hiMag = Number(((step + 1 < n ? HIST_MANTISSAS[step + 1] : 10.0) * scale).toPrecision(6));
+    return sign > 0 ? [loMag, hiMag] : [-hiMag, -loMag];
+  }
+
+  function expandHistogram(h) {
+    if (!h || !h.count) return null;
+    const total = h.count;
+    let bins = [];
+    if (h.mode === "log") {
+      const rows = [];
+      for (const [k, cnt] of Object.entries(h.bins)) {
+        if (cnt > 0) {
+          const [lo, hi] = logBinBounds(k);
+          rows.push([lo, hi, cnt]);
+        }
+      }
+      rows.sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+      bins = rows.map(([lo, hi, cnt]) => ({
+        lo, hi,
+        label: (lo === 0 && hi === 0) ? "0" : (fmtBinEdge(lo) + "–" + fmtBinEdge(hi)),
+        count: cnt,
+        pct: (100 * cnt) / total
+      }));
+    } else {
+      bins = h.counts.map((cnt, idx) => {
+        const lo = idx === 0 ? null : h.bounds[idx - 1];
+        const hi = idx === h.bounds.length ? null : h.bounds[idx];
+        const label = lo === null ? ("≤" + fmtBinEdge(hi)) : (hi === null ? (">" + fmtBinEdge(lo)) : (fmtBinEdge(lo) + "–" + fmtBinEdge(hi)));
+        return { lo, hi, label, count: cnt, pct: (100 * cnt) / total };
+      });
+    }
+    const quantiles = {};
+    for (const [name, prob] of [["p50", 0.5], ["p90", 0.9], ["p95", 0.95], ["p99", 0.99]]) {
+      const rank = prob * total;
+      let cum = 0, est = null;
+      for (const b of bins) {
+        if (b.count <= 0) continue;
+        if (cum + b.count >= rank) {
+          const frac = Math.max(0, Math.min(1, (rank - cum) / b.count));
+          if (b.lo !== null && b.hi !== null) est = b.lo + frac * (b.hi - b.lo);
+          else if (b.lo === null && b.hi !== null) est = b.hi >= 0 ? frac * b.hi : b.hi;
+          else if (b.lo !== null) est = b.lo;
+          break;
+        }
+        cum += b.count;
+      }
+      quantiles[name] = est;
+    }
+    return { mode: h.mode, count: total, bins, quantiles };
+  }
+
   function isAvgObj(v) {
     return v && typeof v === "object" && !Array.isArray(v) &&
       Object.prototype.hasOwnProperty.call(v, "avg") &&
@@ -778,6 +880,7 @@ _APP_JS = r"""
     if (raw === null || raw === undefined) return { val: null, metric: "VALUE" };
     if (typeof raw === "number") return { val: raw, metric: "VALUE" };
     if (isAvgObj(raw)) return { val: raw.avg, metric: "AVG" };
+    if (isHistObj(raw)) return { val: null, metric: "HISTOGRAM" };
     if (typeof raw === "object" && !Array.isArray(raw)) {
       if (Object.prototype.hasOwnProperty.call(raw, "AVG") && isAvgObj(raw.AVG)) {
         return { val: raw.AVG.avg, metric: "AVG" };
@@ -796,6 +899,7 @@ _APP_JS = r"""
       let countTotal = 0, hasCount = false;
       let avgSum = 0, avgCount = 0, hasAvg = false;
       let gMin = null, gMax = null;
+      let histState = null;
       let metricName = meta.skit_stats ? meta.skit_stats.metric : "VALUE";
       const active = [];
 
@@ -819,12 +923,18 @@ _APP_JS = r"""
           hasAvg = true;
           if (raw.count > 0) { avgSum += raw.sum; avgCount += raw.count; }
           if (typeof raw.avg === "number") active.push({ id: s.id, count: s.count, value: raw.avg, tokens: s.tokens });
+        } else if (isHistObj(raw)) {
+          histState = mergeHistStates(histState, raw);
+          metricName = "HISTOGRAM";
         } else if (typeof raw === "object" && !Array.isArray(raw)) {
           if (typeof raw.SUM === "number") { sumTotal += raw.SUM; hasSum = true; }
           if (typeof raw.COUNT === "number") { countTotal += raw.COUNT; hasCount = true; }
           if (isAvgObj(raw.AVG)) {
             hasAvg = true;
             if (raw.AVG.count > 0) { avgSum += raw.AVG.sum; avgCount += raw.AVG.count; }
+          }
+          if (isHistObj(raw.HISTOGRAM)) {
+            histState = mergeHistStates(histState, raw.HISTOGRAM);
           }
           if (raw.MIN !== undefined && raw.MIN !== null) pushMin(raw.MIN);
           if (raw.MAX !== undefined && raw.MAX !== null) pushMax(raw.MAX);
@@ -856,7 +966,8 @@ _APP_JS = r"""
           median: plainMedian(nums)
         },
         all_values: nums,
-        outliers: active.slice(0, 15)
+        outliers: active.slice(0, 15),
+        histogram: expandHistogram(histState)
       };
     });
   }
@@ -1366,7 +1477,39 @@ _APP_JS = r"""
     destroyChart("agg");
     const canvas = document.getElementById("chart-agg");
     const empty = document.getElementById("agg-empty");
-    if (!agg || !agg.outliers.length) {
+    const qStrip = document.getElementById("agg-quantiles");
+    const btnEv = document.getElementById("agg-events");
+    const btnOut = document.getElementById("agg-outliers");
+    const btnHist = document.getElementById("agg-histogram");
+    const hasEvHist = Boolean(agg && agg.histogram && agg.histogram.bins.length);
+    if (btnEv) {
+      btnEv.disabled = !hasEvHist;
+      btnEv.title = hasEvHist ? "Per-event distribution merged from HISTOGRAM aggregate" : "Add HISTOGRAM to this aggregate in profile.yaml to enable";
+    }
+    if (qStrip) {
+      clear(qStrip);
+      if (hasEvHist) {
+        qStrip.style.display = "";
+        const h = agg.histogram;
+        qStrip.appendChild(el("span", { class: "badge ok" }, "Per-Event HISTOGRAM (" + h.mode + ") · " + fmtInt(h.count) + " values"));
+        for (const pKey of ["p50", "p90", "p95", "p99"]) {
+          if (h.quantiles[pKey] !== null && h.quantiles[pKey] !== undefined) {
+            qStrip.appendChild(el("span", { class: "badge" }, pKey + " ≈ " + fmtNum(h.quantiles[pKey])));
+          }
+        }
+      } else {
+        qStrip.style.display = "none";
+      }
+    }
+
+    const effectiveView = (hasEvHist && (state.aggView === "events" || !agg.outliers.length))
+      ? "events"
+      : (state.aggView === "events" ? "outliers" : state.aggView);
+    if (btnEv) btnEv.classList.toggle("active", effectiveView === "events");
+    if (btnOut) btnOut.classList.toggle("active", effectiveView === "outliers");
+    if (btnHist) btnHist.classList.toggle("active", effectiveView === "histogram");
+
+    if (!agg || (!agg.outliers.length && !hasEvHist)) {
       canvas.style.display = "none";
       empty.style.display = "";
       empty.textContent = agg ? "No numeric per-skit values for '" + agg.key + "' (" + agg.kind + ") in current filter." : "No aggregate selected.";
@@ -1376,7 +1519,63 @@ _APP_JS = r"""
     empty.style.display = "none";
     const tc = themeColors();
 
-    if (state.aggView === "histogram" && agg.all_values.length >= 2) {
+    if (effectiveView === "events" && hasEvHist) {
+      const h = agg.histogram;
+      let cum = 0;
+      const cumPcts = h.bins.map(b => { cum += b.count; return Number(((100 * cum) / h.count).toFixed(2)); });
+      state.charts.agg = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: {
+          labels: h.bins.map(b => b.label),
+          datasets: [
+            {
+              label: "Event values (" + agg.key + ")",
+              data: h.bins.map(b => b.count),
+              backgroundColor: tc.accent + "cc",
+              borderRadius: 4,
+              yAxisID: "y"
+            },
+            {
+              label: "Cumulative %",
+              data: cumPcts,
+              type: "line",
+              borderColor: tc.accent2,
+              backgroundColor: tc.accent2,
+              borderWidth: 2,
+              pointRadius: 2.5,
+              tension: 0.15,
+              yAxisID: "y1"
+            }
+          ]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            x: { ticks: { color: tc.muted, maxRotation: 40 }, grid: { color: tc.border + "44" } },
+            y: { beginAtZero: true, ticks: { color: tc.muted }, grid: { color: tc.border + "55" }, title: { display: true, text: "Event Values", color: tc.muted } },
+            y1: { beginAtZero: true, max: 100, position: "right", ticks: { color: tc.muted, callback: v => v + "%" }, grid: { drawOnChartArea: false }, title: { display: true, text: "Cumulative %", color: tc.muted } }
+          },
+          plugins: {
+            legend: { labels: { color: tc.text } },
+            tooltip: {
+              callbacks: {
+                afterLabel: ctx => {
+                  if (ctx.datasetIndex !== 0) return "";
+                  const b = h.bins[ctx.dataIndex];
+                  return b ? fmtPct(b.pct) + " of " + fmtInt(h.count) + " values" : "";
+                }
+              }
+            }
+          }
+        }
+      });
+      return;
+    }
+
+    if (effectiveView === "histogram" && agg.all_values.length >= 2) {
       const min = Math.min(...agg.all_values);
       const max = Math.max(...agg.all_values);
       const bins = Math.min(16, Math.max(4, Math.ceil(Math.sqrt(agg.all_values.length))));
@@ -1399,6 +1598,7 @@ _APP_JS = r"""
           datasets: [{ label: "Skits per bin (" + agg.key + " " + agg.skit_stats.metric + ")", data: counts, backgroundColor: tc.accent + "cc", borderRadius: 4 }]
         },
         options: {
+          animation: false,
           responsive: true,
           maintainAspectRatio: false,
           scales: {
@@ -2544,6 +2744,8 @@ _APP_JS = r"""
     document.getElementById("weight-skits").classList.toggle("active", state.weightMode === "skits");
     document.getElementById("agg-outliers").classList.toggle("active", state.aggView === "outliers");
     document.getElementById("agg-histogram").classList.toggle("active", state.aggView === "histogram");
+    const aggEv = document.getElementById("agg-events");
+    if (aggEv) aggEv.classList.toggle("active", state.aggView === "events");
     document.getElementById("sort-select").value = state.sortBy;
     document.getElementById("sort-dir").textContent = state.sortDir === "desc" ? "Desc" : "Asc";
     document.getElementById("toggle-all-tokens").checked = state.showAllTokens;
@@ -2632,7 +2834,7 @@ _APP_JS = r"""
       }
     }
     if (p.has("agg") && aggSet.has(p.get("agg"))) state.selectedAgg = p.get("agg");
-    if (p.has("av") && ["outliers", "histogram"].includes(p.get("av"))) state.aggView = p.get("av");
+    if (p.has("av") && ["outliers", "histogram", "events"].includes(p.get("av"))) state.aggView = p.get("av");
     if (p.has("sort")) {
       const sv = p.get("sort");
       if (["weight", "count", "first_seen", "last_seen"].includes(sv) || (sv.startsWith("agg:") && aggSet.has(sv.slice(4)))) {
@@ -2872,16 +3074,27 @@ _APP_JS = r"""
 
     const btnOut = document.getElementById("agg-outliers");
     const btnHist = document.getElementById("agg-histogram");
+    const btnEv = document.getElementById("agg-events");
     btnOut.addEventListener("click", () => {
       state.aggView = "outliers";
       btnOut.classList.add("active");
       btnHist.classList.remove("active");
+      btnEv.classList.remove("active");
       render();
     });
     btnHist.addEventListener("click", () => {
       state.aggView = "histogram";
       btnHist.classList.add("active");
       btnOut.classList.remove("active");
+      btnEv.classList.remove("active");
+      render();
+    });
+    btnEv.addEventListener("click", () => {
+      if (btnEv.disabled) return;
+      state.aggView = "events";
+      btnEv.classList.add("active");
+      btnOut.classList.remove("active");
+      btnHist.classList.remove("active");
       render();
     });
 
@@ -3252,24 +3465,26 @@ def render_dashboard(payload: dict[str, Any], title: str | None = None) -> str:
           <select id="agg-select" aria-label="Select aggregate"></select>
           <button id="agg-outliers" type="button" class="small active">Top Outliers</button>
           <button id="agg-histogram" type="button" class="small">Across-Skit Distribution</button>
+          <button id="agg-events" type="button" class="small">Per-Event Histogram</button>
         </div>
       </div>
       <div class="note">
-        <strong>Statistical scope:</strong> Global Min, Max, Sum, and Obs-Weighted Mean (<code>AVG.sum / AVG.count</code>) cover all observations in the filtered skits. Across-Skit Median and Mean summarize the per-skit metric across active skits (sketches do not retain raw per-event quantiles).
+        <strong>Statistical scope:</strong> Global Min, Max, Sum, and Obs-Weighted Mean (<code>AVG.sum / AVG.count</code>) cover all observations in the filtered skits. Across-Skit Median and Mean summarize the per-skit metric across active skits. Aggregates configured with <code>HISTOGRAM</code> also merge exact per-event bins and interpolated p50/p90/p95/p99 quantiles live.
       </div>
       <div class="table-wrap">
-        <table>
+        <table id="aggs-table">
           <thead>
             <tr>
-              <th>Aggregate</th><th>Kind</th><th class="num">Global Min</th><th class="num">Global Max</th>
-              <th class="num">Global Sum</th><th class="num">Obs-Weighted Mean</th>
-              <th class="num">Across-Skit Median</th><th class="num">Across-Skit Mean</th><th class="num">Active Skits</th>
+              <th>Aggregate</th><th>Kind</th><th class="num">Min</th><th class="num">Max</th>
+              <th class="num">Sum</th><th class="num">Obs Mean</th>
+              <th class="num">Skit Median</th><th class="num">Skit Mean</th><th class="num">Skits</th>
             </tr>
           </thead>
           <tbody id="aggs-tbody"></tbody>
         </table>
       </div>
-      <div class="chart-wrap" style="margin-top:14px">
+      <div id="agg-quantiles" class="cov-strip" style="margin-top:12px;display:none"></div>
+      <div class="chart-wrap" style="margin-top:10px">
         <canvas id="chart-agg"></canvas>
         <div id="agg-empty" class="empty-state" style="display:none"></div>
       </div>

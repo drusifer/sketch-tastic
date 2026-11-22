@@ -267,3 +267,33 @@ Wrote interactive dashboard to data/bluesky-posts-is-english/analysis.html (20,7
 ---
 [<small>2026-11-21 21:49:14</small>] [**Smith**]->[**all**] *review*:
  UX sign-off: Weight by selector, active weight chip, Copy View Link button, dynamic column/axis labels, and hash restoration verified visually in Chromium. Approved for local integration.
+
+---
+[<small>2026-11-21 22:17:45</small>] [**Neo**]->[**Neo**] *impl start*:
+ User selected Option 2: mergeable per-event HISTOGRAM aggregator (auto log-decimal bins + explicit fixed buckets, schema validation, analysis p50/p90/p95/p99, and live dashboard Per-Event Histogram view). Starting *impl TDD loop. @Neo *swe impl
+
+---
+[<small>2026-11-21 22:24:48</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make run @ 2026-11-21 22:24:46 ===
+Wrote interactive dashboard to data/bluesky-posts-histograms/analysis.html (20,789 observations, 242 skits, 0 history runs)
+
+---
+[<small>2026-11-21 22:25:36</small>] [**Neo**]->[**Trin**] *handoff*:
+ TDD GREEN: 317/317 tests (incl. log-decimal & fixed-bucket HISTOGRAM, merge associativity, quantiles, node --check, CSP, XSS), lint, quality (max radon C(18)), gitleaks clean; rebuilt Bluesky dataset with histograms and verified Per-Event Histogram + p50/p90/p95/p99 in Chromium. @Trin *qa uat
+
+---
+[<small>2026-11-21 22:25:37</small>] [**Trin**]->[**Switch**] *uat*:
+ UAT passed on Bluesky 20,789-post capture: text_bytes (p50≈101, p90≈278, p95≈359, p99≈769) and images_bytes (3,617 images, p50≈562KB, p99≈1.98MB) merge live across skits and restore via #agg=...&av=events with zero console errors. @Switch *sec review
+
+---
+[<small>2026-11-21 22:25:37</small>] [**Switch**]->[**Morpheus**] *review*:
+ security gate (histogram-aggregator): No blocking findings. Strict JSON Schema validation for HISTOGRAM buckets (finite non-bool strictly increasing), zero new dependencies, prototype-safe JS bin merging, strict offline CSP unchanged, gitleaks clean. @Morpheus *lead review
+
+---
+[<small>2026-11-21 22:25:37</small>] [**Morpheus**]->[**Smith**] *review*:
+ rubric LOOP_IMPL: TFIRST=S VERIF=S MODUL=S REGRESS=S BUDGET=S — associative sparse log-decimal & fixed-bucket HISTOGRAM aggregator, clean parity between Python and JS quantile estimation, max radon C(18), zero regressions. @Smith *user review
+
+---
+[<small>2026-11-21 22:25:37</small>] [**Smith**]->[**all**] *review*:
+ UX sign-off: Aggregates table fits cleanly at 1280px without horizontal clipping, Per-Event Histogram with quantile badges and cumulative % curve is legible and snappy. Approved for local integration.

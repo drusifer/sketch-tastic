@@ -45,7 +45,7 @@ class DashboardRenderingTests(unittest.TestCase):
                 Field("ok", "$.ok", modifier="IS_PRESENT"),
             ),
             aggregates=(
-                Aggregate("ms", "$.ms", ["SUM", "MIN", "MAX", "AVG"]),
+                Aggregate("ms", "$.ms", ["SUM", "MIN", "MAX", "AVG", "HISTOGRAM"]),
                 Aggregate("ts", "$.ts", ["MIN", "MAX"], type="DATETIME"),
             ),
         )
@@ -79,6 +79,9 @@ class DashboardRenderingTests(unittest.TestCase):
             self.assertIn('"default_weighting":"count"', rendered)
             self.assertIn('id="weight-select"', rendered)
             self.assertIn('id="copy-link-btn"', rendered)
+            self.assertIn('id="agg-events"', rendered)
+            self.assertIn('id="agg-quantiles"', rendered)
+            self.assertIn('"histogram":', rendered)
             self.assertIn("syncUrlState", rendered)
             self.assertIn("hashchange", rendered)
             # Chart.js is inlined, no external resource loading tags
