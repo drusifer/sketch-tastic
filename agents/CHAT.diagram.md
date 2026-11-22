@@ -113,4 +113,17 @@ sequenceDiagram
     Note right of Neo: "Owner requested changing<br/>CLI command from<br/>sketchtastic to sketch<br/>(keeping skt alias,<br/>distribution sketch-<br/>tastic and import<br/>sketchtastic unc…"
     Tank->>All: "devops sdlc"
     Note right of Tank: "SDLC update verified:<br/>CLI command renamed to<br/>sketch only<br/>(pyproject.toml,<br/>Makefile CLI,<br/>docs/SDLC.md). make<br/>install, lint, 317/317<br/>tests, 4…"
+    Note over User,Tank: 📅 2026-11-22
+    Neo->>Neo: "impl start"
+    Note right of Neo: "User requested simple<br/>streaming processing as<br/>events arrive with timed<br/>limit (--max-seconds)<br/>and count limit (--max-<br/>events) on sketch merge…"
+    Neo->>Trin: "handoff"
+    Note right of Neo: "TDD GREEN: 322/322 tests<br/>(incl. live open-pipe<br/>--max-events and --max-<br/>seconds tests + capture<br/>--output -), lint,<br/>quality (zero radon<br/>D/E/F)…"
+    Trin->>Switch: "uat"
+    Note right of Trin: "UAT passed: streaming<br/>stdin processes events<br/>line-by-line immediately<br/>without 5000-line head<br/>buffering, --max-events<br/>and --max-seconds stop…"
+    Switch->>Morpheus: "review"
+    Note right of Switch: "security gate<br/>(streaming-limits): No<br/>blocking findings.<br/>Finite positive<br/>validation on --max-<br/>events/--max-seconds,<br/>zero new deps, bounded<br/>40…"
+    Morpheus->>Smith: "review"
+    Note right of Morpheus: "rubric LOOP_IMPL:<br/>TFIRST=S VERIF=S MODUL=S<br/>REGRESS=S BUDGET=S —<br/>clean select+os.read<br/>pipe iterator avoids<br/>BufferedReader deadlock,<br/>batch pa…"
+    Smith->>All: "review"
+    Note right of Smith: "UX sign-off: simple Unix<br/>pipeline semantics<br/>(capture | sketch merge<br/>--max-seconds/--max-<br/>events) with clear stop-<br/>reason output. Approved<br/>for…"
 ```

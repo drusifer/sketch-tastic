@@ -13,9 +13,12 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import math
 import os
 import re
+import select
 import sys
+import time
 from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, date, datetime
 from multiprocessing import Process, Queue
@@ -53,13 +56,19 @@ example:
   # first run creates web.sketch.yaml; every later run merges into it
   sketch merge -p access_log.yaml -s web.sketch.yaml access_log.jsonl
 
-  # read events from a pipe
-  tail -n 1000 app.jsonl | sketch merge -p app.yaml -s app.sketch.yaml -
+  # read events from a live pipe, stopping after 60 seconds or 1000 events
+  tail -f app.jsonl | sketch merge -p app.yaml -s app.sketch.yaml --max-seconds 60 -
+  tail -f app.jsonl | sketch merge -p app.yaml -s app.sketch.yaml --max-events 1000 -
 
   # trial run: write the merged result elsewhere, leave the sketch untouched
   sketch merge -p app.yaml -s app.sketch.yaml -o /tmp/preview.yaml new.jsonl
 
 The SKETCH file is updated in place (atomically) unless --output is given.
+
+streaming & limits:
+  Reading from stdin ('-') or passing --max-events / --max-seconds folds events
+  line-by-line as they arrive and writes the sketch as soon as EOF or either
+  limit is reached.
 
 parallel:
   -j N folds batches of 5000 lines in N worker processes (default: all cores)
@@ -135,6 +144,16 @@ def _jobs(text: str) -> int:
     return jobs
 
 
+def _positive_seconds(text: str) -> float:
+    try:
+        seconds = float(text)
+    except ValueError:
+        seconds = 0.0
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise argparse.ArgumentTypeError(f"must be a finite number greater than 0, not {text!r}")
+    return seconds
+
+
 def _say(message: str) -> None:
     print(message, file=sys.stderr)
 
@@ -193,6 +212,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.process_cpu_count() or 1,
         metavar="N",
         help="worker processes (default: all cores, here %(default)s); 1 folds in-process",
+    )
+    merge.add_argument(
+        "--max-events",
+        type=_jobs,
+        default=None,
+        metavar="N",
+        help="stop reading after N valid events have been folded, then save the sketch",
+    )
+    merge.add_argument(
+        "--max-seconds",
+        type=_positive_seconds,
+        default=None,
+        metavar="SECONDS",
+        help="stop reading after SECONDS have elapsed, then save the sketch",
     )
     merge.add_argument(
         "--force-profile",
@@ -451,11 +484,68 @@ Folded = tuple[Sketch, dict, list[tuple[int, str]], "_Sequencer | None"]
 """What one fold returns: its run sketch, counts, its first warnings, its sequencer."""
 
 
+def _iter_timed_fd(fd: int, deadline: float, timed_out: list[bool]) -> Iterator[bytes]:
+    """Read complete lines from a non-seekable OS descriptor without exceeding `deadline`."""
+    buf = bytearray()
+    while True:
+        while (nl := buf.find(b"\n")) != -1:
+            if time.monotonic() >= deadline:
+                timed_out[0] = True
+                return
+            yield bytes(buf[: nl + 1])
+            del buf[: nl + 1]
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out[0] = True
+            return
+        ready, _, _ = select.select([fd], [], [], remaining)
+        if not ready:
+            timed_out[0] = True
+            return
+        chunk = os.read(fd, 4096)
+        if not chunk:
+            if buf and time.monotonic() < deadline:
+                yield bytes(buf)
+            return
+        buf.extend(chunk)
+
+
+def _pipe_fd(stream: Any) -> int | None:
+    """Return an OS fd for a non-seekable stream (like a pipe/stdin), else None."""
+    try:
+        if stream.seekable():
+            return None
+        return stream.fileno()
+    except AttributeError, OSError, ValueError:
+        return None
+
+
+def _iter_stream_lines(
+    stream: Any, deadline: float | None, timed_out: list[bool]
+) -> Iterator[bytes | str]:
+    """Yield lines immediately as they arrive, respecting an optional monotonic deadline."""
+    if deadline is not None:
+        fd = _pipe_fd(stream)
+        if fd is not None:
+            yield from _iter_timed_fd(fd, deadline, timed_out)
+            return
+    while True:
+        if deadline is not None and time.monotonic() >= deadline:
+            timed_out[0] = True
+            return
+        line = stream.readline()
+        if not line:
+            return
+        yield line
+
+
 def _fold_lines(
     numbered_lines: Iterable[tuple[int, bytes | str]],
     profile: Profile,
     run_id: str,
     sequencer: _Sequencer | None,
+    *,
+    max_events: int | None = None,
 ) -> Folded:
     """Fold `(line number, JSONL line)` pairs into a new run sketch, recording `run_id`.
 
@@ -464,6 +554,7 @@ def _fold_lines(
     """
     run = Sketch(profile.aggregates, profile.profile_id)
     events = skipped_lines = 0
+    stop_reason: str | None = None
     warnings: list[tuple[int, str]] = []
 
     def skip(lineno: int, reason: str) -> None:
@@ -493,15 +584,20 @@ def _fold_lines(
                 "  nothing written: the profile declares a sequence, so every event needs one"
             )
         events += 1
-        if sequence is DROP:
-            continue
-        if profile.event_time is not None:
-            event_time, unusable = profile.extract_event_time(event)
-            run.skipped_values += int(unusable)
-            run.upsert(profile.tokens(event), event, run_id, seen=event_time)
-        else:
-            run.upsert(profile.tokens(event), event, run_id)
-    return run, {"events": events, "skipped_lines": skipped_lines}, warnings, sequencer
+        if sequence is not DROP:
+            if profile.event_time is not None:
+                event_time, unusable = profile.extract_event_time(event)
+                run.skipped_values += int(unusable)
+                run.upsert(profile.tokens(event), event, run_id, seen=event_time)
+            else:
+                run.upsert(profile.tokens(event), event, run_id)
+        if max_events is not None and events >= max_events:
+            stop_reason = "max_events"
+            break
+    counts: dict[str, Any] = {"events": events, "skipped_lines": skipped_lines}
+    if stop_reason is not None:
+        counts["stop_reason"] = stop_reason
+    return run, counts, warnings, sequencer
 
 
 _BATCH_LINES = 5000
@@ -584,37 +680,58 @@ def _fold_parallel(
 
 
 def _fold_stream(
-    stream: Iterable[str],
+    stream: Any,
     profile: Profile,
     run_id: str,
     sequencer: _Sequencer | None,
     jobs: int = 1,
+    *,
+    streaming: bool = False,
+    max_events: int | None = None,
+    max_seconds: float | None = None,
 ) -> tuple[Sketch, dict]:
     """Fold a JSONL stream into this run's sketch, in-process or on `jobs` workers.
 
-    Worker results are merged as they complete: counts, aggregates, run ids and the sequence
-    range are exact; FIRST/LAST samples come from matching events, not necessarily the first
-    or last. Warnings are printed in line order. Returns the run sketch and run statistics.
+    Streaming mode (stdin or when `--max-events`/`--max-seconds` is given) folds each line
+    immediately as it arrives without buffering a full batch up front. Worker results are
+    merged as they complete: counts, aggregates, run ids and the sequence range are exact;
+    FIRST/LAST samples come from matching events, not necessarily the first or last.
     """
-    numbered = enumerate(stream, start=1)
-    head = list(itertools.islice(numbered, _BATCH_LINES + 1))
-    lines = itertools.chain(head, numbered)
-    if jobs == 1 or len(head) <= _BATCH_LINES:
-        parts = [_fold_lines(lines, profile, run_id, sequencer)]
+    timed_out = [False]
+    if streaming or max_events is not None or max_seconds is not None:
+        deadline = time.monotonic() + max_seconds if max_seconds is not None else None
+        numbered = enumerate(_iter_stream_lines(stream, deadline, timed_out), start=1)
+        parts: Iterable[Folded] = [
+            _fold_lines(numbered, profile, run_id, sequencer, max_events=max_events)
+        ]
     else:
-        parts = _fold_parallel(lines, profile, run_id, sequencer, jobs)
+        numbered = enumerate(stream, start=1)
+        head = list(itertools.islice(numbered, _BATCH_LINES + 1))
+        lines = itertools.chain(head, numbered)
+        if jobs == 1 or len(head) <= _BATCH_LINES:
+            parts = [_fold_lines(lines, profile, run_id, sequencer)]
+        else:
+            parts = _fold_parallel(lines, profile, run_id, sequencer, jobs)
     run: Sketch | None = None
-    stats = {"events": 0, "skipped_lines": 0}
+    stats: dict[str, Any] = {"events": 0, "skipped_lines": 0}
+    stop_reason: str | None = None
     warnings: list[tuple[int, str]] = []
     for part, counts, part_warnings, part_sequencer in parts:
         if run is None:
             run = part  # the first fold is the run; later ones merge into it
         else:
             run.merge(part)
-        stats = {key: stats[key] + counts[key] for key in stats}
+        stats["events"] += counts["events"]
+        stats["skipped_lines"] += counts["skipped_lines"]
+        if counts.get("stop_reason"):
+            stop_reason = counts["stop_reason"]
         warnings += part_warnings
         if sequencer and part_sequencer is not sequencer:
             sequencer.absorb(part_sequencer)
+    if stop_reason is None and timed_out[0]:
+        stop_reason = "max_seconds"
+    if stop_reason is not None:
+        stats["stop_reason"] = stop_reason
     for lineno, reason in sorted(warnings)[:_MAX_LINE_WARNINGS]:
         _say(f"sketch: line {lineno}: {reason} - skipped")
     if stats["skipped_lines"] > _MAX_LINE_WARNINGS:
@@ -709,6 +826,8 @@ def _write_history(
     }
     if stats.get("sequence"):
         run.run["sequence"] = stats["sequence"]
+    if stats.get("stop_reason"):
+        run.run["stop_reason"] = stats["stop_reason"]
     directory = _history_dir(args.sketch_path)
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, f"{run_id}.yaml")
@@ -737,6 +856,10 @@ def _report(
         mark = stats["mark"]
         since = "no earlier mark" if mark is None else f"sequence ≤ {mark}"
         _say(f"  dropped: {stats['dropped']} events already merged ({since})")
+    if stats.get("stop_reason") == "max_events":
+        _say(f"  stopped: reached --max-events {args.max_events}")
+    elif stats.get("stop_reason") == "max_seconds":
+        _say(f"  stopped: reached --max-seconds {args.max_seconds:g}")
     _say(f"  {verb} {destination} (profile {profile.profile_id})")
     if args.output:
         _say(f"  {args.sketch_path} left unchanged")
@@ -765,7 +888,16 @@ def _cmd_merge(args: argparse.Namespace) -> int:
         sketch.last_run = run_id
         sequencer = _sequencer(profile, sketch)
         with _open_events(args) as stream:
-            run, stats = _fold_stream(stream, profile, run_id, sequencer, args.jobs)
+            run, stats = _fold_stream(
+                stream,
+                profile,
+                run_id,
+                sequencer,
+                args.jobs,
+                streaming=args.events == "-",
+                max_events=args.max_events,
+                max_seconds=args.max_seconds,
+            )
         known_before = set(sketch)
         sketch.merge(run)  # fold once, into the run; merge it once
         stats["new"] = len(set(run) - known_before)

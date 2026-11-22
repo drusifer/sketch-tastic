@@ -1045,3 +1045,122 @@ class ParallelMergeTests(CliTestCase):
                 )
                 self.assertEqual(code, 2)
                 self.assertIn("must be a whole number of at least 1", err)
+
+
+class StreamingLimitTests(CliTestCase):
+    """Streaming input processes events as they arrive and stops at --max-events / --max-seconds."""
+
+    def test_max_events_stops_after_n_valid_events_ignoring_malformed_lines(self):
+        lines = [
+            "not json",
+            json.dumps({"kind": "a", "size": 10}),
+            json.dumps({"kind": "b", "size": 20}),
+            json.dumps({"kind": "c", "size": 30}),
+            json.dumps({"kind": "d", "size": 40}),
+        ]
+        path = self.write("stream.jsonl", "\n".join(lines) + "\n")
+        code, _, err = self.fingerprint(path, "--max-events", "2")
+        self.assertEqual(code, 1)  # 1 malformed line skipped, 2 valid events read
+        self.assertIn("2 events read", err)
+        self.assertIn("stopped: reached --max-events 2", err)
+        data = self.load_set()
+        self.assertEqual(sum(r["meta"]["count"] for r in data["skits"].values()), 2)
+        kinds = {r["tokens"]["kind"] for r in data["skits"].values()}
+        self.assertEqual(kinds, {"a", "b"})
+
+    def test_live_pipe_stops_at_max_events_without_waiting_for_eof(self):
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "sketchtastic",
+                "merge",
+                "-p",
+                self.profile,
+                "-s",
+                self.sketch_path,
+                "--max-events",
+                "2",
+                "-",
+            ],
+            cwd=PACKAGE_ROOT,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
+        try:
+            proc.stdin.write(b'{"kind": "a", "size": 1}\n{"kind": "b", "size": 2}\n')
+            proc.stdin.flush()
+            # Keep stdin open (no EOF!) — sketch must exit on its own once 2 events arrive.
+            proc.wait(timeout=5)
+            out, err = proc.stdout.read(), proc.stderr.read()
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            proc.stdin.close()
+            proc.stdout.close()
+            proc.stderr.close()
+        self.assertEqual(proc.returncode, 0, err.decode())
+        self.assertEqual(out, b"")
+        self.assertIn("stopped: reached --max-events 2", err.decode())
+        data = self.load_set()
+        self.assertEqual(sum(r["meta"]["count"] for r in data["skits"].values()), 2)
+
+    def test_live_pipe_stops_at_max_seconds_during_idle_pause(self):
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "sketchtastic",
+                "merge",
+                "-p",
+                self.profile,
+                "-s",
+                self.sketch_path,
+                "--max-seconds",
+                "0.35",
+                "-",
+            ],
+            cwd=PACKAGE_ROOT,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert proc.stdin is not None and proc.stdout is not None and proc.stderr is not None
+        try:
+            proc.stdin.write(b'{"kind": "a", "size": 5}\n{"kind": "a", "size": 7}\n')
+            proc.stdin.flush()
+            # Producer stays idle without closing pipe; timed limit must stop cleanly.
+            proc.wait(timeout=5)
+            out, err = proc.stdout.read(), proc.stderr.read()
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            proc.stdin.close()
+            proc.stdout.close()
+            proc.stderr.close()
+        self.assertEqual(proc.returncode, 0, err.decode())
+        self.assertEqual(out, b"")
+        self.assertIn("2 events read from stdin", err.decode())
+        self.assertIn("stopped: reached --max-seconds", err.decode())
+        data = self.load_set()
+        self.assertEqual(sum(r["meta"]["count"] for r in data["skits"].values()), 2)
+
+    def test_invalid_limits_are_rejected(self):
+        events = self.write_events("e.jsonl", EVENTS[:2])
+        for flag, bad in (
+            ("--max-events", "0"),
+            ("--max-events", "-3"),
+            ("--max-events", "nope"),
+            ("--max-seconds", "0"),
+            ("--max-seconds", "-1.5"),
+            ("--max-seconds", "nan"),
+            ("--max-seconds", "inf"),
+        ):
+            with self.subTest(flag=flag, bad=bad):
+                code, _, err = self.fingerprint(events, flag, bad)
+                self.assertEqual(code, 2)
+                self.assertTrue(err)
