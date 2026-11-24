@@ -2,26 +2,23 @@
 
 ## Context
 ### Recent Decisions
-- 2026-11-23: Sprint 8 Phase 1 security review **PASSED** (`security gate (phase 1): No blocking findings`).
-- All 5 non-blocking hardening items (`SEC-S8-01`..`SEC-S8-05`: skip symlinks in `_load_history`, validate `skits` is a `dict` in `Sketch.load_data`, strict `type(version) is int`, `_json_safe` for `bytes`/`set`, `Path(filename).name` + `type(...) is int` in `_load_run_file`) were adopted cleanly by Neo before Phase 1 commit.
-
-### Key Findings
-- `.githooks/pre-commit`, `Makefile` security targets, `CSafeLoader`, atomic `os.link`/`os.replace` no-symlink publication, and `safe_text` escaping all verified clean; 0 gitleaks findings.
+- 2026-11-23: Phase 2 initial security review blocked on `SEC-S8-06` (High: sequential `.replace()` placeholder injection in `dashboard.py`) and logged Low/Info `SEC-S8-07`/`SEC-S8-08`.
+- 2026-11-23: Re-reviewed Neo's fix: single-pass `_PLACEHOLDER_RE.sub(lambda m: replacements[m.group(0)], ...)` eliminates second-order expansion; regression test `test_placeholder_tokens_in_title_metadata_and_payload_are_not_expanded` passes; `SEC-S8-07` (`Object.create(null)` + `hasOwnProperty`) and `SEC-S8-08` (`base-uri 'none'; form-action 'none';` + `</style` check) applied; gitleaks 0 leaks. Cleared: `security gate (phase 2): No blocking findings`.
 
 ## Current Task
-**Status:** Phase 1 security gate passed; awaiting Phase 2 security review (`*sec review phase-2`).
+**Status:** Phase 2 security gate cleared; awaiting Phase 3 security review (`*sec review phase-3`).
 **Assigned to:** Switch (`*sec`)
 **Started:** 2026-11-23
 
 ### Progress
 - [x] Design Gate 2b passed
-- [x] Phase 1 security gate passed (and all 5 Low/Info hardening items fixed)
-- [ ] Phase 2 security gate (`STORY-SKT-17`)
+- [x] Phase 1 security gate passed
+- [x] Phase 2 security gate passed (after catching & verifying fix for `SEC-S8-06`)
 - [ ] Phase 3 security gate (`STORY-SKT-18`)
 
 ## Next Steps
 ### Immediate Next Action
-Audit Phase 2 diff (`dashboard.py` + `src/sketchtastic/assets/dashboard/*`) for fixed asset allowlist, zero `</script`, strict offline CSP, XSS/prototype guards, and Chart.js SHA-256.
+Audit Phase 3 diff (`cli.py`, `aggregators.py`, `tests/`) and verify full `bobp make security-scan`.
 
 ---
-*Last updated: 2026-11-23T23:32:00-05:00*
+*Last updated: 2026-11-23T23:47:00-05:00*

@@ -228,7 +228,46 @@ sequenceDiagram
     autonumber
     participant Mouse
     participant All
-    Note over Mouse,All: 📅 2026-11-23
+    participant Neo
+    participant Trin
+    participant Switch
+    participant Morpheus
+    Note over Mouse,Morpheus: 📅 2026-11-23
     Mouse->>All: "phase 2"
     Note right of Mouse: "Phase 2: Extract<br/>dashboard.py CSS/HTML/JS<br/>monolith into modular<br/>static assets under src/<br/>sketchtastic/assets/dash<br/>board/ with direct node<br/>uni…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 2 impl complete:<br/>extracted dashboard.py<br/>(3,582L -> 83L) into src<br/>/sketchtastic/assets/das<br/>hboard/* (styles.css,<br/>template.html, 8 modula…"
+    Trin->>Switch: "qa handoff"
+    Note right of Trin: "UAT phase 2 initial pass<br/>on modular<br/>assets/dashboard/* and<br/>node stats.js tests<br/>(flagged sequential<br/>.replace, SVG_NS in<br/>explorer.js, standal…"
+    Switch->>Neo: "sec reject"
+    Note right of Switch: "security gate (phase 2):<br/>Blocked SEC-S8-06 (High:<br/>sequential .replace() in<br/>dashboard.py allows<br/>second-order placeholder<br/>injection of __APP_…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Fixed SEC-S8-06 (single-<br/>pass _PLACEHOLDER_RE.sub<br/>in dashboard.py +<br/>regression test),<br/>SEC-S8-07<br/>(Object.create(null)<br/>bins + hasOwnProperty o…"
+    Trin->>Switch: "qa handoff"
+    Note right of Trin: "UAT phase 2 re-verified<br/>and passed: 9/9<br/>test_dashboard (incl.<br/>placeholder-injection<br/>regression, zero dup JS<br/>fns, node stats.js unit<br/>tests),…"
+    Switch->>Morpheus: "sec handoff"
+    Note right of Switch: "Re-verified dashboard.py<br/>single-pass<br/>_PLACEHOLDER_RE.sub, CSP<br/>base-uri/form-action,<br/>prototype guards,<br/>Chart.js SHA-256, and<br/>gitleaks (0 lea…"
+    Morpheus->>Neo: "lead handoff"
+    Note right of Morpheus: "Phase 2 review passed:<br/>dashboard.py 3,582L -><br/>83L, pure DOM-free<br/>stats.js with direct<br/>node tests, clean JS<br/>monolith decomposition,<br/>SVG_NS &…"
+```
+
+## Phase 2 close-out
+
+- **Trin**: UAT phase 2 re-verified and passed: 9/9 test\_dashboard (incl. placeholder-injection regression, zero dup JS fns, node stats.js unit tests),…
+- **Switch**: Re-verified dashboard.py single-pass \_PLACEHOLDER\_RE.sub, CSP base-uri/form-action, prototype guards, Chart.js SHA-256, and gitleaks (0 lea…
+- **Morpheus**: Phase 2 review passed: dashboard.py 3,582L -&gt; 83L, pure DOM-free stats.js with direct node tests, clean JS monolith decomposition, SVG\_NS &amp;…
+
+## Phase 3 starts
+
+Phase 3: Decompose cli.py merge pipeline and aggregators.py histogram helpers to &lt;= radon B / 0 extended ruff, and retire legacy fid/wh/fin…
+
+```mermaid
+%%{init: {"sequence": {"messageFontSize": 14, "noteFontSize": 18, "actorFontSize": 14}}}%%
+sequenceDiagram
+    autonumber
+    participant Mouse
+    participant All
+    Note over Mouse,All: 📅 2026-11-23
+    Mouse->>All: "phase 3"
+    Note right of Mouse: "Phase 3: Decompose<br/>cli.py merge pipeline<br/>and aggregators.py<br/>histogram helpers to <=<br/>radon B / 0 extended<br/>ruff, and retire legacy<br/>fid/wh/fin…"
 ```

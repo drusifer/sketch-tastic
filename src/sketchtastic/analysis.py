@@ -183,7 +183,7 @@ def _inspect_single_entry(
     if is_histogram_state(raw):
         _record_fn(functions, fn_seen, "HISTOGRAM")
         kinds.add("numeric")
-        return None, None
+        return "HISTOGRAM", None
     _record_fn(functions, fn_seen, "VALUE")
     kind = _classify_scalar(raw)
     if kind:
@@ -224,7 +224,6 @@ def _describe_aggregate(
         "kind": kind,
         "functions": functions,
         "metric": metric_name,
-        "skit_stats": {"metric": metric_name},
     }
     axis = None
     if kind in ("datetime", "date") and time_pairs:
@@ -485,6 +484,14 @@ def _resolve_history_dir(sketch_path: Path | str, history_dir: Path | str | None
     return directory if directory.is_dir() else None
 
 
+def _iter_history_yaml(directory: Path) -> list[Path]:
+    return [
+        entry
+        for entry in sorted(directory.iterdir(), key=lambda p: p.name)
+        if not entry.is_symlink() and entry.is_file() and entry.suffix.lower() in (".yaml", ".yml")
+    ]
+
+
 def _load_history(
     sketch_path: Path | str, history_dir: Path | str | None
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
@@ -495,12 +502,7 @@ def _load_history(
 
     warnings: list[str] = []
     loaded: list[tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, str]]]]] = []
-    yaml_entries = (
-        entry
-        for entry in sorted(directory.iterdir(), key=lambda p: p.name)
-        if not entry.is_symlink() and entry.is_file() and entry.suffix.lower() in (".yaml", ".yml")
-    )
-    for entry in yaml_entries:
+    for entry in _iter_history_yaml(directory):
         try:
             loaded.append(_load_run_file(entry))
         except (OSError, SketchError, ValueError, TypeError) as exc:

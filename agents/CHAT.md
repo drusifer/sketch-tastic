@@ -553,3 +553,55 @@ OK
 ---
 [<small>2026-11-23 23:32:42</small>] [**Mouse**]->[**all**] *phase 2*:
  Phase 2: Extract dashboard.py CSS/HTML/JS monolith into modular static assets under src/sketchtastic/assets/dashboard/ with direct node unit tests for stats.js.
+
+---
+[<small>2026-11-23 23:39:23</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make run @ 2026-11-23 23:39:22 ===
+Wrote interactive dashboard to data/bluesky-posts-multi-lang/analysis-s8.html (20,789 observations, 172 skits, 0 history runs)
+
+---
+[<small>2026-11-23 23:39:23</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Phase 2 impl complete: extracted dashboard.py (3,582L -> 83L) into src/sketchtastic/assets/dashboard/* (styles.css, template.html, 8 modular JS files), made stats.js 100% pure with direct node unit tests in test_dashboard.py (7/7 OK), dropped analysis.py skit_stats shim & radon C(11), verified live Bluesky dashboard generation, lint & gitleaks clean. @Trin *qa uat phase-2
+
+---
+[<small>2026-11-23 23:46:51</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+11:46PM INF 117 commits scanned.
+11:46PM INF scanned ~2950953 bytes (2.95 MB) in 854ms
+11:46PM INF no leaks found
+
+---
+[<small>2026-11-23 23:47:49</small>] [**Trin**]->[**Switch**] *qa handoff*:
+ UAT phase 2 initial pass on modular assets/dashboard/* and node stats.js tests (flagged sequential .replace, SVG_NS in explorer.js, standalone HISTOGRAM metric, and wheel smoke). @Switch *sec review phase-2
+
+---
+[<small>2026-11-23 23:47:49</small>] [**Switch**]->[**Neo**] *sec reject*:
+ security gate (phase 2): Blocked SEC-S8-06 (High: sequential .replace() in dashboard.py allows second-order placeholder injection of __APP_JS__/__CHARTJS__/__DATA_JSON__/__CSS__ from untrusted payload/title; plus Low/Info SEC-S8-07/08). Proposed single-pass re.sub fix. @Neo *swe fix SEC-S8-06
+
+---
+[<small>2026-11-23 23:47:49</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Fixed SEC-S8-06 (single-pass _PLACEHOLDER_RE.sub in dashboard.py + regression test), SEC-S8-07 (Object.create(null) bins + hasOwnProperty on aggregates), SEC-S8-08 (base-uri/form-action CSP + </style check), moved SVG_NS to core.js, and fixed standalone HISTOGRAM metric. 9/9 test_dashboard, 4/4 wheel smoke, lint, gitleaks pass. @Trin *qa uat phase-2
+
+---
+[<small>2026-11-23 23:47:49</small>] [**Trin**]->[**Switch**] *qa handoff*:
+ UAT phase 2 re-verified and passed: 9/9 test_dashboard (incl. placeholder-injection regression, zero dup JS fns, node stats.js unit tests), 4/4 wheel smoke (assets/dashboard/* bundled), 0 extended ruff / 0 radon C+ on Phase 1+2. @Switch *sec review phase-2
+
+---
+[<small>2026-11-23 23:47:49</small>] [**Switch**]->[**Morpheus**] *sec handoff*:
+ Re-verified dashboard.py single-pass _PLACEHOLDER_RE.sub, CSP base-uri/form-action, prototype guards, Chart.js SHA-256, and gitleaks (0 leaks). security gate (phase 2): No blocking findings. @Morpheus *lead review phase-2
+
+---
+[<small>2026-11-23 23:47:49</small>] [**Morpheus**]->[**Neo**] *lead handoff*:
+ Phase 2 review passed: dashboard.py 3,582L -> 83L, pure DOM-free stats.js with direct node tests, clean JS monolith decomposition, SVG_NS & SEC-S8-06..08 fixed. Committing Phase 2. @Neo *swe impl phase-3
+
+---
+[<small>2026-11-23 23:47:49</small>] [**Mouse**]->[**all**] *phase 3*:
+ Phase 3: Decompose cli.py merge pipeline and aggregators.py histogram helpers to <= radon B / 0 extended ruff, and retire legacy fid/wh/fingerprint internal identifiers.
