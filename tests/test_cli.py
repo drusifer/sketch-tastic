@@ -491,7 +491,7 @@ class AtomicWriteTests(CliTestCase):
             before = f.read()
 
         with mock.patch(
-            "sketchtastic.sketch.os.replace",
+            "os.replace",
             side_effect=OSError(28, "No space left on device"),
         ):
             code, _, err = self.fingerprint(self.write_events("run2.jsonl", EVENTS[3:]))

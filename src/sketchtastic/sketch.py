@@ -11,16 +11,16 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import os
-import tempfile
 from dataclasses import asdict, dataclass, field
 from functools import cache
 from importlib.resources import files
+from pathlib import Path
 from typing import Any, Iterator, Sequence
 
 import yaml
 
 from sketchtastic import _yaml
+from sketchtastic._io import atomic_replace_file, is_number
 from sketchtastic.aggregators import Aggregate
 from sketchtastic.model import MISSING
 
@@ -120,16 +120,16 @@ class Sketch:
         The sketch keeps references, not copies: FIRST and LAST store `record` (or parts of
         it) as given, so the caller must not modify `record` afterwards.
         """
-        fid = skit_id(tokens)
-        skit = self._records.get(fid)
+        sid = skit_id(tokens)
+        skit = self._records.get(sid)
         if skit is None:
-            skit = self._records[fid] = self._new_skit(tokens)
+            skit = self._records[sid] = self._new_skit(tokens)
         seen_value = run if seen is MISSING else seen
         sample = {"meta": {"run": run}, "record": record}
         envelope = {"meta": {"run": run, "seen": seen_value}, "sample": sample}
         self.skipped_values += _fold(self._aggregates, skit.aggregates, record)
         _fold(builtin_aggregates(), skit.meta, envelope)
-        return fid
+        return sid
 
     def merge(self, later: Sketch) -> None:
         """Fold `later` (a sketch of events that came after this one's) into this sketch.
@@ -141,16 +141,16 @@ class Sketch:
         """
         if later._aggregates != self._aggregates:
             raise SketchError("cannot merge sketches with different aggregates")
-        for fid, skit in later._records.items():
-            skit = copy.deepcopy(skit)
-            mine = self._records.get(fid)
+        for sid, skit in later._records.items():
+            copied = copy.deepcopy(skit)
+            mine = self._records.get(sid)
             if mine is None:
-                self._records[fid] = skit
+                self._records[sid] = copied
                 continue
             for aggregate in self._aggregates:
-                aggregate.merge(mine.aggregates, skit.aggregates)
+                aggregate.merge(mine.aggregates, copied.aggregates)
             for aggregate in builtin_aggregates():
-                aggregate.merge(mine.meta, skit.meta)
+                aggregate.merge(mine.meta, copied.meta)
         self.skipped_values += later.skipped_values
 
     def _new_skit(self, tokens: dict[str, str], stored: Skit | None = None) -> Skit:
@@ -197,7 +197,7 @@ class Sketch:
         values = []
         for record in self._records.values():
             value = aggregate.value(getattr(record, section), function)
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if is_number(value):
                 values.append((record, value))
         total = sum(value for _, value in values)
         if not total:
@@ -212,26 +212,36 @@ class Sketch:
         Each record's `share` is recomputed first, so it describes the sketch as written.
         """
         self._compute_shares()
-        data = {"version": SKETCH_VERSION, "profile_id": self.profile_id}
+        data: dict[str, Any] = {"version": SKETCH_VERSION, "profile_id": self.profile_id}
         if self.last_run is not None:
             data["last_run"] = self.last_run
         if self.sequence is not None:
             data["sequence"] = self.sequence
         if self.run is not None:
             data["run"] = self.run
-        data["skits"] = {fid: asdict(rec) for fid, rec in self._records.items()}
-        directory = os.path.dirname(os.path.abspath(path))
-        fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".sketch-", suffix=".tmp")
+        data["skits"] = {sid: asdict(rec) for sid, rec in self._records.items()}
+        # Insertion order, not alphabetical: header first, and each record leads with tokens.
+        atomic_replace_file(path, ".sketch-", lambda stream: _yaml.dump(data, stream))
+
+    def load_data(self, data: dict[str, Any], path: str, *, force: bool = False) -> None:
+        """Populate this sketch from an already-parsed sketch mapping."""
+        stored_profile = data.get("profile_id")
+        if (
+            not force
+            and None not in (stored_profile, self.profile_id)
+            and stored_profile != self.profile_id
+        ):
+            raise ProfileMismatchError(path, stored_profile, self.profile_id)
+        self.last_run = data.get("last_run")
+        self.sequence = data.get("sequence")
+        skits_raw = data["skits"] or {}
+        if not isinstance(skits_raw, dict):
+            raise SketchError(f"{path} has a malformed 'skits' mapping")
         try:
-            with os.fdopen(fd, "w") as f:
-                # Insertion order, not alphabetical: header first, and each record
-                # leads with the tokens that explain its ID.
-                _yaml.dump(data, f)
-            os.replace(tmp_path, path)
-        except BaseException:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-            raise
+            stored = {sid: Skit(**rec) for sid, rec in skits_raw.items()}
+            self._records = {sid: self._new_skit(rec.tokens, rec) for sid, rec in stored.items()}
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise SketchError(f"{path} has a malformed skit entry: {exc}") from exc
 
     def load(self, path: str, *, force: bool = False) -> None:
         """Replace the in-memory sketch with the one stored at `path`.
@@ -240,32 +250,67 @@ class Sketch:
         than this sketch was created with, unless `force` is set (the file's
         skits are then adopted under the current profile).
         """
-        data = _read_set_file(path)
-        stored = data.get("profile_id")
-        if not force and None not in (stored, self.profile_id) and stored != self.profile_id:
-            raise ProfileMismatchError(path, stored, self.profile_id)
-        self.last_run = data.get("last_run")
-        self.sequence = data.get("sequence")
-        try:
-            stored = {fid: Skit(**rec) for fid, rec in (data["skits"] or {}).items()}
-            self._records = {fid: self._new_skit(rec.tokens, rec) for fid, rec in stored.items()}
-        except TypeError as exc:
-            raise SketchError(f"{path} has a malformed skit entry: {exc}") from exc
+        self.load_data(read_sketch_file(path), path, force=force)
 
 
-def _read_set_file(path: str) -> dict:
-    """Read a sketch file and check its header. An empty file is an empty sketch."""
+def read_sketch_file(path: Path | str) -> dict[str, Any]:
+    """Read a sketch file once and check its header. An empty file is an empty sketch."""
+    text_path = str(path)
     try:
-        with open(path) as f:
+        with open(text_path, encoding="utf-8") as f:
             data = _yaml.load(f)
     except yaml.YAMLError as exc:
-        raise SketchError(f"{path} is not valid YAML: {exc}") from exc
+        raise SketchError(f"{text_path} is not valid YAML: {exc}") from exc
     if data is None:
         return {"version": SKETCH_VERSION, "profile_id": None, "skits": {}}
     if not isinstance(data, dict) or "skits" not in data or "version" not in data:
-        raise SketchError(f"{path} is not a sketch (expected top-level 'version' and 'skits')")
-    if data["version"] != SKETCH_VERSION:
+        raise SketchError(f"{text_path} is not a sketch (expected top-level 'version' and 'skits')")
+    if type(data["version"]) is not int or data["version"] != SKETCH_VERSION:
         raise SketchError(
-            f"{path} is sketch version {data['version']}; this tool reads version {SKETCH_VERSION}"
+            f"{text_path} is sketch version {data['version']}; "
+            f"this tool reads version {SKETCH_VERSION}"
         )
     return data
+
+
+def load_sketch_with_header(
+    path: Path | str, *, profile_id: str | None = None
+) -> tuple[dict[str, Any], Sketch]:
+    """Parse a sketch file once and return `(raw_header, loaded_sketch)`."""
+    text_path = str(path)
+    raw = read_sketch_file(text_path)
+    if profile_id is not None:
+        stored = raw.get("profile_id")
+        if stored != profile_id:
+            raise ValueError(f"Baseline profile {stored!r} does not match profile {profile_id!r}")
+    sketch = Sketch(profile_id=profile_id)
+    sketch.load_data(raw, text_path)
+    return raw, sketch
+
+
+def _validate_skit(key: Any, skit: Skit) -> None:
+    if not isinstance(key, str) or not isinstance(skit.tokens, dict):
+        raise ValueError("Malformed skit identity")
+    if any(not isinstance(k, str) or not isinstance(v, str) for k, v in skit.tokens.items()):
+        raise ValueError(f"Malformed tokens for skit {key!r}")
+    if key != skit_id(skit.tokens):
+        raise ValueError(f"Skit ID {key!r} does not match its tokens")
+    count = skit.meta.get("count")
+    if type(count) is not int or count < 0:
+        raise ValueError(f"Invalid count for skit {key!r}: expected nonnegative integer")
+
+
+def load_ranked_skits(
+    path: Path | str, profile_id: str | None = None
+) -> tuple[dict[str, Any], list[tuple[str, Skit]]]:
+    """Load a sketch once, validate every skit's identity/count, and rank by descending count."""
+    try:
+        raw, sketch = load_sketch_with_header(path, profile_id=profile_id)
+        rows = [(key, sketch.get(key)) for key in sketch]
+        for key, skit in rows:
+            assert skit is not None
+            _validate_skit(key, skit)
+    except (AttributeError, KeyError, TypeError) as exc:
+        raise SketchError(f"Malformed sketch: {path}") from exc
+    ranked = sorted(rows, key=lambda item: (-item[1].meta["count"], item[0]))
+    return raw, ranked

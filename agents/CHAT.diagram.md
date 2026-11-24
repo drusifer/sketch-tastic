@@ -14,7 +14,11 @@ sequenceDiagram
     participant Switch
     participant Smith
     participant Tank
-    Note over User,Tank: 📅 2026-11-21
+    participant Bob
+    participant Cypher
+    participant Mouse
+    participant Oracle
+    Note over User,Oracle: 📅 2026-11-21
     User->>All: "request"
     Note right of User: "*nit add Boolean type<br/>support (distinct from<br/>enum)"
     Neo->>All: "swe init"
@@ -113,7 +117,7 @@ sequenceDiagram
     Note right of Neo: "Owner requested changing<br/>CLI command from<br/>sketchtastic to sketch<br/>(keeping skt alias,<br/>distribution sketch-<br/>tastic and import<br/>sketchtastic unc…"
     Tank->>All: "devops sdlc"
     Note right of Tank: "SDLC update verified:<br/>CLI command renamed to<br/>sketch only<br/>(pyproject.toml,<br/>Makefile CLI,<br/>docs/SDLC.md). make<br/>install, lint, 317/317<br/>tests, 4…"
-    Note over User,Tank: 📅 2026-11-22
+    Note over User,Oracle: 📅 2026-11-22
     Neo->>Neo: "impl start"
     Note right of Neo: "User requested simple<br/>streaming processing as<br/>events arrive with timed<br/>limit (--max-seconds)<br/>and count limit (--max-<br/>events) on sketch merge…"
     Neo->>Trin: "handoff"
@@ -126,4 +130,105 @@ sequenceDiagram
     Note right of Morpheus: "rubric LOOP_IMPL:<br/>TFIRST=S VERIF=S MODUL=S<br/>REGRESS=S BUDGET=S —<br/>clean select+os.read<br/>pipe iterator avoids<br/>BufferedReader deadlock,<br/>batch pa…"
     Smith->>All: "review"
     Note right of Smith: "UX sign-off: simple Unix<br/>pipeline semantics<br/>(capture | sketch merge<br/>--max-seconds/--max-<br/>events) with clear stop-<br/>reason output. Approved<br/>for…"
+    Note over User,Oracle: 📅 2026-11-23
+    User->>All: "request"
+    Note right of User: "$bob-protocol init time<br/>for a tech debt sprint"
+    Bob->>All: "ready"
+    Note right of Bob: "Bob Protocol<br/>initialized. Team ready."
+    Bob->>All: "greeting"
+    Note right of Bob: "Good morning, team! What<br/>is your favorite part of<br/>your job? Why: a quick<br/>check-in starts the day<br/>together."
+    Bob->>All: "greeting"
+    Note right of Bob: "Refining a skill until<br/>the rubric can actually<br/>see good judgment and<br/>every persona knows its<br/>exact boundary. Why:<br/>clear roles let the<br/>workf…"
+    Cypher->>All: "greeting"
+    Note right of Cypher: "Turning a fuzzy idea<br/>into crisp acceptance<br/>criteria that everyone<br/>can observe and agree<br/>on. Why: starting with<br/>the user outcome keeps<br/>scope…"
+    Morpheus->>All: "greeting"
+    Note right of Morpheus: "Naming the boundaries<br/>and invariants before<br/>anyone draws the boxes,<br/>then watching a complex<br/>problem collapse into a<br/>simple design. Why: cla…"
+    Mouse->>All: "greeting"
+    Note right of Mouse: "Slicing big ambitions<br/>into small, dependency-<br/>ordered batches in<br/>task.md and clearing<br/>blockers before they<br/>slow the team down. Why:<br/>small ba…"
+    Neo->>All: "greeting"
+    Note right of Neo: "Watching a failing<br/>reproduction test turn<br/>green after the<br/>smallest, cleanest<br/>change that proves the<br/>fix. Why: running<br/>software and passing…"
+    Oracle->>All: "greeting"
+    Note right of Oracle: "Tracing a tricky<br/>question back to its<br/>source and filing the<br/>answer right where the<br/>next person will look<br/>for it. Why: durable,<br/>accurate doc…"
+    Smith->>All: "greeting"
+    Note right of Smith: "Running the real CLI and<br/>UI myself to spot<br/>friction and test error<br/>recovery before users<br/>hit it. Why: an<br/>interface should make<br/>the next ste…"
+    Switch->>All: "greeting"
+    Note right of Switch: "Catching a risky<br/>assumption or vulnerable<br/>dependency early and<br/>pairing the evidence<br/>with a clean, easy-to-<br/>adopt fix. Why: least<br/>privilege a…"
+    Tank->>All: "greeting"
+    Note right of Tank: "Turning one-off setup<br/>steps into declarative,<br/>repeatable Makefile<br/>targets that behave the<br/>same from a clean<br/>checkout every time.<br/>Why: repea…"
+    Trin->>All: "greeting"
+    Note right of Trin: "Backing every quality<br/>gate with a fast,<br/>deterministic test<br/>against real behavior<br/>instead of a fragile<br/>guess. Why: coverage<br/>should follow ri…"
+    User->>All: "request"
+    Note right of User: "Option 1: Full tech-debt<br/>audit first to propose a<br/>scoped Tier 2 Sprint 8<br/>plan."
+    Bob->>Morpheus: "handoff"
+    Note right of Bob: "User requested full<br/>tech-debt audit before<br/>scoping Sprint 8 (Tier<br/>2). @Morpheus *lead<br/>audit tech-debt"
+    Morpheus->>All: "lead init"
+    Note right of Morpheus: "Activating for Sprint 8<br/>tech-debt audit: running<br/>bobp make quality and<br/>surveying src/, tests/,<br/>docs/, and backlog. Why:<br/>evidence-driven pri…"
+    Morpheus->>User: "lead audit"
+    Note right of Morpheus: "Tech-debt audit<br/>complete: 35 extended<br/>ruff issues, 19 radon<br/>C/D functions (worst:<br/>_value_cooccurrence<br/>D(24)), 3,582-line<br/>dashboard.py monol…"
+    Morpheus->>User: "lead advise"
+    Note right of Morpheus: "Advised owner on 3<br/>architecture questions:<br/>(1) dashboard.py NEVER<br/>reads DATA.ablation/corr<br/>elations/concentration<br/>or computed field/agg<br/>stat…"
+    User->>All: "request"
+    Note right of User: "yes and I agree with<br/>keep lean /sprint plan &<br/>impl sprint 8"
+    Cypher->>Smith: "pm handoff"
+    Note right of Cypher: "Tier 2 Sprint 8 combined<br/>stories + architecture<br/>drafted in docs/sprints/<br/>USER_STORIES_SPRINT8.md<br/>(STORY-SKT-15..18, 8<br/>pts) and domain model…"
+    Smith->>Switch: "user approve"
+    Note right of Smith: "*user approve. rubric<br/>STORIES: OUT=PASS<br/>TEST=PASS FAIL=PASS<br/>SCOPE=PASS SIZE=PASS<br/>DESIGN=PASS | rubric<br/>ARCH: BOUND=PASS<br/>FLOW=PASS FAIL=PASS…"
+    Switch->>Mouse: "sec handoff"
+    Note right of Switch: "Reviewed Sprint 8 design<br/>& gitleaks hook<br/>(.githooks active, 0<br/>accepted risks). Fixed-<br/>allowlist asset loading<br/>via importlib.resources,<br/>atomi…"
+    Mouse->>Morpheus: "sm handoff"
+    Note right of Mouse: "Sprint 8 task board<br/>ready in task.md (3<br/>bounded phases +<br/>closeout, L1-L3 levels,<br/>Switch gates after every<br/>coding phase, Tank sdlc-<br/>check at…"
+    Morpheus->>Neo: "lead handoff"
+    Note right of Morpheus: "Sprint plan approved.<br/>rubric PLAN: SIZE=PASS<br/>GATE=PASS VERIF=PASS<br/>ALIGN=PASS OWNER=PASS<br/>LEVEL=PASS. Phase 1<br/>ready. @Neo *swe impl<br/>phase-1"
+```
+
+## Phase 1 starts
+
+Phase 1: Shared internal I/O &amp; single-pass ranked sketch loading, acyclic reporting/analysis boundaries, and lean analysis.py payload build…
+
+```mermaid
+%%{init: {"sequence": {"messageFontSize": 14, "noteFontSize": 18, "actorFontSize": 14}}}%%
+sequenceDiagram
+    autonumber
+    participant Mouse
+    participant All
+    participant Neo
+    participant Trin
+    participant Switch
+    participant Morpheus
+    Note over Mouse,Morpheus: 📅 2026-11-23
+    Mouse->>All: "phase 1"
+    Note right of Mouse: "Phase 1: Shared internal<br/>I/O & single-pass ranked<br/>sketch loading, acyclic<br/>reporting/analysis<br/>boundaries, and lean<br/>analysis.py payload<br/>build…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 1 impl complete:<br/>added _io.py, single-<br/>pass load_ranked_skits/l<br/>oad_sketch_with_header<br/>in sketch.py, broke<br/>reporting<->analysis<br/>cycle (…"
+    Neo->>Neo: "impl start"
+    Note right of Neo: "User requested reliable<br/>very-long captures.<br/>Adding auto-reconnect<br/>with Jetstream cursor<br/>resume, exponential<br/>backoff, max_queue=512,<br/>ping ke…"
+    Neo->>All: "done"
+    Note right of Neo: "Hardened examples/bluesk<br/>y/capture.py for very<br/>long captures (auto-<br/>reconnect with Jetstream<br/>cursor resume,<br/>exponential backoff<br/>0.5s->15s, ma…"
+    Trin->>Switch: "qa handoff"
+    Note right of Trin: "UAT phase 1 passed: zero<br/>private/lazy cross-<br/>imports, single-pass<br/>YAML read verified (spy<br/>count=2), lean payload<br/>compatible with<br/>dashboard,…"
+    Switch->>Morpheus: "sec handoff"
+    Note right of Switch: "Security review of Phase<br/>1 complete: gitleaks<br/>hook active (0 leaks),<br/>CSafeLoader, atomic no-<br/>symlink _io.py,<br/>safe_text escaping, plus<br/>all 5…"
+    Morpheus->>Neo: "lead handoff"
+    Note right of Morpheus: "Phase 1 review passed:<br/>acyclic imports matching<br/>docs/DOMAIN.md, single-<br/>pass loading, lean<br/>analysis.py, DRY<br/>validate_output_target.<br/>Committi…"
+```
+
+## Phase 1 close-out
+
+- **Trin**: UAT phase 1 passed: zero private/lazy cross-imports, single-pass YAML read verified (spy count=2), lean payload compatible with dashboard,…
+- **Switch**: Security review of Phase 1 complete: gitleaks hook active (0 leaks), CSafeLoader, atomic no-symlink \_io.py, safe\_text escaping, plus all 5…
+- **Morpheus**: Phase 1 review passed: acyclic imports matching docs/DOMAIN.md, single-pass loading, lean analysis.py, DRY validate\_output\_target. Committi…
+
+## Phase 2 starts
+
+Phase 2: Extract dashboard.py CSS/HTML/JS monolith into modular static assets under src/sketchtastic/assets/dashboard/ with direct node uni…
+
+```mermaid
+%%{init: {"sequence": {"messageFontSize": 14, "noteFontSize": 18, "actorFontSize": 14}}}%%
+sequenceDiagram
+    autonumber
+    participant Mouse
+    participant All
+    Note over Mouse,All: 📅 2026-11-23
+    Mouse->>All: "phase 2"
+    Note right of Mouse: "Phase 2: Extract<br/>dashboard.py CSS/HTML/JS<br/>monolith into modular<br/>static assets under src/<br/>sketchtastic/assets/dash<br/>board/ with direct node<br/>uni…"
 ```

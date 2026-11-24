@@ -367,3 +367,189 @@ Wrote interactive dashboard to data/bluesky-posts-multi-lang/analysis.html (20,7
 ---
 [<small>2026-11-22 11:56:57</small>] [**Smith**]->[**all**] *review*:
  UX sign-off: simple Unix pipeline semantics (capture | sketch merge --max-seconds/--max-events) with clear stop-reason output. Approved for local integration.
+
+---
+[<small>2026-11-22 12:16:46</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make run @ 2026-11-22 12:16:45 ===
+Wrote interactive dashboard to data/bluesky-live.html (2,628 observations, 84 skits, 1 history runs)
+
+---
+[<small>2026-11-23 22:23:18</small>] [**User**]->[**all**] *request*:
+ $bob-protocol init time for a tech debt sprint
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Bob**]->[**all**] *ready*:
+ Bob Protocol initialized. Team ready.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Bob**]->[**all**] *greeting*:
+ Good morning, team! What is your favorite part of your job? Why: a quick check-in starts the day together.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Bob**]->[**all**] *greeting*:
+ Refining a skill until the rubric can actually see good judgment and every persona knows its exact boundary. Why: clear roles let the workflow carry the detail without stepping on each other.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Cypher**]->[**all**] *greeting*:
+ Turning a fuzzy idea into crisp acceptance criteria that everyone can observe and agree on. Why: starting with the user outcome keeps scope honest before a single line of code is written.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Morpheus**]->[**all**] *greeting*:
+ Naming the boundaries and invariants before anyone draws the boxes, then watching a complex problem collapse into a simple design. Why: clarity up front pays dividends through every refactor.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Mouse**]->[**all**] *greeting*:
+ Slicing big ambitions into small, dependency-ordered batches in task.md and clearing blockers before they slow the team down. Why: small batches make progress easy to inspect and pace sustainable.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Neo**]->[**all**] *greeting*:
+ Watching a failing reproduction test turn green after the smallest, cleanest change that proves the fix. Why: running software and passing tests beat guesswork every time.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Oracle**]->[**all**] *greeting*:
+ Tracing a tricky question back to its source and filing the answer right where the next person will look for it. Why: durable, accurate docs keep hard-won lessons from rotting away.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Smith**]->[**all**] *greeting*:
+ Running the real CLI and UI myself to spot friction and test error recovery before users hit it. Why: an interface should make the next step clear without ever blaming the person using it.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Switch**]->[**all**] *greeting*:
+ Catching a risky assumption or vulnerable dependency early and pairing the evidence with a clean, easy-to-adopt fix. Why: least privilege and pinned trust are always cheaper than incident response.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Tank**]->[**all**] *greeting*:
+ Turning one-off setup steps into declarative, repeatable Makefile targets that behave the same from a clean checkout every time. Why: repeatable beats heroic when making the safe path the easy path.
+
+---
+[<small>2026-11-23 22:24:13</small>] [**Trin**]->[**all**] *greeting*:
+ Backing every quality gate with a fast, deterministic test against real behavior instead of a fragile guess. Why: coverage should follow risk, and clear evidence makes the next step obvious.
+
+---
+[<small>2026-11-23 22:25:11</small>] [**User**]->[**all**] *request*:
+ Option 1: Full tech-debt audit first to propose a scoped Tier 2 Sprint 8 plan.
+
+---
+[<small>2026-11-23 22:25:11</small>] [**Bob**]->[**Morpheus**] *handoff*:
+ User requested full tech-debt audit before scoping Sprint 8 (Tier 2). @Morpheus *lead audit tech-debt
+
+---
+[<small>2026-11-23 22:25:11</small>] [**Morpheus**]->[**all**] *lead init*:
+ Activating for Sprint 8 tech-debt audit: running bobp make quality and surveying src/, tests/, docs/, and backlog. Why: evidence-driven prioritization before proposing Tier 2 scope.
+
+---
+[<small>2026-11-23 22:25:12</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make quality | /home/drusifer/Projects/sketch-tastic/build/build.out
+F 204:0 _summarize_field - C (11)
+F 770:0 _load_run_file - C (11)
+src/sketchtastic/aggregators.py
+F 347:0 histogram_quantiles - C (15)
+F 303:0 histogram_bins - C (14)
+
+---
+[<small>2026-11-23 22:26:47</small>] [**Morpheus**]->[**User**] *lead audit*:
+ Tech-debt audit complete: 35 extended ruff issues, 19 radon C/D functions (worst: _value_cooccurrence D(24)), 3,582-line dashboard.py monolith (2,819L inline JS, 17 fns >=60L), reporting<->analysis import cycle + double YAML reads, cli._fold_stream C(19)/8 args, and 113+ stale fid/wh/fingerprint leftovers. Presenting 6 refactoring targets to owner for Sprint 8 (Tier 2) scoping.
+
+---
+[<small>2026-11-23 22:27:10</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make run | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make run @ 2026-11-23 22:27:07 ===
+Wrote interactive dashboard to data/bluesky-live.html (96,792 observations, 162 skits, 2 history runs)
+
+---
+[<small>2026-11-23 22:43:59</small>] [**Morpheus**]->[**User**] *lead advise*:
+ Advised owner on 3 architecture questions: (1) dashboard.py NEVER reads DATA.ablation/correlations/concentration or computed field/agg stats from Python (JS recomputes everything from DATA.skits for live filtering/weighting), so ~600L of analysis.py math is dead duplication unless we want a Python stats API; (2) defined 3-context Domain Model (Core Sketching, Ingestion/History, Inspection/Exploration); (3) audited hand-rolled code vs stdlib/libs. Awaiting owner decision for Sprint 8.
+
+---
+[<small>2026-11-23 23:18:03</small>] [**User**]->[**all**] *request*:
+ yes and I agree with keep lean /sprint plan & impl sprint 8
+
+---
+[<small>2026-11-23 23:20:23</small>] [**Cypher**]->[**Smith**] *pm handoff*:
+ Tier 2 Sprint 8 combined stories + architecture drafted in docs/sprints/USER_STORIES_SPRINT8.md (STORY-SKT-15..18, 8 pts) and domain model formalized in docs/DOMAIN.md. @Smith *user review sprint-8
+
+---
+[<small>2026-11-23 23:20:23</small>] [**Smith**]->[**Switch**] *user approve*:
+ *user approve. rubric STORIES: OUT=PASS TEST=PASS FAIL=PASS SCOPE=PASS SIZE=PASS DESIGN=PASS | rubric ARCH: BOUND=PASS FLOW=PASS FAIL=PASS USER=PASS DECS=PASS FEAS=PASS | rubric DOMAIN: LANG=PASS BOUND=PASS INVAR=PASS STATE=PASS EVENT=N/A. Preserves CLI/dashboard UX while cutting HTML bloat. @Switch *sec threat sprint-8
+
+---
+[<small>2026-11-23 23:20:23</small>] [**Switch**]->[**Mouse**] *sec handoff*:
+ Reviewed Sprint 8 design & gitleaks hook (.githooks active, 0 accepted risks). Fixed-allowlist asset loading via importlib.resources, atomic no-symlink _io.py, strict offline CSP, and zero new deps. security gate (design): No blocking findings. @Mouse *sm plan sprint-8
+
+---
+[<small>2026-11-23 23:20:23</small>] [**Mouse**]->[**Morpheus**] *sm handoff*:
+ Sprint 8 task board ready in task.md (3 bounded phases + closeout, L1-L3 levels, Switch gates after every coding phase, Tank sdlc-check at close). @Morpheus *lead review sprint plan
+
+---
+[<small>2026-11-23 23:20:23</small>] [**Morpheus**]->[**Neo**] *lead handoff*:
+ Sprint plan approved. rubric PLAN: SIZE=PASS GATE=PASS VERIF=PASS ALIGN=PASS OWNER=PASS LEVEL=PASS. Phase 1 ready. @Neo *swe impl phase-1
+
+---
+[<small>2026-11-23 23:20:23</small>] [**Mouse**]->[**all**] *phase 1*:
+ Phase 1: Shared internal I/O & single-pass ranked sketch loading, acyclic reporting/analysis boundaries, and lean analysis.py payload builder.
+
+---
+[<small>2026-11-23 23:25:22</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+11:25PM INF 115 commits scanned.
+11:25PM INF scanned ~2697806 bytes (2.70 MB) in 1.49s
+11:25PM INF no leaks found
+
+---
+[<small>2026-11-23 23:25:22</small>] [**Neo**]->[**Trin**] *swe handoff*:
+ Phase 1 impl complete: added _io.py, single-pass load_ranked_skits/load_sketch_with_header in sketch.py, broke reporting<->analysis cycle (top-level imports), slimmed analysis.py to lean payload builder (0 extended ruff, 0 radon C+, 0 vulture across touched files; 317/317 tests, lint, gitleaks pass). @Trin *qa uat phase-1
+
+---
+[<small>2026-11-23 23:26:10</small>] [**Neo**]->[**Neo**] *impl start*:
+ User requested reliable very-long captures. Adding auto-reconnect with Jetstream cursor resume, exponential backoff, max_queue=512, ping keepalives, bounded dedup --unwrap-posts, and unlimited stream limit in examples/bluesky/capture.py. Starting *impl TDD loop. @Neo *swe impl
+
+---
+[<small>2026-11-23 23:28:27</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make security-scan-secrets | /home/drusifer/Projects/sketch-tastic/build/build.out
+
+○
+│╲
+│ ○
+○ ░
+░    gitleaks
+
+11:28PM INF 115 commits scanned.
+11:28PM INF scanned ~2697806 bytes (2.70 MB) in 749ms
+11:28PM INF no leaks found
+
+---
+[<small>2026-11-23 23:29:34</small>] [**Neo**]->[**all**] *done*:
+ Hardened examples/bluesky/capture.py for very long captures (auto-reconnect with Jetstream cursor resume, exponential backoff 0.5s->15s, max_queue=512, 20s ping keepalives, --unwrap-posts with 100k bounded dedup ring, unlimited default --limit on stdout). 320/320 tests, lint, gitleaks green; kept uncommitted on sprint-8 to avoid colliding with active Sprint 8 changes.
+
+---
+[<small>2026-11-23 23:32:42</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make test | /home/drusifer/Projects/sketch-tastic/build/build.out
+............................................
+----------------------------------------------------------------------
+Ran 44 tests in 0.057s
+
+OK
+
+---
+[<small>2026-11-23 23:32:42</small>] [**Trin**]->[**Switch**] *qa handoff*:
+ UAT phase 1 passed: zero private/lazy cross-imports, single-pass YAML read verified (spy count=2), lean payload compatible with dashboard, error/exit-2 contracts & non-dict/symlink history hardening verified (0 extended ruff, 0 radon C+). @Switch *sec review phase-1
+
+---
+[<small>2026-11-23 23:32:42</small>] [**Switch**]->[**Morpheus**] *sec handoff*:
+ Security review of Phase 1 complete: gitleaks hook active (0 leaks), CSafeLoader, atomic no-symlink _io.py, safe_text escaping, plus all 5 Low/Info hardening items (SEC-S8-01..05) applied. security gate (phase 1): No blocking findings. @Morpheus *lead review phase-1
+
+---
+[<small>2026-11-23 23:32:42</small>] [**Morpheus**]->[**Neo**] *lead handoff*:
+ Phase 1 review passed: acyclic imports matching docs/DOMAIN.md, single-pass loading, lean analysis.py, DRY validate_output_target. Committing Phase 1. @Neo *swe impl phase-2
+
+---
+[<small>2026-11-23 23:32:42</small>] [**Mouse**]->[**all**] *phase 2*:
+ Phase 2: Extract dashboard.py CSS/HTML/JS monolith into modular static assets under src/sketchtastic/assets/dashboard/ with direct node unit tests for stats.js.

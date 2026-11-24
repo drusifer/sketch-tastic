@@ -89,7 +89,7 @@ class ReportingTests(unittest.TestCase):
             Path(destination).write_text("other writer")
             real_link(source, destination)
 
-        with patch("sketchtastic.reporting.os.link", competing):
+        with patch("os.link", competing):
             with self.assertRaises(FileExistsError):
                 export_samples(self.path, output)
         self.assertEqual(output.read_text(), "other writer")

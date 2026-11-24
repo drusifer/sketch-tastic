@@ -1,5 +1,45 @@
 # Task Board
 
+## Sprint 8: Lean Architecture, Modular Dashboard & Code Hygiene
+
+*   **Goal**: Formalize the domain model (`docs/DOMAIN.md`), untangle circular/private module boundaries and double YAML reads, slim `analysis.py` into a lean dashboard payload builder, decompose the 3,582-line `dashboard.py` into modular static web assets with `node` unit tests, and bring all of `src/` to 0 extended ruff warnings and 0 radon C+ functions while retiring legacy `fid`/`wh`/`fingerprint` internal names.
+*   **Tier**: Tier 2 (Tech Debt / Fast-track) · **Total Points**: 8 · **Branch**: `sprint-8`
+*   **Source**: `docs/sprints/USER_STORIES_SPRINT8.md` (`STORY-SKT-15`..`18`, `ADR-2026-11-23`) & `docs/DOMAIN.md`
+*   **Status**: Active — approved by Smith, Switch & Morpheus; starting Phase 1
+
+### Stage 0: SDLC Gate (Blocker)
+- [x] **Task 0.1 (L1):** Verify `docs/SDLC.md` exists and is current; create `sprint-8` branch from `main`. (*Owner: Mouse | Trace: N/A — sprint gate | Verification: `test -f docs/SDLC.md && git branch --show-current`*)
+
+### Phase 1: Shared Internal Boundaries, Single-Pass Loading & Lean Analysis Builder
+*Phase goal: Introduce `src/sketchtastic/_io.py`, single-pass ranked sketch loading in `sketch.py`, break the `reporting.py` ↔ `analysis.py` cycle, and slim `analysis.py` into a lean dashboard payload builder (≤ radon B, 0 extended ruff).*
+- [x] **Task 1.1 (L3):** Create `src/sketchtastic/_io.py` (`is_number`, `history_dir_for`, `safe_text`, `atomic_write_text`, `atomic_publish_file`), add single-pass `read_sketch_file` / `load_ranked_skits` to `sketch.py`, refactor `reporting.py` to top-level imports & ≤ radon B, and slim `analysis.py` to a lean single-pass dashboard payload builder (`meta`, `fields`, `aggregates`, `weightings`, `time_axes`, `history`, `skits`) using native Python 3.14 `fromisoformat`; update `tests/test_analysis.py` & `tests/test_reporting.py`. (*Owner: Neo | Trace: STORY-SKT-15, STORY-SKT-16 / ADR-2026-11-23 | Verification: `bobp make test ARGS="test_analysis" && bobp make test ARGS="test_reporting" && bobp make lint`*)
+- [x] **Task 1.2 (L2):** Run Phase 1 UAT verifying single-pass loading, lean payload contract, error/exit-2 behavior, zero circular/private imports, and `bobp make quality` on `sketch.py`, `_io.py`, `reporting.py`, `analysis.py`. (*Owner: Trin | Trace: STORY-SKT-15 AC1–5, STORY-SKT-16 AC1–4 | Verification: UAT verdict in `agents/CHAT.md`*)
+- [x] **Task 1.3 (L2):** Security review of Phase 1 diff (symlink refusal, atomic publication, history directory validation, safe YAML, gitleaks). (*Owner: Switch | Trace: STORY-SKT-15 AC5 / sprint8-design | Verification: `security gate (phase 1): ...` in `agents/CHAT.md`*)
+- [x] **Task 1.4 (L2):** Code & architecture review of Phase 1; commit `refactor(core): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-23 | Verification: review verdict in `agents/CHAT.md`*)
+
+### Phase 2: Modular Offline Dashboard Web Assets & Direct JS Unit Tests
+*Phase goal: Extract `dashboard.py` CSS/HTML/JS into `src/sketchtastic/assets/dashboard/*`, decompose large JS functions, update `dashboard.py` for the lean payload, and add `node`-backed unit tests for `stats.js`.*
+- [ ] **Task 2.1 (L3):** Extract `styles.css`, `template.html`, and modular JS (`core.js`, `stats.js`, `charts.js`, `correlations.js`, `sankey.js`, `explorer.js`, `url_state.js`, `app.js`) into `src/sketchtastic/assets/dashboard/`, decompose `initControls`/`renderAggChart`/`renderCorrNetwork`/`renderSankey`/`computeCorrelations`, slim `src/sketchtastic/dashboard.py` to a thin cached assembler, and add direct `node` unit tests for `stats.js` in `tests/test_dashboard.py`. (*Owner: Neo | Trace: STORY-SKT-17 / ADR-2026-11-23 | Verification: `bobp make test ARGS="test_dashboard" && bobp make test ARGS="test_analyze_cli" && bobp make lint`*)
+- [ ] **Task 2.2 (L2):** Run Phase 2 UAT (offline CSP, XSS/prototype tests, `node` JS stats unit tests, empty sketch, and live Bluesky HTML generation confirming reduced file size and clean rendering). (*Owner: Trin | Trace: STORY-SKT-17 AC1–6 | Verification: UAT verdict in `agents/CHAT.md`*)
+- [ ] **Task 2.3 (L2):** Security review of Phase 2 diff (fixed asset allowlist, no `</script` sequences, CSP unchanged, XSS & prototype guards, Chart.js SHA-256). (*Owner: Switch | Trace: STORY-SKT-17 AC3 / sprint8-design | Verification: `security gate (phase 2): ...` in `agents/CHAT.md`*)
+- [ ] **Task 2.4 (L2):** Code & architecture review of Phase 2; commit `refactor(dashboard): ...`. (*Owner: Morpheus | Trace: ADR-2026-11-23 | Verification: review verdict in `agents/CHAT.md`*)
+
+### Phase 3: CLI Merge Engine, Histogram Decomposition & Stale Vocabulary Cleanup
+*Phase goal: Bring `cli.py` and `aggregators.py` to 0 extended ruff warnings and 0 radon C+ functions, and retire legacy `fid`/`wh`/`fingerprint` internal identifiers across `src/` and `tests/`.*
+- [ ] **Task 3.1 (L2):** Refactor `cli.py` (`_FoldOptions`, `_merge_folded_parts`, `_emit_line_warnings`, clean `_show_columns` lambdas, loop var overwrites) and `aggregators.py` (`_log_histogram_bins`, `_fixed_histogram_bins`, `_interpolate_bin_quantile`, `_LOG_BASE`), and rename stale `fid`/`wh`/`fingerprint` internal identifiers across `src/` and `tests/`. (*Owner: Neo | Trace: STORY-SKT-18 | Verification: `bobp make test && bobp make lint && bobp make -vvv quality`*)
+- [ ] **Task 3.2 (L2):** Run Phase 3 UAT (`docs/sprints/UAT_PLAN_SPRINT8.md`): full test suite, 0 extended ruff / 0 vulture / 0 radon C+ across `src/`, and wheel smoke test verifying `assets/dashboard/*` bundling. (*Owner: Trin | Trace: STORY-SKT-18 AC1–4 | Verification: UAT verdict in `docs/sprints/UAT_PLAN_SPRINT8.md` & `agents/CHAT.md`*)
+- [ ] **Task 3.3 (L1):** Security review of Phase 3 diff (stream limits, no new deps, `bobp make security-scan`). (*Owner: Switch | Trace: STORY-SKT-18 / sprint8-design | Verification: `security gate (phase 3): ...` in `agents/CHAT.md`*)
+- [ ] **Task 3.4 (L2):** Code & architecture review of Phase 3; commit `refactor(cli): ...`. (*Owner: Morpheus | Trace: STORY-SKT-18 | Verification: review verdict in `agents/CHAT.md`*)
+
+### Stage 3: Sprint Closeout
+- [ ] **Task C.1 (L2):** SDLC conformance check (preserve `data/` across `distclean`, run `install`, `lint`, `test`, `test-all` 3.14/3.15, `smoke`, `build`, `security-scan`, `uv lock --check`; verify `assets/dashboard/*` ships in wheel). (*Owner: Tank | Trace: N/A — closeout | Verification: `docs/SDLC.md` section 10 checks pass*)
+- [ ] **Task C.2 (L2):** Document grooming (`docs/DECISIONS.md` ADR-2026-11-23, `docs/LESSONS.md`, `README.md` check) and sprint chat report. (*Owner: Oracle | Trace: N/A — closeout | Verification: `bobp chat-report --moniker SPRINT_8 ...`*)
+- [ ] **Task C.3 (L2):** End-to-end user usability testing on live CLI & Bluesky dashboard, UAT rubric & lesson rubric review. (*Owner: Smith | Trace: STORY-SKT-15..18 | Verification: `*user approve` recorded in `agents/CHAT.md`*)
+- [ ] **Task C.4 (L1):** Sprint retrospective & backlog grooming. (*Owner: Mouse | Trace: N/A — closeout | Verification: Retros posted in `agents/CHAT.md`*)
+- [ ] **Task C.5 (L1):** Sprint launch announcement and local `--no-ff` merge to `main` (no push/release). (*Owner: Cypher | Trace: N/A — release decision | Verification: Cypher launch in `agents/CHAT.md` & `git log -n 2`*)
+
+---
+
 ## Sprint 7: Interactive Sketch Analysis Dashboard
 
 *   **Goal**: Deliver `sketchtastic analyze SKETCH -o REPORT.html` to turn any sketch (and optional history) into a 100% offline, interactive HTML dashboard bundling Chart.js v4.4.9 (MIT) with weighted enum distributions, min/max and numeric mean/median stats, time/run range sliders, skit/sample explorer, and history drift.

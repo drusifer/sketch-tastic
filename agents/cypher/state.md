@@ -2,75 +2,32 @@
 
 ## Context
 ### Recent Decisions
-- 2026-10-14 Sprint 2 (Sort the Show) STORY-SKT-03 launched: `show --sort KEY`, lowest first, default COUNT; owner dropped `--top N` and any reverse option.
+- 2026-11-23: Sprint 8 (Tier 2 Tech Debt, 8 pts) combined stories + architecture drafted in `docs/sprints/USER_STORIES_SPRINT8.md` (`STORY-SKT-15`..`18`) alongside `docs/DOMAIN.md`. Owner confirmed "keep lean" (`analysis.py` becomes a lean dashboard payload builder; JS owns interactive stats).
 
 ### Key Findings
-None yet
+- Next story ID after Sprint 8 will be `STORY-SKT-19`.
 
 ### Important Notes
-- 2026-10-14 Sprint 3 (Faster Merge) SKT-04..05 launched: 2.6x faster merge.
-- 2026-10-15 Sprint 4 (Parallel Merge) SKT-06..07 launched.
-- Next story id STORY-SKT-08. Ask the owner design questions before writing stories (it cut scope again in Sprint 2).
+- Stories approved by Smith at Gate 1 (`STORIES`, `ARCH`, `DOMAIN` checks passed).
 
 ## Current Task
-**Status:** Sprint 5 stories drafted, ready for Smith Gate 1.
-**Assigned to:** N/A
-**Started:** N/A
+**Status:** Sprint 8 planning complete; awaiting Sprint Close for launch (`*pm launch sprint-8`).
+**Assigned to:** Cypher (`*pm`)
+**Started:** 2026-11-23
 
 ### Task Description
-Bluesky Image Explorer: STORY-SKT-08 capture/sketch, STORY-SKT-09 interactive app. See docs/sprints/USER_STORIES_SPRINT5.md. Eight points; local browser app assumed pending optional owner preference. Dimensions shared with sketch profile; sampled records cover observed combinations only.
+Co-authored `docs/sprints/USER_STORIES_SPRINT8.md` and `docs/DOMAIN.md` for Tier 2 Tech Debt Sprint 8 and handed off to Smith.
 
 ### Progress
-- [ ] Not started
+- [x] Drafted `STORY-SKT-15`..`18` and `docs/DOMAIN.md`
+- [x] Cleared Smith Gate 1
 
 ### Blockers
 None
 
-### Oracle Consultations
-None yet
-
 ## Next Steps
 ### Immediate Next Action
-Smith reviews stories, then Morpheus designs pipeline. No release or push authorized.
-
-### Waiting On
-None
-
-### Planned Work
-- [ ] No planned work
+Wait for Phase 1–3 execution, Tank SDLC check, Oracle grooming, Smith user testing, and team retro before posting `*pm launch sprint-8`.
 
 ---
-*Last updated: [timestamp]*
-
-
-## Current checkpoint — 2026-11-19 (supersedes earlier Sprint 5 plans)
-
-The owner authorized `$sprint until done` and clarified **local ASCII output**, with no browser,
-web app or TUI. Sprint 5 implementation and independent Trin/Switch/Morpheus reviews passed;
-Tank clean-environment gates and final Smith UAT remain pending. Six shared enum dimensions
-preserve observed image variants using the existing sketch/sample APIs. Original post/event
-and attachment indexes are retained. No global coverage or replay claim is made.
-
-Resume from `task.md` and `docs/sprints/UAT_PLAN_SPRINT5.md`; do not restart HDFS research or
-web design. Root coordinates final evidence, sprint close and handoffs. No push/release requested.
-
-## Final Sprint 5 checkpoint — supersedes pending work above
-Context: local ASCII Bluesky demo complete; six enum dimensions preserve observed image variants. Owner skill migration included. No core package semantics changed.
-Current Task: complete (100%). Independent code/security/doc reviews and Smith live UAT passed. Clean gates: 267 tests on Python 3.14/3.15, lint, three wheel smoke tests, build and scans. Two-minute capture: 4,587 events -> 821 image rows -> 70 representatives; exact observed skit-ID preservation verified, public CLI re-sketch yields 70 skits.
-Next Steps: read task.md and sprint UAT before new work. Sprint close integrates locally to main; no push, tag or version bump. Use git log/status to confirm integration after interruption. Generated data/bluesky-demo is available locally but clean deletes data. Do not rerun unchanged tests or restart planning; await next user task.
-
-## Sprint 6 final checkpoint — supersedes pending work above
-Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
-Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
-## Sprint 7 planning — 2026-11-21 (active)
-- **Context:** Owner confirmed Sprint 7 scope on 2026-11-21: generic CLI subcommand `sketchtastic analyze SKETCH -o REPORT.html` generating a 100% offline self-contained interactive HTML dashboard bundling MIT Chart.js (~200 KB), with concentration curve, weighted enum distributions, min/max & numeric mean/median stats across all fields and aggregates, time/run range sliders (`DATETIME`/`DATE` min/max + `first_seen`/`last_seen`), cross-filtering skit explorer with retained JSON sample inspector, and run-over-run history drift.
-- **Current Task:** Stories `STORY-SKT-12`..`14` drafted in `docs/sprints/USER_STORIES_SPRINT7.md` (8 pts, Tier 1) and self-checked against STORIES rubric. Handed off to Smith for Gate 1 review.
-- **Next Steps:**
-  1. Smith evaluates `docs/sprints/USER_STORIES_SPRINT7.md` at Gate 1 (`*user review`).
-  2. Morpheus appends Architecture + ADR-2026-11-21 → Smith Gate 2 → Switch Gate 2b → Mouse task board → Morpheus plan review.
-
-
-## Sprint 7 final checkpoint — 2026-11-21
-- **Context:** Delivered `sketchtastic analyze SKETCH -o REPORT.html` (`STORY-SKT-12`..`14`, 8 pts) per owner requirements: offline interactive HTML dashboard with bundled MIT Chart.js v4.4.9, weighted enum distributions, min/max & numeric mean/median stats, dual time/run sliders, skit/sample explorer, and history drift.
-- **Current Task:** Complete (100%) — launched 2026-11-21, merged locally to `main`, no push/release.
-- **Next Steps:** Next story ID `STORY-SKT-15`. Backlog includes `--no-samples` compact mode, browser CSV/JSON export, and cross-tab heatmap. Await owner direction.
+*Last updated: 2026-11-23T23:21:00-05:00*
