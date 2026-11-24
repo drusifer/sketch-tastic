@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="__CSP__">
+  <title>__TITLE__</title>
+  <style>__CSS__</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>__TITLE__</h1>
+      <div class="subtitle">Sketch: __SKETCH_PATH__ · Profile: __PROFILE_ID__ · Last run: __LAST_RUN__ · Offline report</div>
+    </div>
+    <div class="hdr-actions">
+      <span id="filter-status" class="badge"></span>
+      <button id="copy-link-btn" type="button">Copy View Link</button>
+      <button id="theme-btn" type="button">Toggle Light/Dark</button>
+      <button id="reset-btn" type="button">Reset Filters</button>
+    </div>
+  </header>
+
+  <section class="filter-bar" aria-label="Dashboard filters">
+    <div class="filter-row">
+      <select id="weight-select" aria-label="Weight statistics by"></select>
+      <select id="axis-select" aria-label="Time or run axis"></select>
+      <select id="range-mode" aria-label="Range match mode">
+        <option value="overlap">Overlap window</option>
+        <option value="first">First appeared in window</option>
+        <option value="contained">Fully contained in window</option>
+      </select>
+      <div id="slider-box" class="slider-box">
+        <div class="slider-meta">
+          <span id="slider-lo-label">From: -</span>
+          <span id="slider-hi-label">To: -</span>
+        </div>
+        <div class="dual-range">
+          <div class="dual-track"></div>
+          <div id="dual-fill" class="dual-fill"></div>
+          <input id="range-lo" type="range" min="0" max="1000" value="0" aria-label="Range minimum">
+          <input id="range-hi" type="range" min="0" max="1000" value="1000" aria-label="Range maximum">
+        </div>
+      </div>
+      <input id="search-input" type="search" placeholder="Search skit ID or token..." aria-label="Search skits">
+    </div>
+    <div id="active-chips" class="chips"></div>
+  </section>
+
+  <main>
+    <section aria-label="Key metrics">
+      <div id="kpi-grid" class="kpi-grid"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Overview &amp; Concentration Curve (Pareto)</h2>
+          <div class="muted" style="font-size:12px">Observations in this sketch only — not a complete population inventory. Click a bar to inspect that skit.</div>
+        </div>
+        <div>
+          <label class="muted" style="font-size:12px">Top skits:
+            <select id="pareto-top">
+              <option value="20">20</option>
+              <option value="40" selected>40</option>
+              <option value="80">80</option>
+              <option value="150">150</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="cov-strip" class="cov-strip"></div>
+      <div class="chart-wrap">
+        <canvas id="chart-pareto"></canvas>
+        <div id="pareto-empty" class="empty-state" style="display:none">No skits to chart in the current filter.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Enumerated Field Distributions &amp; Field Min / Max / Numeric Stats</h2>
+          <div id="field-detail-meta" class="muted" style="font-size:12px"></div>
+        </div>
+        <div class="hdr-actions">
+          <select id="field-select" aria-label="Select field"></select>
+          <button id="weight-obs" type="button" class="small active">Observation Weight %</button>
+          <button id="weight-skits" type="button" class="small">Distinct Skits %</button>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="chart-wrap tall"><canvas id="chart-field"></canvas></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Value</th><th id="field-col-metric" class="num">Observations</th><th id="field-col-pct" class="num">Obs %</th><th class="num">Skits</th><th class="num">Skit %</th></tr>
+            </thead>
+            <tbody id="field-values-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <h3 style="margin-top:16px">All Fields — Min, Max, Weighted Mean / Median &amp; Diagnostics</h3>
+      <div class="table-wrap">
+        <table id="fields-table">
+          <thead>
+            <tr>
+              <th>Field</th><th>Type</th><th class="num">Card.</th><th>Min</th><th>Max</th>
+              <th>Mode (Obs %)</th><th class="num">Wtd Mean</th><th class="num">Wtd Median</th>
+              <th class="num">NULL %</th><th>Diagnostics</th>
+            </tr>
+          </thead>
+          <tbody id="fields-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Profile Diagnostics — Drop-One Field Ablation</h2>
+          <div class="muted" style="font-size:12px">Skits and singletons collapsed if each field is removed alone (holding all other fields fixed). Click any field to inspect its distribution above.</div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-ablation"></canvas>
+        <div id="ablation-empty" class="empty-state" style="display:none">No fields to ablate in the current filter.</div>
+      </div>
+      <div class="table-wrap" style="margin-top:14px">
+        <table>
+          <thead>
+            <tr>
+              <th>Field Dropped</th><th class="num">Cardinality</th><th class="num">Singleton-Only Vals</th>
+              <th class="num">Skits Collapsed</th><th class="num">Singletons Removed</th>
+              <th class="num">Remaining Skits</th><th class="num">Remaining Singletons</th>
+            </tr>
+          </thead>
+          <tbody id="ablation-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Correlated Value Clusters &amp; Field Associations</h2>
+          <div class="muted" style="font-size:12px">Exact observation-weighted Cramér's V, directional Theil's U, and token co-occurrence φ / Lift. Recomputes live on slider and filter changes.</div>
+        </div>
+      </div>
+      <div class="sub-tabs" role="tablist">
+        <button type="button" class="small active" data-corr-tab="network">1. Value Cluster Graph</button>
+        <button type="button" class="small" data-corr-tab="heatmap">2. Field Matrix (Theil's U / Cramér's V)</button>
+        <button type="button" class="small" data-corr-tab="clusters">3. Discovered Clusters &amp; Rules</button>
+      </div>
+
+      <div id="corr-panel-network" class="sub-panel corr-sub-panel active">
+        <div class="ctrl-inline">
+          <label class="muted">Min |φ|:
+            <input id="corr-phi-slider" type="range" min="0.05" max="0.95" step="0.01" value="0.14" style="vertical-align:middle">
+            <span id="corr-phi-val" class="mono">0.14</span>
+          </label>
+          <div class="hdr-actions">
+            <button type="button" class="small active" data-corr-sign="all">All (±)</button>
+            <button type="button" class="small" data-corr-sign="pos">Positive (+)</button>
+            <button type="button" class="small" data-corr-sign="neg">Anti (−)</button>
+          </div>
+          <label style="cursor:pointer"><input id="corr-hide-locks" type="checkbox" checked> Hide 1:1 schema locks (|φ|≥0.95)</label>
+          <div class="hdr-actions">
+            <button type="button" class="small" data-corr-preset="behavioral">Behavioral Signals</button>
+            <button type="button" class="small" data-corr-preset="schema">Schema Locks</button>
+            <button type="button" class="small" data-corr-preset="replies">Anti-Correlations</button>
+          </div>
+          <span id="corr-net-summary" class="muted" style="margin-left:auto"></span>
+        </div>
+        <div class="svg-wrap">
+          <svg id="corr-net-svg" viewBox="0 0 920 420" style="width:100%;height:420px;display:block"></svg>
+        </div>
+        <div class="legend-row">
+          <span><span class="leg-line pos"></span>Positive correlation (+φ, co-occur)</span>
+          <span><span class="leg-line neg"></span>Negative correlation (−φ, repel)</span>
+          <span>Node size = log(observations) · Color = positive cluster · Click node or link to inspect &amp; cross-filter</span>
+        </div>
+        <div id="corr-net-inspector" class="inspector">Click or hover any node or edge to inspect Support, Lift, φ, and directional Confidence P(B|A), or click to cross-filter the dashboard.</div>
+      </div>
+
+      <div id="corr-panel-heatmap" class="sub-panel corr-sub-panel">
+        <div class="ctrl-inline">
+          <button type="button" class="small active" data-corr-mat="theils">Theil's U(col | row) — Directional</button>
+          <button type="button" class="small" data-corr-mat="cramers">Cramér's V — Symmetric</button>
+          <span class="muted">Row X predicts Column Y (1.00 = knowing X completely determines Y).</span>
+        </div>
+        <div class="svg-wrap">
+          <svg id="corr-heat-svg" viewBox="0 0 600 460" style="width:100%;height:460px;display:block"></svg>
+        </div>
+        <div id="corr-heat-inspector" class="inspector">Hover any cell to compare Cramér's V against directional Theil's U(col|row) and U(row|col).</div>
+      </div>
+
+      <div id="corr-panel-clusters" class="sub-panel corr-sub-panel">
+        <div id="corr-clusters-grid" class="clusters-grid"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Token A</th><th>Token B</th><th class="num">φ</th><th class="num">Lift</th>
+                <th class="num">Support</th><th class="num">P(B|A)</th><th class="num">P(A|B)</th>
+              </tr>
+            </thead>
+            <tbody id="corr-pairs-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Alluvial / Sankey Flow Explorer (2–3 Fields)</h2>
+          <div class="muted" style="font-size:12px">Traces exact observation volume flowing between correlated field buckets. Click any node or ribbon to cross-filter the dashboard.</div>
+        </div>
+        <div class="hdr-actions">
+          <label class="muted" style="font-size:12px">Stage 1: <select id="sankey-f1" aria-label="Sankey stage 1"></select></label>
+          <label class="muted" style="font-size:12px">Stage 2: <select id="sankey-f2" aria-label="Sankey stage 2"></select></label>
+          <label class="muted" style="font-size:12px">Stage 3: <select id="sankey-f3" aria-label="Sankey stage 3"></select></label>
+        </div>
+      </div>
+      <div class="svg-wrap">
+        <svg id="sankey-svg" viewBox="0 0 920 360" style="width:100%;height:360px;display:block"></svg>
+      </div>
+      <div id="sankey-inspector" class="inspector">Hover any node or ribbon to inspect exact observation flow and conditional share; click to filter.</div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <div>
+          <h2>Aggregates — Global Rollups, Across-Skit Mean/Median &amp; Outliers</h2>
+        </div>
+        <div class="hdr-actions">
+          <select id="agg-select" aria-label="Select aggregate"></select>
+          <button id="agg-outliers" type="button" class="small active">Top Outliers</button>
+          <button id="agg-histogram" type="button" class="small">Across-Skit Distribution</button>
+          <button id="agg-events" type="button" class="small">Per-Event Histogram</button>
+        </div>
+      </div>
+      <div class="note">
+        <strong>Statistical scope:</strong> Global Min, Max, Sum, and Obs-Weighted Mean (<code>AVG.sum / AVG.count</code>) cover all observations in the filtered skits. Across-Skit Median and Mean summarize the per-skit metric across active skits. Aggregates configured with <code>HISTOGRAM</code> also merge exact per-event bins and interpolated p50/p90/p95/p99 quantiles live.
+      </div>
+      <div class="table-wrap">
+        <table id="aggs-table">
+          <thead>
+            <tr>
+              <th>Aggregate</th><th>Kind</th><th class="num">Min</th><th class="num">Max</th>
+              <th class="num">Sum</th><th class="num">Obs Mean</th>
+              <th class="num">Skit Median</th><th class="num">Skit Mean</th><th class="num">Skits</th>
+            </tr>
+          </thead>
+          <tbody id="aggs-tbody"></tbody>
+        </table>
+      </div>
+      <div id="agg-quantiles" class="cov-strip" style="margin-top:12px;display:none"></div>
+      <div class="chart-wrap" style="margin-top:10px">
+        <canvas id="chart-agg"></canvas>
+        <div id="agg-empty" class="empty-state" style="display:none"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <h2>History &amp; Run-over-Run Drift</h2>
+        <select id="drift-select" aria-label="Select run transition"></select>
+      </div>
+      <div id="history-warnings" class="warn-box" style="display:none"></div>
+      <div id="history-empty" class="empty-state">
+        No run history directory found. History files are written automatically by <code>sketch merge</code> under <code>&lt;sketch&gt;.history/</code>, or supply <code>--history DIR</code>.
+      </div>
+      <div id="history-content" style="display:none">
+        <div class="chart-wrap"><canvas id="chart-history"></canvas></div>
+        <div id="drift-box" style="margin-top:16px">
+          <div id="drift-badges" class="cov-strip"></div>
+          <div class="grid-2">
+            <div>
+              <h3>Newly Appeared Skits</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Skit</th><th class="num">Count</th><th class="num">Weight</th><th>Tokens</th></tr></thead>
+                  <tbody id="drift-new-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <h3>Disappeared Skits</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Skit</th><th class="num">Prev Count</th><th class="num">Prev Weight</th><th>Tokens</th></tr></thead>
+                  <tbody id="drift-gone-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <h3 style="margin-top:14px">Biggest Share Shifts (Persisted Skits)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Skit</th><th class="num">Count Change</th><th class="num">Share Shift</th><th>Tokens</th></tr></thead>
+              <tbody id="drift-shift-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-hdr">
+        <h2>Interactive Skit Explorer &amp; Retained Sample Inspector</h2>
+        <div class="hdr-actions">
+          <label class="muted" style="font-size:12px"><input id="toggle-all-tokens" type="checkbox"> Show NULL/FALSE tokens</label>
+          <select id="sort-select" aria-label="Sort skits by">
+            <option id="sort-weight-opt" value="weight" selected>Sort: Weight (Count)</option>
+            <option value="count">Sort: Count</option>
+            <option value="first_seen">Sort: First Seen</option>
+            <option value="last_seen">Sort: Last Seen</option>
+          </select>
+          <button id="sort-dir" type="button" class="small">Desc</button>
+          <select id="page-size" aria-label="Rows per page">
+            <option value="25" selected>25 / page</option>
+            <option value="50">50 / page</option>
+            <option value="100">100 / page</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap" style="max-height:none">
+        <table>
+          <thead>
+            <tr>
+              <th>Skit ID</th><th id="skits-col-metric" class="num">Count</th><th class="num">Weight %</th><th class="num">Cum %</th>
+              <th>First / Last Seen</th><th>Tokens (click to filter)</th><th>Sample</th>
+            </tr>
+          </thead>
+          <tbody id="skits-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span id="pager-info" class="muted" style="font-size:12px"></span>
+        <div class="hdr-actions">
+          <button id="prev-page" type="button" class="small">Previous</button>
+          <button id="next-page" type="button" class="small">Next</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script id="skt-data" type="application/json">__DATA_JSON__</script>
+  <script>__CHARTJS__</script>
+  <script id="skt-app-script">__APP_JS__</script>
+</body>
+</html>

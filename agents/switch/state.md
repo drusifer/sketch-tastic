@@ -1,34 +1,23 @@
 # Agent State
 
 ## Context
-- Sprint 6 owner steering: reporting/export/coverage belong in generic core CLI for any profile/sketch. Bluesky adapter only unwraps/deduplicates original posts and prepares artifacts.
-- Local profile/baseline files are operator-controlled artifacts; public and regression JSONL are untrusted. No new dependency in reviewed changes.
-- Sprint 5 security tooling and redacted staged hook remain. No open security findings or accepted risks.
+### Recent Decisions
+- 2026-11-23: Sprint 8 Phase 3 security review **PASSED** (`security gate (phase 3): No blocking findings`).
+- Full `bobp make security-scan` verified: 0 gitleaks leaks (119 commits), 0 pip-audit vulnerabilities across all lockfile groups; zero new dependencies.
+- Non-blocking defense-in-depth items logged for backlog: `log_bin_key` subnormal float scaling (`5e-324`) and `_fold_parallel` SIGKILL feed guard.
 
 ## Current Task
-- **Status:** Complete
-- **Assigned to:** Switch
-- **Started:** 2026-11-20
-- **Description:** Sprint 6 design and implementation security review.
-- **Progress:** Both gates: No blocking findings. Reviewed generic reporting/CLI integration, bounded original-post input, fresh prepare/export publication and tests. No make runs or scans; root/QA owns final execution. Reports in agents/switch/reviews/2026-11-20-sprint6-*.md.
-- **Blockers:** Separate functional default-profile compilation blocker remains outside security clearance.
-- **Consultations:** Read-only Oracle consultation diagnosed installed JSONPath parser cumulative max_expression_depth=30; union branches do not reset counter. Suggested shorter independent profile fields. No files changed for that consultation.
+**Status:** All Sprint 8 security gates cleared (Design + Phases 1, 2, 3).
+**Assigned to:** Tank (`*devops`)
+**Started:** 2026-11-23
+
+### Progress
+- [x] Design Gate 2b passed
+- [x] Phase 1, 2, 3 security gates passed (`SEC-S8-01`..`08` all resolved)
 
 ## Next Steps
-- **Immediate next action:** Morpheus completes functional review after Trin and profile resolution; parent logs shared Switch handoff.
-- **Waiting on:** Root secrets scan and QA execution for delivery, not further security assessment.
-- **Planned work:** Re-review if security-relevant source changes; do not rerun unchanged tests. Default profile compilation/coverage must pass before sprint acceptance.
+### Immediate Next Action
+Post Switch's Sprint 8 retrospective during Stage 3 closeout.
 
 ---
-*Last updated: 2026-11-20*
-
-## Sprint 6 final checkpoint — supersedes pending work above
-Context: original post rows are the regression unit. Generic report/export/coverage live in sketch-tastic; Bluesky only unwraps post-create envelopes. Owner approved split native profile fields and absent-array distinction.
-Current Task: complete (100%). Four container groups use present/any/multiple bits; mixed galleries count image entries only. Core and profile reviews, clean gates (279 tests on3.14/3.15, lint,3wheel smokes/build/security scans) and live UAT passed. Final dataset data/bluesky-posts:20789 posts,860 kinds; all representatives100% kind/frequency coverage. Selected sample represents3331 observations (16.0%),1/860 kinds. No pending questions/blockers.
-Next Steps: sprint launch/archive/local main integration; confirm git log/status if interrupted. No push, version bump or release. Existing data preserved; clean deletes it. Read task.md before new work; do not rerun unchanged tests or restore the superseded image model.
-
-
-## Sprint 7 final checkpoint — 2026-11-21
-- **Context:** Design threat model and Phases 1–3 implementation security reviews all passed (`No blocking findings`, saved in `agents/switch/reviews/2026-11-21-sprint7-*.md`). Verified Chart.js v4.4.9 MIT + SHA-256 pin, strict offline CSP, script-safe JSON escaping, `textContent`/`Map` DOM handling, atomic no-symlink output, `gitleaks` 0 leaks, and `pip-audit` 0 vulns.
-- **Current Task:** Complete (100%).
-- **Next Steps:** Re-verify SHA-256 and CSP if Chart.js or dashboard renderer is upgraded in a future sprint.
+*Last updated: 2026-11-23T23:59:30-05:00*

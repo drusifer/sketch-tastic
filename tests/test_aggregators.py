@@ -1,4 +1,4 @@
-"""Tests: mergeable per-fingerprint aggregators."""
+"""Tests: mergeable per-skit aggregators."""
 
 import unittest
 

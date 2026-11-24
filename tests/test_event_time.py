@@ -97,7 +97,7 @@ class EventTimeMergeAndAnalysisTests(unittest.TestCase):
 
             sketch = Sketch()
             sketch.load(str(sketch_path))
-            by_kind = {sketch.get(fid).tokens["kind"]: sketch.get(fid) for fid in sketch}
+            by_kind = {sketch.get(sid).tokens["kind"]: sketch.get(sid) for sid in sketch}
 
             login = by_kind["login"]
             self.assertEqual(login.meta["first_seen"], datetime(2022, 1, 10, 8, 30, tzinfo=UTC))
@@ -169,7 +169,7 @@ class EventTimeMergeAndAnalysisTests(unittest.TestCase):
 
             sketch = Sketch()
             sketch.load(str(sketch_path))
-            skit = next(sketch.get(fid) for fid in sketch)
+            skit = next(sketch.get(sid) for sid in sketch)
             self.assertEqual(skit.meta["first_seen"], datetime(2021, 2, 1, 0, 0, tzinfo=UTC))
             self.assertEqual(skit.meta["last_seen"], datetime(2024, 5, 1, 0, 0, tzinfo=UTC))
 
@@ -223,7 +223,7 @@ class EventTimeMergeAndAnalysisTests(unittest.TestCase):
             self.assertEqual(code, 0, err)
             sketch = Sketch()
             sketch.load(str(sketch_path))
-            skit = next(sketch.get(fid) for fid in sketch)
+            skit = next(sketch.get(sid) for sid in sketch)
             self.assertEqual(skit.meta["first_seen"], datetime(2020, 1, 1, 0, 0, tzinfo=UTC))
             self.assertEqual(skit.meta["last_seen"], datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC))
 

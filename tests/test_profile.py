@@ -1,4 +1,4 @@
-"""Tests for fingerprint profile files."""
+"""Tests for skit profile files."""
 
 import os
 import tempfile

@@ -170,3 +170,20 @@ The owner requested a generic `sketchtastic` CLI capability for a sketch analysi
 
 ### Outcome and consequences
 `sketchtastic analyze SKETCH -o REPORT.html` generates a single standalone HTML file with a strict offline CSP (`default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src 'none'; connect-src 'none';`), vendored Chart.js v4.4.9 (`src/sketchtastic/assets/chart.umd.min.js` + MIT license + SHA-256 checksum), script-safe JSON escaping, and safe DOM rendering. Existing ASCII `report` and `show` commands remain unchanged. Because sketches retain per-skit summaries rather than raw per-event distributions, exact observation-weighted mean/median are reported for numeric token fields and skit counts, exact observation-weighted mean is reported for `AVG` aggregates (`sum / count`), and aggregate medians are explicitly labeled as across-skit statistics.
+
+## ADR-2026-11-23: Lean dashboard payload builder & modular offline web assets
+
+**Status:** Accepted. **Date:** 2026-11-23. **Deciders:** Owner ("keep lean"), Morpheus, Switch. **Related:** [Sprint 8 stories & architecture](sprints/USER_STORIES_SPRINT8.md), [Domain Model](DOMAIN.md).
+
+### Context and drivers
+After Sprint 7 and follow-up dashboard features (boolean types, ablation, Cramér's V / Theil's U correlations, Sankey, additive weightings, per-event histograms), `src/sketchtastic/dashboard.py` grew to 3,582 lines of inline Python strings while `src/sketchtastic/analysis.py` grew to 1,146 lines with 13 radon C/D functions (up to Grade D(24)). Auditing `dashboard.py` showed the browser never read Python's precomputed `ablation`, `correlations`, `concentration`, or computed field/aggregate statistics — JS already recomputed everything dynamically from `DATA.skits` to support live filtering, sliders, and `Weight by` re-weighting. Meanwhile `reporting.py` and `analysis.py` had a circular import (`PLC0415`) and parsed sketch YAML files twice.
+
+### Considered options
+| Option | Benefits | Costs / risks | Decision |
+|---|---|---|---|
+| Keep duplicated Python + JS statistical engines in sync | Preserves an internal Python stats dict | ~600L dead computation for the dashboard, larger HTML payloads, shotgun surgery and parity drift | Rejected |
+| Lean Python payload builder + modular static `assets/dashboard/*` with direct `node` JS unit tests | Single source of truth for interactive stats, smaller HTML output, zero Python/JS drift, 0 radon C+ across `src/`, zero new runtime deps or frontend build toolchain | `analyze_sketch()` returns view-model metadata + skits/history rather than precomputed aggregates (not in `__all__`) | Selected |
+| Introduce frontend bundler (Vite/esbuild) or heavy Python stats libs (`numpy`/`scipy`) | Standard JS/stats ecosystem tooling | Violates `docs/SDLC.md` minimal PyPI deps and zero-frontend-toolchain principles | Rejected |
+
+### Outcome and consequences
+`src/sketchtastic/analysis.py` is now a lean, single-pass dashboard payload and `.history/` drift builder (`meta`, `fields` keys, `aggregates` metadata, `weightings`, `time_axes`, `history`, `skits`). All interactive dashboard CSS, HTML, and JS live as static package-data files under `src/sketchtastic/assets/dashboard/` (concatenated into one inline HTML file at render time via single-pass regex substitution under a hardened offline CSP including `base-uri 'none'; form-action 'none';`), with `stats.js` kept 100% pure and unit-tested directly via `node`. Shared internal primitives (`src/sketchtastic/_io.py`) and single-pass `sketch.load_ranked_skits` eliminate circular/private cross-module imports and double YAML parsing. All of `src/` now passes `bobp make quality` with 0 extended ruff warnings, 0 vulture hits, and 0 radon C+ functions.

@@ -20,12 +20,14 @@ import select
 import sys
 import time
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from multiprocessing import Process, Queue
 from queue import Empty
 from typing import IO, Any, Callable, Iterable, Iterator, NamedTuple
 
 from sketchtastic import __version__
+from sketchtastic._io import history_dir_for, is_number
 from sketchtastic.aggregators import as_number
 from sketchtastic.model import Path
 from sketchtastic.profile import Profile, ProfileError, load_profile
@@ -325,36 +327,36 @@ class _Column(NamedTuple):
 def _show_columns(records: list[tuple[str, Skit]]) -> list[_Column]:
     """ID, count and share, first/last run, each shared value and share, then each token key."""
     columns = [
-        _Column("ID", lambda fid, record: fid, lambda fid: fid[:8]),
-        _Column("COUNT", lambda fid, record: record.meta.get("count"), _cell),
+        _Column("ID", lambda sid, _record: sid, lambda sid: sid[:8]),
+        _Column("COUNT", lambda _sid, record: record.meta.get("count"), _cell),
         _Column(
             "COUNT %",
-            lambda fid, record: record.share.get("meta", {}).get("count"),
+            lambda _sid, record: record.share.get("meta", {}).get("count"),
             _percent,
         ),
-        _Column("FIRST RUN", lambda fid, record: record.meta.get("first_seen"), _cell),
-        _Column("LAST RUN", lambda fid, record: record.meta.get("last_seen"), _cell),
+        _Column("FIRST RUN", lambda _sid, record: record.meta.get("first_seen"), _cell),
+        _Column("LAST RUN", lambda _sid, record: record.meta.get("last_seen"), _cell),
     ]
     for key, function in _shared_columns(record for _, record in records):
         name = key if function is None else f"{key}.{function}"
         columns.append(
             _Column(
                 name,
-                lambda fid, record, k=key, f=function: _lookup(record.aggregates, k, f),
+                lambda _sid, record, k=key, f=function: _lookup(record.aggregates, k, f),
                 _cell,
             )
         )
         columns.append(
             _Column(
                 f"{name} %",
-                lambda fid, record, k=key, f=function: _lookup(
+                lambda _sid, record, k=key, f=function: _lookup(
                     record.share.get("aggregates", {}), k, f
                 ),
                 _percent,
             )
         )
     for key in sorted({key for _, record in records for key in record.tokens}):
-        columns.append(_Column(key, lambda fid, record, k=key: record.tokens.get(k), _cell))
+        columns.append(_Column(key, lambda _sid, record, k=key: record.tokens.get(k), _cell))
     return columns
 
 
@@ -381,7 +383,7 @@ def _sort_key(value: Any) -> tuple:
     """Missing values first, then numbers by value, then everything else as text."""
     if value is None:
         return (0, 0)
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if is_number(value):
         return (1, value)
     return (2, str(value))
 
@@ -392,7 +394,7 @@ def _show_table(records: list[tuple[str, Skit]], key: str, sketch_path: str) -> 
     column = _find_column(columns, key, sketch_path)
     records = sorted(records, key=lambda item: _sort_key(column.value(*item)))  # ties: file order
     rows = [
-        [column.cell(column.value(fid, record)) for column in columns] for fid, record in records
+        [column.cell(column.value(sid, record)) for column in columns] for sid, record in records
     ]
     return _table([[column.header for column in columns]] + rows)
 
@@ -404,7 +406,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     except (SketchError, OSError) as exc:
         _say(f"sketch: cannot use sketch file: {exc}")
         return EXIT_NOT_WRITTEN
-    records = [(fid, sketch.get(fid)) for fid in sketch]
+    records = [(sid, sketch.get(sid)) for sid in sketch]
     if not records:
         print(f"{args.sketch_path}: no skits")
         return EXIT_OK
@@ -539,6 +541,67 @@ def _iter_stream_lines(
         yield line
 
 
+@dataclass(frozen=True)
+class _FoldOptions:
+    """Execution mode and limits for `_fold_stream`."""
+
+    jobs: int = 1
+    streaming: bool = False
+    max_events: int | None = None
+    max_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class _WorkerConfig:
+    """Immutable configuration handed to each parallel fold worker."""
+
+    profile: Profile
+    run_id: str
+    sequence: Path | None
+    mark: int | float | None
+
+
+def _parse_event_line(raw_line: bytes | str) -> tuple[dict[str, Any] | None, str | None]:
+    """Decode and parse one non-empty JSONL line into `(event_dict, skip_reason)`."""
+    text = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
+    try:
+        event = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return None, f"invalid JSON ({exc.msg} at column {exc.colno})"
+    if not isinstance(event, dict):
+        return None, f"expected a JSON object, got {type(event).__name__}"
+    return event, None
+
+
+def _upsert_event(run: Sketch, profile: Profile, event: dict[str, Any], run_id: str) -> None:
+    if profile.event_time is not None:
+        event_time, unusable = profile.extract_event_time(event)
+        run.skipped_values += int(unusable)
+        run.upsert(profile.tokens(event), event, run_id, seen=event_time)
+    else:
+        run.upsert(profile.tokens(event), event, run_id)
+
+
+def _check_sequence_or_raise(
+    sequencer: _Sequencer | None, event: dict[str, Any], lineno: int
+) -> Any:
+    if sequencer is None:
+        return 0
+    sequence = sequencer.check(event)
+    if sequence is None:  # duplicate detection must be exact, so the whole run fails
+        raise _NotWritten(
+            f"sketch: line {lineno}: no usable sequence at {sequencer.path.text} "
+            "(missing, several values, or not a number)\n"
+            "  nothing written: the profile declares a sequence, so every event needs one"
+        )
+    return sequence
+
+
+def _record_warning(warnings: list[tuple[int, str]], lineno: int, reason: str) -> None:
+    if len(warnings) <= _MAX_LINE_WARNINGS:
+        warnings.append((lineno, reason))
+
+
 def _fold_lines(
     numbered_lines: Iterable[tuple[int, bytes | str]],
     profile: Profile,
@@ -557,40 +620,18 @@ def _fold_lines(
     stop_reason: str | None = None
     warnings: list[tuple[int, str]] = []
 
-    def skip(lineno: int, reason: str) -> None:
-        nonlocal skipped_lines
-        skipped_lines += 1
-        if len(warnings) <= _MAX_LINE_WARNINGS:
-            warnings.append((lineno, reason))
-
-    for lineno, line in numbered_lines:
-        if not line.strip():
+    for lineno, raw_line in numbered_lines:
+        if not raw_line.strip():
             continue
-        if isinstance(line, bytes):
-            line = line.decode("utf-8", errors="replace")
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError as exc:
-            skip(lineno, f"invalid JSON ({exc.msg} at column {exc.colno})")
+        event, skip_reason = _parse_event_line(raw_line)
+        if skip_reason is not None or event is None:
+            skipped_lines += 1
+            _record_warning(warnings, lineno, skip_reason or "invalid JSON")
             continue
-        if not isinstance(event, dict):
-            skip(lineno, f"expected a JSON object, got {type(event).__name__}")
-            continue
-        sequence = sequencer.check(event) if sequencer else 0
-        if sequence is None:  # duplicate detection must be exact, so the whole run fails
-            raise _NotWritten(
-                f"sketch: line {lineno}: no usable sequence at {sequencer.path.text} "
-                "(missing, several values, or not a number)\n"
-                "  nothing written: the profile declares a sequence, so every event needs one"
-            )
+        sequence = _check_sequence_or_raise(sequencer, event, lineno)
         events += 1
         if sequence is not DROP:
-            if profile.event_time is not None:
-                event_time, unusable = profile.extract_event_time(event)
-                run.skipped_values += int(unusable)
-                run.upsert(profile.tokens(event), event, run_id, seen=event_time)
-            else:
-                run.upsert(profile.tokens(event), event, run_id)
+            _upsert_event(run, profile, event, run_id)
         if max_events is not None and events >= max_events:
             stop_reason = "max_events"
             break
@@ -604,17 +645,10 @@ _BATCH_LINES = 5000
 """Lines per task for a worker; input of at most one batch folds in-process."""
 
 
-def _fold_worker(
-    tasks: Queue,
-    results: Queue,
-    profile: Profile,
-    run_id: str,
-    sequence: Path | None,
-    mark: int | float | None,
-) -> None:
+def _fold_worker(tasks: Queue, results: Queue, config: _WorkerConfig) -> None:
     """A worker process: fold each (first line number, lines) task until a None, then put
     its fold on `results`."""
-    sequencer = None if sequence is None else _Sequencer(sequence, mark)
+    sequencer = None if config.sequence is None else _Sequencer(config.sequence, config.mark)
 
     def lines() -> Iterator[tuple[int, bytes]]:
         while (task := tasks.get()) is not None:
@@ -622,7 +656,7 @@ def _fold_worker(
             yield from enumerate(batch, start)
 
     try:
-        results.put(_fold_lines(lines(), profile, run_id, sequencer))
+        results.put(_fold_lines(lines(), config.profile, config.run_id, sequencer))
     except Exception as exc:  # e.g. _NotWritten: report it, then drain so the parent never blocks
         results.put(exc)
         for _ in lines():
@@ -641,6 +675,19 @@ def _get(queue: Queue, stalled: Callable[[], bool]) -> Any:
                 ) from None
 
 
+def _collect_worker_results(workers: list[Process], results: Queue) -> Iterator[Folded]:
+    def all_dead() -> bool:
+        return not any(worker.is_alive() for worker in workers)
+
+    for _ in workers:
+        part = _get(results, all_dead)
+        if isinstance(part, Exception):
+            raise part
+        yield part
+    for worker in workers:
+        worker.join()
+
+
 def _fold_parallel(
     numbered_lines: Iterable[tuple[int, bytes | str]],
     profile: Profile,
@@ -655,9 +702,16 @@ def _fold_parallel(
     the reader waits when the workers fall behind.
     """
     tasks, results = Queue(3 * jobs), Queue()
-    args = (tasks, results, profile, run_id, sequencer and sequencer.path)
-    args += (sequencer and sequencer.mark,)
-    workers = [Process(target=_fold_worker, args=args, daemon=True) for _ in range(jobs)]
+    config = _WorkerConfig(
+        profile=profile,
+        run_id=run_id,
+        sequence=sequencer.path if sequencer else None,
+        mark=sequencer.mark if sequencer else None,
+    )
+    workers = [
+        Process(target=_fold_worker, args=(tasks, results, config), daemon=True)
+        for _ in range(jobs)
+    ]
     try:
         for worker in workers:
             worker.start()
@@ -665,53 +719,43 @@ def _fold_parallel(
             tasks.put((batch[0][0], [line for _, line in batch]))
         for _ in workers:
             tasks.put(None)
-        all_dead = lambda: not any(worker.is_alive() for worker in workers)  # noqa: E731
-        for _ in workers:
-            part = _get(results, all_dead)
-            if isinstance(part, Exception):
-                raise part
-            yield part
-        for worker in workers:
-            worker.join()
+        yield from _collect_worker_results(workers, results)
     finally:
         for worker in workers:
             if worker.is_alive():
                 worker.terminate()
 
 
-def _fold_stream(
+def _dispatch_fold(
     stream: Any,
     profile: Profile,
     run_id: str,
     sequencer: _Sequencer | None,
-    jobs: int = 1,
-    *,
-    streaming: bool = False,
-    max_events: int | None = None,
-    max_seconds: float | None = None,
-) -> tuple[Sketch, dict]:
-    """Fold a JSONL stream into this run's sketch, in-process or on `jobs` workers.
-
-    Streaming mode (stdin or when `--max-events`/`--max-seconds` is given) folds each line
-    immediately as it arrives without buffering a full batch up front. Worker results are
-    merged as they complete: counts, aggregates, run ids and the sequence range are exact;
-    FIRST/LAST samples come from matching events, not necessarily the first or last.
-    """
+    options: _FoldOptions,
+) -> tuple[Iterable[Folded], list[bool]]:
     timed_out = [False]
-    if streaming or max_events is not None or max_seconds is not None:
-        deadline = time.monotonic() + max_seconds if max_seconds is not None else None
+    if options.streaming or options.max_events is not None or options.max_seconds is not None:
+        deadline = (
+            time.monotonic() + options.max_seconds if options.max_seconds is not None else None
+        )
         numbered = enumerate(_iter_stream_lines(stream, deadline, timed_out), start=1)
-        parts: Iterable[Folded] = [
-            _fold_lines(numbered, profile, run_id, sequencer, max_events=max_events)
-        ]
-    else:
-        numbered = enumerate(stream, start=1)
-        head = list(itertools.islice(numbered, _BATCH_LINES + 1))
-        lines = itertools.chain(head, numbered)
-        if jobs == 1 or len(head) <= _BATCH_LINES:
-            parts = [_fold_lines(lines, profile, run_id, sequencer)]
-        else:
-            parts = _fold_parallel(lines, profile, run_id, sequencer, jobs)
+        return (
+            [_fold_lines(numbered, profile, run_id, sequencer, max_events=options.max_events)],
+            timed_out,
+        )
+    numbered = enumerate(stream, start=1)
+    head = list(itertools.islice(numbered, _BATCH_LINES + 1))
+    lines = itertools.chain(head, numbered)
+    if options.jobs == 1 or len(head) <= _BATCH_LINES:
+        return [_fold_lines(lines, profile, run_id, sequencer)], timed_out
+    return _fold_parallel(lines, profile, run_id, sequencer, options.jobs), timed_out
+
+
+def _merge_folded_parts(
+    parts: Iterable[Folded],
+    sequencer: _Sequencer | None,
+    timed_out: list[bool],
+) -> tuple[Sketch, dict[str, Any], list[tuple[int, str]]]:
     run: Sketch | None = None
     stats: dict[str, Any] = {"events": 0, "skipped_lines": 0}
     stop_reason: str | None = None
@@ -723,8 +767,7 @@ def _fold_stream(
             run.merge(part)
         stats["events"] += counts["events"]
         stats["skipped_lines"] += counts["skipped_lines"]
-        if counts.get("stop_reason"):
-            stop_reason = counts["stop_reason"]
+        stop_reason = counts.get("stop_reason") or stop_reason
         warnings += part_warnings
         if sequencer and part_sequencer is not sequencer:
             sequencer.absorb(part_sequencer)
@@ -732,11 +775,35 @@ def _fold_stream(
         stop_reason = "max_seconds"
     if stop_reason is not None:
         stats["stop_reason"] = stop_reason
+    assert run is not None  # every path yields at least one fold
+    return run, stats, warnings
+
+
+def _emit_line_warnings(warnings: list[tuple[int, str]], skipped_lines: int) -> None:
     for lineno, reason in sorted(warnings)[:_MAX_LINE_WARNINGS]:
         _say(f"sketch: line {lineno}: {reason} - skipped")
-    if stats["skipped_lines"] > _MAX_LINE_WARNINGS:
+    if skipped_lines > _MAX_LINE_WARNINGS:
         _say("sketch: further skipped lines are counted but not listed")
-    assert run is not None  # every path yields at least one fold
+
+
+def _fold_stream(
+    stream: Any,
+    profile: Profile,
+    run_id: str,
+    sequencer: _Sequencer | None,
+    options: _FoldOptions | None = None,
+) -> tuple[Sketch, dict[str, Any]]:
+    """Fold a JSONL stream into this run's sketch, in-process or on worker processes.
+
+    Streaming mode (stdin or when `--max-events`/`--max-seconds` is given) folds each line
+    immediately as it arrives without buffering a full batch up front. Worker results are
+    merged as they complete: counts, aggregates, run ids and the sequence range are exact;
+    FIRST/LAST samples come from matching events, not necessarily the first or last.
+    """
+    opts = options or _FoldOptions()
+    parts, timed_out = _dispatch_fold(stream, profile, run_id, sequencer, opts)
+    run, stats, warnings = _merge_folded_parts(parts, sequencer, timed_out)
+    _emit_line_warnings(warnings, stats["skipped_lines"])
     return run, {**stats, **(sequencer.stats() if sequencer else {})}
 
 
@@ -762,7 +829,7 @@ def _open_sketch(args: argparse.Namespace, profile: Profile) -> Sketch:
     except ProfileMismatchError as exc:
         raise _NotWritten(
             f"sketch: {exc}.\n"
-            "  Fingerprints from different profiles are not comparable, so nothing was merged.\n"
+            "  Skits from different profiles are not comparable, so nothing was merged.\n"
             "  Use a separate --sketch file for this profile, or pass --force-profile to merge anyway."
         ) from exc
     except (SketchError, OSError) as exc:
@@ -794,11 +861,6 @@ RUN_ID = re.compile(r"\d{6}-(\d{4,})")
 """A run id, `YYMMDD-SEQ`: the UTC date of the run and a per-sketch sequence number."""
 
 
-def _history_dir(sketch_path: str) -> str:
-    """`<sketch without its last extension>.history`, where each run's own sketch is kept."""
-    return os.path.splitext(sketch_path)[0] + ".history"
-
-
 def _next_run_id(last_run: str | None, history_dir: str, day: date) -> str:
     """`YYMMDD-SEQ` for a new run: SEQ is one past the highest in the sketch and its history.
 
@@ -828,7 +890,7 @@ def _write_history(
         run.run["sequence"] = stats["sequence"]
     if stats.get("stop_reason"):
         run.run["stop_reason"] = stats["stop_reason"]
-    directory = _history_dir(args.sketch_path)
+    directory = str(history_dir_for(args.sketch_path))
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, f"{run_id}.yaml")
     run.save(path)
@@ -884,20 +946,19 @@ def _cmd_merge(args: argparse.Namespace) -> int:
     try:
         profile = _load_profile(args.profile)
         sketch = _open_sketch(args, profile)
-        run_id = _next_run_id(sketch.last_run, _history_dir(args.sketch_path), started.date())
+        run_id = _next_run_id(
+            sketch.last_run, str(history_dir_for(args.sketch_path)), started.date()
+        )
         sketch.last_run = run_id
         sequencer = _sequencer(profile, sketch)
+        fold_opts = _FoldOptions(
+            jobs=args.jobs,
+            streaming=args.events == "-",
+            max_events=args.max_events,
+            max_seconds=args.max_seconds,
+        )
         with _open_events(args) as stream:
-            run, stats = _fold_stream(
-                stream,
-                profile,
-                run_id,
-                sequencer,
-                args.jobs,
-                streaming=args.events == "-",
-                max_events=args.max_events,
-                max_seconds=args.max_seconds,
-            )
+            run, stats = _fold_stream(stream, profile, run_id, sequencer, fold_opts)
         known_before = set(sketch)
         sketch.merge(run)  # fold once, into the run; merge it once
         stats["new"] = len(set(run) - known_before)

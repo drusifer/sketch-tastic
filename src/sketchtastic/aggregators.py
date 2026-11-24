@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
+from sketchtastic._io import is_number
 from sketchtastic.model import MISSING, Path, Rule, ValueType, typed_values
 
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
 ]
 
 HISTOGRAM_MANTISSAS = (1.0, 1.5, 2.0, 3.0, 5.0, 7.0)
+_LOG_BASE = 10.0
 
 
 SKIP = object()
@@ -222,8 +224,8 @@ def log_bin_key(value: int | float) -> str:
     sign = "+" if value > 0 else "-"
     mag = abs(float(value))
     exp = math.floor(math.log10(mag))
-    mantissa = mag / (10.0**exp)
-    if mantissa >= 10.0:
+    mantissa = mag / (_LOG_BASE**exp)
+    if mantissa >= _LOG_BASE:
         exp += 1
         mantissa = 1.0
     step = min(
@@ -240,9 +242,11 @@ def log_bin_bounds(key: str) -> tuple[float, float]:
     idx = int(key[1:])
     n_steps = len(HISTOGRAM_MANTISSAS)
     exp, step = divmod(idx, n_steps)
-    scale = 10.0**exp
+    scale = _LOG_BASE**exp
     lo_mag = _clean_bound(HISTOGRAM_MANTISSAS[step] * scale)
-    hi_mag = _clean_bound((HISTOGRAM_MANTISSAS[step + 1] if step + 1 < n_steps else 10.0) * scale)
+    hi_mag = _clean_bound(
+        (HISTOGRAM_MANTISSAS[step + 1] if step + 1 < n_steps else _LOG_BASE) * scale
+    )
     return (lo_mag, hi_mag) if sign > 0 else (-hi_mag, -lo_mag)
 
 
@@ -300,48 +304,82 @@ def _copy_histogram_state(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def histogram_bins(state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Expand a serialized `HISTOGRAM` state into ordered bin descriptors."""
-    total = state.get("count", 0)
-    if state.get("mode") == "log":
-        rows: list[tuple[float, float, int]] = []
-        for key, cnt in state.get("bins", {}).items():
-            if cnt > 0:
-                lo, hi = log_bin_bounds(str(key))
-                rows.append((lo, hi, int(cnt)))
-        rows.sort(key=lambda r: (r[0], r[1]))
-        return [
-            {
-                "lo": lo,
-                "hi": hi,
-                "label": "0" if lo == 0 and hi == 0 else f"{_fmt_edge(lo)}–{_fmt_edge(hi)}",
-                "count": cnt,
-                "pct": round(100.0 * cnt / total, 2) if total else 0.0,
-            }
-            for lo, hi, cnt in rows
-        ]
+def _log_histogram_bins(state: dict[str, Any], total: int) -> list[dict[str, Any]]:
+    rows = sorted(
+        (*log_bin_bounds(str(key)), int(cnt))
+        for key, cnt in state.get("bins", {}).items()
+        if cnt > 0
+    )
+    return [
+        {
+            "lo": lo,
+            "hi": hi,
+            "label": "0" if lo == 0 and hi == 0 else f"{_fmt_edge(lo)}–{_fmt_edge(hi)}",
+            "count": cnt,
+            "pct": round(100.0 * cnt / total, 2) if total else 0.0,
+        }
+        for lo, hi, cnt in rows
+    ]
+
+
+def _fixed_bin_label(lo: float | None, hi: float | None) -> str:
+    if lo is None:
+        return f"≤{_fmt_edge(hi)}" if hi is not None else ""
+    if hi is None:
+        return f">{_fmt_edge(lo)}"
+    return f"{_fmt_edge(lo)}–{_fmt_edge(hi)}"
+
+
+def _fixed_histogram_bins(state: dict[str, Any], total: int) -> list[dict[str, Any]]:
     bounds = state.get("bounds", [])
     counts = state.get("counts", [])
     out: list[dict[str, Any]] = []
     for idx, cnt in enumerate(counts):
         lo = None if idx == 0 else bounds[idx - 1]
         hi = None if idx == len(bounds) else bounds[idx]
-        if lo is None:
-            label = f"≤{_fmt_edge(hi)}"
-        elif hi is None:
-            label = f">{_fmt_edge(lo)}"
-        else:
-            label = f"{_fmt_edge(lo)}–{_fmt_edge(hi)}"
         out.append(
             {
                 "lo": lo,
                 "hi": hi,
-                "label": label,
+                "label": _fixed_bin_label(lo, hi),
                 "count": int(cnt),
                 "pct": round(100.0 * cnt / total, 2) if total else 0.0,
             }
         )
     return out
+
+
+def histogram_bins(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand a serialized `HISTOGRAM` state into ordered bin descriptors."""
+    total = state.get("count", 0)
+    if state.get("mode") == "log":
+        return _log_histogram_bins(state, total)
+    return _fixed_histogram_bins(state, total)
+
+
+def _interpolate_bin(bin_info: dict[str, Any], frac: float) -> float | None:
+    lo, hi = bin_info["lo"], bin_info["hi"]
+    if lo is not None and hi is not None:
+        return lo + frac * (hi - lo)
+    if lo is None and hi is not None:
+        return (frac * hi) if hi >= 0 else float(hi)
+    if lo is not None:
+        return float(lo)
+    return None
+
+
+def _quantile_at_rank(bins: list[dict[str, Any]], rank: float) -> float | None:
+    cum = 0
+    for b in bins:
+        cnt = b["count"]
+        if cnt <= 0:
+            continue
+        if cum + cnt >= rank:
+            frac = max(0.0, min(1.0, (rank - cum) / cnt))
+            est = _interpolate_bin(b, frac)
+            return round(est, 4) if est is not None else None
+        cum += cnt
+    return None
 
 
 def histogram_quantiles(
@@ -351,30 +389,9 @@ def histogram_quantiles(
     labels = [f"p{int(round(p * 100))}" for p in probs]
     total = state.get("count", 0)
     if total <= 0:
-        return {name: None for name in labels}
+        return dict.fromkeys(labels, None)
     bins = histogram_bins(state)
-    result: dict[str, float | None] = {}
-    for name, prob in zip(labels, probs):
-        rank = prob * total
-        cum = 0
-        est: float | None = None
-        for b in bins:
-            cnt = b["count"]
-            if cnt <= 0:
-                continue
-            if cum + cnt >= rank:
-                frac = max(0.0, min(1.0, (rank - cum) / cnt))
-                lo, hi = b["lo"], b["hi"]
-                if lo is not None and hi is not None:
-                    est = lo + frac * (hi - lo)
-                elif lo is None and hi is not None:
-                    est = (frac * hi) if hi >= 0 else float(hi)
-                elif lo is not None:
-                    est = float(lo)
-                break
-            cum += cnt
-        result[name] = round(est, 4) if est is not None else None
-    return result
+    return {name: _quantile_at_rank(bins, prob * total) for name, prob in zip(labels, probs)}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -391,11 +408,7 @@ class Histogram(_Numeric):
             raise ValueError("HISTOGRAM buckets must not be empty")
         prev: float | None = None
         for bound in self.buckets:
-            if (
-                isinstance(bound, bool)
-                or not isinstance(bound, (int, float))
-                or not math.isfinite(bound)
-            ):
+            if not is_number(bound) or not math.isfinite(bound):
                 raise ValueError(f"HISTOGRAM bucket bound must be a finite number: {bound!r}")
             if prev is not None and bound <= prev:
                 raise ValueError(
