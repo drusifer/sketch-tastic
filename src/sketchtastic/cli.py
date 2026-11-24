@@ -310,7 +310,7 @@ def _token_cell(value: Any) -> str:
         return "<missing>"
     if value is None or isinstance(value, list):
         return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
-    if value in ("null", "<missing>") or value.startswith("[") or value.startswith('"'):
+    if value in ("null", "<missing>") or value.startswith(("[", '"')):
         return json.dumps(value, ensure_ascii=True)
     return safe_text(value)
 

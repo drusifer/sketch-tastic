@@ -598,11 +598,11 @@ def _extract_sample_record(skit: Skit, slot: str) -> Any:
 def _serialize_skits(
     sketch_path: Path | str,
     rows: list[tuple[str, Skit]],
-    total: int,
     skit_weights: dict[str, dict[str, float | int]],
     skit_bounds: dict[str, dict[str, list[int]]],
-    covered: set[str] | None = None,
+    covered: set[str] | None,
 ) -> list[dict[str, Any]]:
+    total = sum(skit.meta["count"] for _, skit in rows)
     skits_out: list[dict[str, Any]] = []
     cumulative = 0
     for sid, skit in rows:
@@ -649,6 +649,19 @@ def _assemble_time_axes(
     return time_axes
 
 
+def _regression_coverage(
+    regression: tuple[Path | str, Path | str] | None,
+    profile: Any,
+    rows: list[tuple[str, Skit]],
+    runs: list[tuple[dict[str, Any], dict]],
+) -> tuple[dict[str, Any] | None, set[str] | None]:
+    """Coverage payload and covered skit IDs, or `(None, None)` without a regression corpus."""
+    if regression is None:
+        return None, None
+    coverage = coverage_payload(profile, regression[1], rows, runs)
+    return coverage, set(coverage["covered_ids"])
+
+
 def analyze_sketch(
     sketch_path: Path | str,
     history_dir: Path | str | None = None,
@@ -661,7 +674,7 @@ def analyze_sketch(
     `profile_id` is checked), and adds baseline and per-run coverage of the corpus.
     """
     profile = load_profile(str(regression[0])) if regression else None
-    raw_header, rows = load_ranked_skits(sketch_path, profile.profile_id if profile else None)
+    raw_header, rows = load_ranked_skits(sketch_path, getattr(profile, "profile_id", None))
     total = sum(skit.meta["count"] for _, skit in rows)
     singletons = sum(1 for _, skit in rows if skit.meta["count"] == 1)
 
@@ -671,11 +684,8 @@ def analyze_sketch(
     resolved_weight = _resolve_default_weighting(default_weight, weightings)
     history, run_map, runs = _load_history(sketch_path, history_dir)
     time_axes = _assemble_time_axes(rows, agg_axes, skit_bounds, run_map)
-    coverage = (
-        coverage_payload(profile, regression[1], rows, runs) if profile and regression else None
-    )
-    covered = set(coverage["covered_ids"]) if coverage else None
-    skits_out = _serialize_skits(sketch_path, rows, total, skit_weights, skit_bounds, covered)
+    coverage, covered = _regression_coverage(regression, profile, rows, runs)
+    skits_out = _serialize_skits(sketch_path, rows, skit_weights, skit_bounds, covered)
 
     return {
         "meta": {

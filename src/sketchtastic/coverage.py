@@ -66,6 +66,12 @@ def _ratio(part: int, whole: int) -> float | None:
     return round(100.0 * part / whole, 2) if whole else None
 
 
+def _tally(counts: dict[str, int], covered: set[str]) -> tuple[int, int, int, int]:
+    """(kinds, covered kinds, events, covered events) for skit ID -> event count."""
+    hits = [count for sid, count in counts.items() if sid in covered]
+    return len(counts), len(hits), sum(counts.values()), sum(hits)
+
+
 def _run_coverage(
     info: dict[str, Any],
     skits: RunSkits,
@@ -73,35 +79,32 @@ def _run_coverage(
     cumulative: dict[str, int],
 ) -> dict[str, Any]:
     """One run's own coverage, then fold it into `cumulative` (kind -> events so far)."""
-    new = [sid for sid in skits if sid not in cumulative]
+    counts = {sid: count for sid, (count, _) in skits.items()}
+    new = [sid for sid in counts if sid not in cumulative]
     new_uncovered = sorted(
-        (sid for sid in new if sid not in covered), key=lambda sid: (-skits[sid][0], sid)
+        (sid for sid in new if sid not in covered), key=lambda sid: (-counts[sid], sid)
     )
-    events = sum(count for count, _ in skits.values())
-    covered_events = sum(count for sid, (count, _) in skits.items() if sid in covered)
-    covered_kinds = sum(1 for sid in skits if sid in covered)
-    for sid, (count, _) in skits.items():
+    for sid, count in counts.items():
         cumulative[sid] = cumulative.get(sid, 0) + count
-    cum_events = sum(cumulative.values())
-    cum_covered_events = sum(count for sid, count in cumulative.items() if sid in covered)
-    cum_covered_kinds = sum(1 for sid in cumulative if sid in covered)
+    kinds, covered_kinds, events, covered_events = _tally(counts, covered)
+    cum_kinds, cum_covered_kinds, cum_events, cum_covered_events = _tally(cumulative, covered)
     return {
         "id": info["id"],
         "comparable": True,
-        "kinds": len(skits),
+        "kinds": kinds,
         "covered_kinds": covered_kinds,
-        "kind_pct": _ratio(covered_kinds, len(skits)),
+        "kind_pct": _ratio(covered_kinds, kinds),
         "events": events,
         "covered_events": covered_events,
         "event_pct": _ratio(covered_events, events),
-        "cum_kinds": len(cumulative),
+        "cum_kinds": cum_kinds,
         "cum_covered_kinds": cum_covered_kinds,
-        "cum_kind_pct": _ratio(cum_covered_kinds, len(cumulative)),
+        "cum_kind_pct": _ratio(cum_covered_kinds, cum_kinds),
         "cum_event_pct": _ratio(cum_covered_events, cum_events),
         "new_kinds": len(new),
         "new_uncovered_count": len(new_uncovered),
         "new_uncovered": [
-            {"id": sid, "count": skits[sid][0], "tokens": skits[sid][1]}
+            {"id": sid, "count": counts[sid], "tokens": skits[sid][1]}
             for sid in new_uncovered[:MAX_LISTED]
         ],
     }
