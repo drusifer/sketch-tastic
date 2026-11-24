@@ -57,6 +57,9 @@ function renderExplorer(skits, totalW, wm) {
       }
     });
     idTd.appendChild(cpBtn);
+    if (s.covered !== null && s.covered !== undefined) {
+      idTd.appendChild(el("span", { class: "badge " + (s.covered ? "ok" : "warn"), style: "margin-left:6px" }, s.covered ? "covered" : "uncovered"));
+    }
     tr.appendChild(idTd);
 
     const metricTd = el("td", { class: "num", title: wm.isCount ? "" : (fmtInt(s.count) + " observations") }, fmtWeight(w, wm));
@@ -67,12 +70,13 @@ function renderExplorer(skits, totalW, wm) {
 
     const tokTd = el("td");
     const entries = Object.entries(s.tokens);
-    const shown = state.showAllTokens ? entries : entries.filter(([, v]) => v !== "NULL" && v !== "FALSE");
+    const shown = state.showAllTokens ? entries : entries.filter(([, v]) => v !== null && v !== "FALSE");
     const list = shown.length ? shown : entries.slice(0, 4);
     for (const [k, v] of list) {
-      const pill = el("span", { class: "token-pill", title: k + " = " + v }, k + "=" + v);
+      const label = tokenLabel(v);
+      const pill = el("span", { class: "token-pill", title: k + " = " + label }, k + "=" + label);
       pill.style.cursor = "pointer";
-      pill.addEventListener("click", () => toggleFieldFilter(k, v));
+      pill.addEventListener("click", () => toggleFieldFilter(k, tokenKey(v)));
       tokTd.appendChild(pill);
     }
     tr.appendChild(tokTd);

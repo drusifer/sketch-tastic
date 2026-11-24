@@ -119,7 +119,7 @@ class CreateAndMergeTests(CliTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out, "")  # AC7: stdout stays clean
         data = self.load_set()
-        self.assertEqual(data["version"], 0)
+        self.assertEqual(data["version"], 1)
         self.assertEqual(len(data["skits"]), 3)
         by_kind = {rec["tokens"]["kind"]: rec for rec in data["skits"].values()}
         self.assertEqual(by_kind["a"]["meta"]["count"], 3)
@@ -258,7 +258,7 @@ class NonTelemetryFixtureTests(CliTestCase):
 
         health = by_shape[("GET", "/health", "TRUE")]
         self.assertEqual(health["tokens"]["authenticated"], "FALSE")
-        self.assertEqual(health["tokens"]["slow_upstreams"], "NULL")
+        self.assertNotIn("slow_upstreams", health["tokens"])
 
 
 class BadInputTests(CliTestCase):
@@ -445,7 +445,7 @@ aggregates:
         data = self.load_set()
         self.assertEqual(data["profile_id"], "3f0dd0d9f280ba32064a891dcd3b17cb")
         self.assertEqual(len(data["skits"]), 3)
-        db_ok = data["skits"]["9312137ea290aa8d196e7036cd687af8"]
+        db_ok = data["skits"]["549439e519c9cad471036ab7ebb4e2a6"]
         self.assertEqual(db_ok["tokens"], {"level": "INFO", "component": "db", "failed": "FALSE"})
         self.assertEqual(db_ok["meta"]["count"], 2)
         self.assertEqual(db_ok["aggregates"]["example"], ["query ok", "query ok (cached)"])
@@ -594,8 +594,8 @@ class ShowTests(CliTestCase):
             out.splitlines(),
             [
                 "ID        COUNT  COUNT %  FIRST RUN    LAST RUN     kind  route",
-                f"{ida}  1      25.0     261014-0001  261014-0001  a     -",
-                f"{idc}  1      25.0     261015-0003  261015-0003  c     -",
+                f"{ida}  1      25.0     261014-0001  261014-0001  a     <missing>",
+                f"{idc}  1      25.0     261015-0003  261015-0003  c     <missing>",
                 f"{idb}  2      50.0     261014-0001  261014-0002  b     /x",
             ],
         )
@@ -645,7 +645,7 @@ class ShowTests(CliTestCase):
         self.write(
             "set.yaml",
             f"""
-            version: 0
+            version: 1
             profile_id: null
             skits:
               {sid}:
@@ -689,6 +689,16 @@ class ShowTests(CliTestCase):
 
 class ShowSortTests(CliTestCase):
     """`show --sort KEY`: lowest first, default COUNT (STORY-SKT-03)."""
+
+    def test_structured_cells_distinguish_missing_null_literal_and_empty_set(self):
+        sketch = Sketch()
+        for tokens in ({}, {"value": None}, {"value": "null"}, {"value": []}, {"value": "[]"}):
+            sketch.upsert(tokens, {}, run="261124-0001")
+        sketch.save(self.sketch_path)
+        code, out, err = self.run_cli("show", "--sort", "value", self.sketch_path)
+        self.assertEqual((code, err), (0, ""))
+        cells = [re.split(r"\s{2,}", row)[-1] for row in out.splitlines()[1:]]
+        self.assertEqual(set(cells), {"<missing>", "null", '"null"', "[]", '"[]"'})
 
     def save_sizes(self, sizes):
         """One skit per (kind, size) with a SUM aggregate on size, saved in that order."""
@@ -734,12 +744,10 @@ class ShowSortTests(CliTestCase):
         self.assertEqual(self.kinds(), self.kinds("--sort", "COUNT"))
 
     def test_missing_values_sort_first_and_numbers_before_text(self):
-        sketch = Sketch()
-        for tokens in ({"kind": "t", "v": "a"}, {"kind": "n10", "v": 10}, {"kind": "none"}):
-            sketch.upsert(tokens, {}, run="261014-0001")
-        sketch.upsert({"kind": "n9", "v": 9}, {}, run="261014-0001")
-        sketch.save(self.sketch_path)
-        self.assertEqual(self.kinds("--sort", "v"), ["none", "n9", "n10", "t"])
+        from sketchtastic.cli import _sort_key
+
+        # Numeric values belong to aggregate columns; format-1 scalar tokens are strings.
+        self.assertEqual(sorted(["a", 10, None, 9], key=_sort_key), [None, 9, 10, "a"])
 
     def test_exact_header_wins_and_a_caseless_tie_is_ambiguous(self):
         sketch = Sketch()
@@ -794,7 +802,7 @@ class HistoryTests(CliTestCase):
         self.assertIn(f"  history: {second}", err)
 
         run = self.load_set(second)
-        self.assertEqual(run["version"], 0)
+        self.assertEqual(run["version"], 1)
         self.assertEqual(run["profile_id"], self.load_set()["profile_id"])
         kinds = {rec["tokens"]["kind"]: rec for rec in run["skits"].values()}
         self.assertEqual(sorted(kinds), ["a", "b", "c"])  # events 4-6 only

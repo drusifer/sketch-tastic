@@ -14,7 +14,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from functools import cache, cached_property
-from typing import Any, ClassVar, Self
+from typing import Any, ClassVar, Iterable, Self
 
 import jsonpath_rfc9535 as jsonpath
 
@@ -37,13 +37,39 @@ __all__ = [
     "Regex",
     "Rule",
     "Trunc",
+    "Token",
     "ValueType",
+    "canonical_set",
+    "is_token",
     "tokens",
     "typed_values",
 ]
 
 MISSING = object()
 """Handed to a modifier when a path selects nothing."""
+
+type Token = str | None | list[Token]
+"""A scalar token, explicit null, or a canonical structured set of tokens."""
+
+
+def canonical_set(values: Iterable[Token]) -> list[Token]:
+    """Sort and deduplicate structured tokens by their unambiguous JSON encoding."""
+    keyed = {
+        json.dumps(value, ensure_ascii=False, separators=(",", ":")): value for value in values
+    }
+    return [keyed[key] for key in sorted(keyed)]
+
+
+def is_token(value: Any) -> bool:
+    """Whether a stored value has the canonical structured-token representation."""
+    if value is None or isinstance(value, str):
+        return True
+    if not isinstance(value, list):
+        return False
+    try:
+        return all(is_token(item) for item in value) and value == canonical_set(value)
+    except RecursionError, TypeError, ValueError:
+        return False
 
 
 @cache
@@ -129,12 +155,12 @@ class Rule:
 
 
 class Modifier(Rule):
-    """Turns one selected value into a token. `absent` is the token for a missing or null value."""
+    """Turns one selected value into a token; predicates share a missing/null fallback."""
 
     family = "modifier"
     absent: ClassVar[str] = "FALSE"
 
-    def token(self, value: Any) -> str:
+    def token(self, value: Any) -> Any:
         return self.absent if value is MISSING or value is None else self.present(value)
 
     def present(self, value: Any) -> str:
@@ -145,12 +171,20 @@ def _flag(condition: Any) -> str:
     return "TRUE" if condition else "FALSE"
 
 
-@dataclass(frozen=True, kw_only=True)
-class Default(Modifier):
-    name = "DEFAULT"
-    absent = "NULL"
+class _ValueModifier(Modifier):
+    """Value-producing modifiers retain absence and explicit null as distinct states."""
 
-    def present(self, value: Any) -> str:
+    def token(self, value: Any) -> Any:
+        return value if value is MISSING or value is None else self.present(value)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Default(_ValueModifier):
+    name = "DEFAULT"
+
+    def present(self, value: Any) -> Token:
+        if isinstance(value, list):
+            return canonical_set(self.token(item) for item in value)
         return value.isoformat() if isinstance(value, date) else str(value)
 
 
@@ -234,9 +268,8 @@ class Regex(Modifier):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RegSub(Regex):
+class RegSub(_ValueModifier, Regex):
     name = "REGSUB"
-    absent = "NULL"
     replace: str
 
     def check(self) -> None:
@@ -260,15 +293,14 @@ _TRUNC_FORMATS = {
 
 
 @dataclass(frozen=True, kw_only=True)
-class Trunc(Modifier):
+class Trunc(_ValueModifier):
     """A date or time cut down to `unit`, e.g. hour -> "2024-01-01T15". Needs a DATE/DATETIME type."""
 
     name = "TRUNC"
-    absent = "NULL"
     unit: str
 
-    def present(self, value: Any) -> str:
-        return value.strftime(_TRUNC_FORMATS[self.unit]) if isinstance(value, date) else "NULL"
+    def present(self, value: Any) -> Token:
+        return value.strftime(_TRUNC_FORMATS[self.unit]) if isinstance(value, date) else None
 
 
 class ValueType(Rule):
@@ -347,12 +379,16 @@ class Field:
         text = f"{self.key}|{self.path.text}|{self.modifier.spec}"
         return f"{text}|{self.type.spec}" if self.type else text
 
-    def token(self, event: Any) -> str:
-        """No match is tokenized as missing; several are tokenized, de-duplicated, sorted, joined."""
+    def token(self, event: Any) -> Any:
+        """Return one token or a canonical set; value modifiers preserve missing omission."""
         values = typed_values(self.path.values(event), self.type) or [MISSING]
-        return ",".join(sorted({self.modifier.token(value) for value in values}))
+        selected = [self.modifier.token(value) for value in values]
+        unique = canonical_set(value for value in selected if value is not MISSING)
+        if not unique:
+            return MISSING
+        return unique[0] if len(unique) == 1 else unique
 
 
-def tokens(event: Any, fields: tuple[Field, ...] | list[Field]) -> dict[str, str]:
-    """The tokens `fields` make of `event`, by key."""
-    return {f.key: f.token(event) for f in fields}
+def tokens(event: Any, fields: tuple[Field, ...] | list[Field]) -> dict[str, Token]:
+    """The tokens `fields` make of `event`, omitting fields whose result is missing."""
+    return {f.key: token for f in fields if (token := f.token(event)) is not MISSING}

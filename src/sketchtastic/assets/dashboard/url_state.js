@@ -8,6 +8,7 @@ function syncDomFromState() {
   document.getElementById("range-lo").value = String(state.sliderLo);
   document.getElementById("range-hi").value = String(state.sliderHi);
   document.getElementById("search-input").value = state.search;
+  document.getElementById("coverage-select").value = state.coverageFilter;
   document.getElementById("pareto-top").value = String(state.paretoTop);
   document.getElementById("weight-obs").classList.toggle("active", state.weightMode === "observations");
   document.getElementById("weight-skits").classList.toggle("active", state.weightMode === "skits");
@@ -81,6 +82,7 @@ function readUrlState() {
     s.add(fv);
   }
   state.search = p.get("q") || "";
+  state.coverageFilter = DATA.coverage && ["covered", "uncovered"].includes(p.get("cv")) ? p.get("cv") : "all";
   if (p.has("fld") && fieldSet.has(p.get("fld"))) state.selectedField = p.get("fld");
   if (p.has("wm") && (p.get("wm") === "observations" || p.get("wm") === "skits")) state.weightMode = p.get("wm");
   if (p.has("pt")) {
@@ -141,6 +143,7 @@ function syncUrlState() {
     for (const v of vals) p.append("f", fk + ":" + v);
   }
   if (state.search.trim()) p.set("q", state.search.trim());
+  if (state.coverageFilter !== "all") p.set("cv", state.coverageFilter);
   const defField = DATA.fields.length ? DATA.fields[0].key : "";
   if (state.selectedField && state.selectedField !== defField) p.set("fld", state.selectedField);
   if (state.weightMode !== "observations") p.set("wm", state.weightMode);

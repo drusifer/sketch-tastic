@@ -39,8 +39,8 @@ function showCorrEdgeInspector(e, wm) {
   top.appendChild(el("strong", { class: "mono" }, e.a + (e.phi >= 0 ? "  <->  " : "  (repels)  ") + e.b));
   const fBtn = el("button", { type: "button", class: "small" }, "Filter dashboard to pair");
   fBtn.addEventListener("click", () => {
-    state.fieldFilters.set(e.fa, new Set([e.va]));
-    state.fieldFilters.set(e.fb, new Set([e.vb]));
+    state.fieldFilters.set(e.fa, new Set([e.ta]));
+    state.fieldFilters.set(e.fb, new Set([e.tb]));
     state.page = 1;
     render();
   });
@@ -64,7 +64,7 @@ function showCorrNodeInspector(nId, itemMap, edges, wm) {
   top.appendChild(el("strong", { class: "mono" }, nId + (info ? " — " + fmtWeight(info.count, wm) + " " + wm.shortLabel + " (" + fmtPct(info.pct) + ")" : "")));
   if (info) {
     const fBtn = el("button", { type: "button", class: "small" }, "Toggle filter: " + shortTokenLabel(info.field, info.value));
-    fBtn.addEventListener("click", () => toggleFieldFilter(info.field, info.value));
+    fBtn.addEventListener("click", () => toggleFieldFilter(info.field, info.token));
     top.appendChild(fBtn);
   }
   box.appendChild(top);
@@ -266,7 +266,7 @@ function renderCorrClustersTab(corr, wm) {
         if (it) {
           let s = state.fieldFilters.get(it.field);
           if (!s) { s = new Set(); state.fieldFilters.set(it.field, s); }
-          s.add(it.value);
+          s.add(it.token);
         }
       }
       state.page = 1;
@@ -279,7 +279,7 @@ function renderCorrClustersTab(corr, wm) {
       const pctLbl = it ? (it.pct > 0 && it.pct < 0.1 ? "<0.1%" : it.pct.toFixed(1) + "%") : "";
       const pill = el("span", { class: "token-pill", style: "cursor:pointer", title: n },
         (it ? shortTokenLabel(it.field, it.value) + " (" + pctLbl + ")" : n));
-      if (it) pill.addEventListener("click", () => toggleFieldFilter(it.field, it.value));
+      if (it) pill.addEventListener("click", () => toggleFieldFilter(it.field, it.token));
       card.appendChild(pill);
     }
     grid.appendChild(card);
@@ -296,8 +296,8 @@ function renderCorrClustersTab(corr, wm) {
   for (const e of edges.slice(0, 40)) {
     const tr = el("tr", { class: "clickable" });
     tr.addEventListener("click", () => {
-      state.fieldFilters.set(e.fa, new Set([e.va]));
-      state.fieldFilters.set(e.fb, new Set([e.vb]));
+      state.fieldFilters.set(e.fa, new Set([e.ta]));
+      state.fieldFilters.set(e.fb, new Set([e.tb]));
       state.page = 1;
       render();
     });

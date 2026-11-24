@@ -1,3 +1,31 @@
+function fieldToken(tokens, key) {
+  return Object.prototype.hasOwnProperty.call(tokens, key) ? tokens[key] : undefined;
+}
+
+function tokenKey(value) {
+  return value === undefined ? "m:" : "v:" + JSON.stringify(value);
+}
+
+function tokenFromKey(key) {
+  return key === "m:" ? undefined : JSON.parse(key.slice(2));
+}
+
+function tokenLabel(value) {
+  if (value === undefined) return "(missing)";
+  if (typeof value !== "string") return JSON.stringify(value);
+  // Quote strings that would look like a structural value or a quoted string.
+  return value === "null" || value === "(missing)" || /^[\[\"]/.test(value)
+    ? JSON.stringify(value) : value;
+}
+
+function tokenKeyLabel(key) {
+  try { return tokenLabel(tokenFromKey(key)); } catch (_) { return "(invalid filter)"; }
+}
+
+function matchesTokenFilter(value, key) {
+  return tokenKey(value) === key;
+}
+
 function skitWeight(skit, wm) {
   const m = wm || { isCount: true };
   if (m.isCount) return skit.count;
@@ -56,22 +84,26 @@ function computeFields(skits, fieldKeys, totalW, wm) {
   return keys.map(key => {
     const byVal = new Map();
     for (const s of skits) {
-      const val = Object.prototype.hasOwnProperty.call(s.tokens, key) ? s.tokens[key] : "NULL";
+      const val = tokenKey(fieldToken(s.tokens, key));
       const cur = byVal.get(val) || [0, 0];
       cur[0] += skitWeight(s, wm);
       cur[1] += 1;
       byVal.set(val, cur);
     }
     const entries = Array.from(byVal.entries()).sort((a, b) => (b[1][0] - a[1][0]) || (b[1][1] - a[1][1]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-    const values = entries.map(([value, [count, skit_count]]) => ({
-      value,
+    const values = entries.map(([token, [count, skit_count]]) => ({
+      token,
+      value: tokenKeyLabel(token),
       count,
       weight_pct: totalW ? (100 * count) / totalW : null,
       skit_count,
       skit_pct: nSkits ? (100 * skit_count) / nSkits : null
     }));
-    const nonNull = entries.filter(([v]) => v !== "NULL");
-    const nullObs = byVal.has("NULL") ? byVal.get("NULL")[0] : 0;
+    const decoded = entries.map(([v, counts]) => [tokenFromKey(v), counts]);
+    const nonNull = decoded.filter(([v]) => v !== null && v !== undefined);
+    const nullObs = (byVal.get(tokenKey(null)) || [0])[0];
+    const missingObs = (byVal.get(tokenKey(undefined)) || [0])[0];
+    const isSet = nonNull.some(([v]) => Array.isArray(v));
     let isBoolean = nonNull.length > 0;
     const boolPairs = [];
     for (const [v, [obs]] of nonNull) {
@@ -88,7 +120,7 @@ function computeFields(skits, fieldKeys, totalW, wm) {
         numPairs.push([parsed, obs]);
       }
     }
-    let fieldType = "enum";
+    let fieldType = isSet ? "enumset" : "enum";
     let minVal = null, maxVal = null, wMean = null, wMed = null, truePct = null;
     if (isBoolean) {
       fieldType = "boolean";
@@ -109,12 +141,13 @@ function computeFields(skits, fieldKeys, totalW, wm) {
         wMed = weightedMedian(numPairs);
       }
     } else if (nonNull.length) {
-      const strs = nonNull.map(([v]) => v).sort();
+      const strs = nonNull.map(([v]) => tokenLabel(v)).sort();
       minVal = strs[0];
       maxVal = strs[strs.length - 1];
     } else if (entries.length) {
-      minVal = "NULL";
-      maxVal = "NULL";
+      const labels = values.map(v => v.value).sort();
+      minVal = labels[0];
+      maxVal = labels[labels.length - 1];
     }
     return {
       key,
@@ -131,6 +164,7 @@ function computeFields(skits, fieldKeys, totalW, wm) {
       weighted_mean: wMean,
       weighted_median: wMed,
       null_pct: totalW ? (100 * nullObs) / totalW : null,
+      missing_pct: totalW ? (100 * missingObs) / totalW : null,
       values
     };
   });
@@ -371,12 +405,12 @@ function computeAblation(skits, fieldKeys) {
     const allVals = new Set();
     const nonSingletonVals = new Set();
     for (const s of skits) {
-      const val = Object.prototype.hasOwnProperty.call(s.tokens, dropKey) ? s.tokens[dropKey] : "NULL";
+      const val = tokenKey(fieldToken(s.tokens, dropKey));
       allVals.add(val);
       if (s.count > 1) nonSingletonVals.add(val);
       const parts = [];
       for (const k of otherKeys) {
-        const ov = Object.prototype.hasOwnProperty.call(s.tokens, k) ? s.tokens[k] : "NULL";
+        const ov = tokenKey(fieldToken(s.tokens, k));
         parts.push(ov.length + ":" + ov);
       }
       const compKey = parts.join("|");
@@ -436,7 +470,7 @@ function computeMarginals(skits, keys, wm) {
     for (const s of skits) {
       const w = skitWeight(s, wm);
       if (w <= 0) continue;
-      const v = Object.prototype.hasOwnProperty.call(s.tokens, f) ? s.tokens[f] : "NULL";
+      const v = tokenKey(fieldToken(s.tokens, f));
       m.set(v, (m.get(v) || 0) + w);
     }
     marginals.set(f, m);
@@ -460,8 +494,8 @@ function computeFieldMatrices(keys, skits, marginals, ent, totalW, wm) {
       for (const s of skits) {
         const w = skitWeight(s, wm);
         if (w <= 0) continue;
-        const v1 = Object.prototype.hasOwnProperty.call(s.tokens, f1) ? s.tokens[f1] : "NULL";
-        const v2 = Object.prototype.hasOwnProperty.call(s.tokens, f2) ? s.tokens[f2] : "NULL";
+        const v1 = tokenKey(fieldToken(s.tokens, f1));
+        const v2 = tokenKey(fieldToken(s.tokens, f2));
         const jk = v1.length + ":" + v1 + "|" + v2;
         joint.set(jk, [v1, v2, (joint.has(jk) ? joint.get(jk)[2] : 0) + w]);
       }
@@ -514,14 +548,16 @@ function computeValueCooccurrence(keys, skits, marginals, totalW, wm) {
   const skitMaps = new Map();
   for (const f of keys) {
     for (const [v, cnt] of marginals.get(f).entries()) {
-      if (v === "NULL" || v === "FALSE" || cnt < minSup) continue;
-      const id = f + "=" + v;
-      items.push({ id, field: f, value: v, count: cnt, pct: (100 * cnt) / totalW });
+      const raw = tokenFromKey(v);
+      if (raw === undefined || raw === null || raw === "FALSE" || cnt < minSup) continue;
+      const label = tokenLabel(raw);
+      const id = f + "=" + label;
+      items.push({ id, field: f, value: label, token: v, count: cnt, pct: (100 * cnt) / totalW });
       const sm = new Map();
       for (let idx = 0; idx < skits.length; idx++) {
         const w = skitWeight(skits[idx], wm);
         if (w <= 0) continue;
-        const sv = Object.prototype.hasOwnProperty.call(skits[idx].tokens, f) ? skits[idx].tokens[f] : "NULL";
+        const sv = tokenKey(fieldToken(skits[idx].tokens, f));
         if (sv === v) sm.set(idx, w);
       }
       skitMaps.set(id, sm);
@@ -545,6 +581,7 @@ function computeValueCooccurrence(keys, skits, marginals, totalW, wm) {
       if (!keepPos && !keepNeg) continue;
       edges.push({
         a: a.id, b: b.id, fa: a.field, va: a.value, fb: b.field, vb: b.value,
+        ta: a.token, tb: b.token,
         n11, support_pct: (100 * n11) / totalW,
         conf_ab: (100 * n11) / a.count, conf_ba: (100 * n11) / b.count,
         lift, phi

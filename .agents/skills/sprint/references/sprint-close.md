@@ -104,4 +104,3 @@ bobp chat "*pm launch <sprint>. Sprint complete." --persona Cypher --cmd "pm lau
 **Sprint is complete** when Cypher posts `*pm launch`.
 
 ---
-

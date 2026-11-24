@@ -122,6 +122,8 @@ See instructions here -> `.agents/skills/bob-protocol/SKILL.md`
 
 Create persona skills from [`agents/templates/_template_PERSONA_SKILL.md`](../../../agents/templates/_template_PERSONA_SKILL.md). Replace all placeholders, apply the embedded PERSONA rubric to the completed draft, then remove the template note and entire rubric block before saving the persona skill. The rubric belongs to the authoring template, not the generated persona’s runtime instructions. Keep its packaged counterpart in `bobp/templates/agents/templates/` synchronized.
 
+Bob also owns the template inventory in [`agents/templates/ARTIFACTS.md`](../../../agents/templates/ARTIFACTS.md) (and its packaged copy in `bobp/templates/agents/templates/ARTIFACTS.md`). Whenever adding, renaming, or updating an artifact template, update both copies and verify the embedded `CATALOG` check.
+
 ---
 
 ## Via Integration

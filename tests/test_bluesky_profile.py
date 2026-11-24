@@ -99,7 +99,7 @@ class PostProfileTests(unittest.TestCase):
             "facets": [{"features": [{"$type": "tag"}, {"$type": "link"}]}],
         }
         self.assertEqual(self.profile.tokens(a), self.profile.tokens(b))
-        self.assertEqual(self.profile.tokens(a)["facet_types"], "link,tag")
+        self.assertEqual(self.profile.tokens(a)["facet_types"], ["link", "tag"])
         self.assertEqual(self.profile.tokens(a)["is_multi_lang"], "TRUE")
 
     def test_is_multi_lang_boolean_field(self):

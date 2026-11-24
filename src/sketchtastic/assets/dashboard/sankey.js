@@ -43,14 +43,14 @@ function buildSankeyStages(uniqueStages, skits, wm) {
     for (const s of skits) {
       const w = skitWeight(s, wm);
       if (w <= 0) continue;
-      const v = Object.prototype.hasOwnProperty.call(s.tokens, fk) ? s.tokens[fk] : "NULL";
+      const v = tokenKey(fieldToken(s.tokens, fk));
       counts.set(v, (counts.get(v) || 0) + w);
     }
     const sorted = Array.from(counts.entries()).sort((a, b) => (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1));
     const top = sorted.slice(0, MAX_NODES);
     const rest = sorted.slice(MAX_NODES);
     stageTopSets.push(new Set(top.map(x => x[0])));
-    const list = top.map(([v, c]) => ({ key: v, label: v, count: c, isOther: false }));
+    const list = top.map(([v, c]) => ({ key: v, label: tokenKeyLabel(v), count: c, isOther: false }));
     if (rest.length) {
       list.push({ key: "__OTHER__", label: "Other (" + rest.length + ")", count: rest.reduce((a, x) => a + x[1], 0), isOther: true });
     }
@@ -89,8 +89,8 @@ function drawSankeyRibbons(svg, uniqueStages, stageTopSets, nodePos, skits, tota
     for (const s of skits) {
       const w = skitWeight(s, wm);
       if (w <= 0) continue;
-      const rawA = Object.prototype.hasOwnProperty.call(s.tokens, fA) ? s.tokens[fA] : "NULL";
-      const rawB = Object.prototype.hasOwnProperty.call(s.tokens, fB) ? s.tokens[fB] : "NULL";
+      const rawA = tokenKey(fieldToken(s.tokens, fA));
+      const rawB = tokenKey(fieldToken(s.tokens, fB));
       const kA = topA.has(rawA) ? rawA : "__OTHER__";
       const kB = topB.has(rawB) ? rawB : "__OTHER__";
       const fk = kA.length + ":" + kA + "|" + kB;

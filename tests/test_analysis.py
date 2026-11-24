@@ -84,6 +84,24 @@ class AnalysisEmptyAndValidationTests(unittest.TestCase):
 
 
 class AnalysisPayloadProjectionTests(unittest.TestCase):
+    def test_payload_keeps_missing_null_and_set_tokens_distinct(self) -> None:
+        profile = Profile(fields=(Field("tags", "$.tags"),))
+        events = [{}, {"tags": None}, {"tags": []}, {"tags": [None, "NULL"]}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "structured.yaml"
+            sketch = _write_sketch(path, profile, events)
+            payload = analyze_sketch(path)
+        self.assertEqual(payload["meta"]["total_skits"], 4)
+        self.assertEqual(payload["meta"]["total_observations"], 4)
+        self.assertEqual(
+            [row["tokens"] for row in payload["skits"]],
+            [sketch.get(row["id"]).tokens for row in payload["skits"]],
+        )
+        tokens = [row["tokens"] for row in payload["skits"]]
+        self.assertIn({}, tokens)
+        self.assertIn({"tags": None}, tokens)
+        self.assertIn({"tags": []}, tokens)
+
     def setUp(self) -> None:
         self.profile = Profile(
             fields=(
@@ -257,7 +275,7 @@ class AnalysisHistoryAndWeightingTests(unittest.TestCase):
 
             (hist_dir / "corrupt.yaml").write_text(":::bad:::\n", encoding="utf-8")
             (hist_dir / "non_dict_skits.yaml").write_text(
-                "version: 0\nskits: [1, 2]\n", encoding="utf-8"
+                "version: 1\nskits: [1, 2]\n", encoding="utf-8"
             )
             secret = Path(tmp) / "secret.txt"
             secret.write_text("TOP_SECRET_LINE\n", encoding="utf-8")

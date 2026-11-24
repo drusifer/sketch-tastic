@@ -22,10 +22,10 @@ import yaml
 from sketchtastic import _yaml
 from sketchtastic._io import atomic_replace_file, is_number
 from sketchtastic.aggregators import Aggregate
-from sketchtastic.model import MISSING
+from sketchtastic.model import MISSING, Token, is_token
 
-SKETCH_VERSION = 0
-"""Format version of sketch files: 0 until 1.0, when the format becomes stable."""
+SKETCH_VERSION = 1
+"""Structured tokens and keyed identities; legacy version 0 requires recapture/rebuild."""
 
 
 class SketchError(ValueError):
@@ -44,19 +44,19 @@ class ProfileMismatchError(SketchError):
         )
 
 
-def skit_id(tokens: dict[str, str]) -> str:
-    """MD5 of the token values in profile order (`tokens` as the profile makes them).
+def skit_id(tokens: dict[str, Token]) -> str:
+    """MD5 of the structured key/value pairs in profile order.
 
-    The keys add nothing: the profile fixes them and their order, and the sketch's profile id
-    covers both. The values are JSON-encoded so none can be mistaken for a separator.
+    Keys distinguish which fields are present when missing fields are omitted. JSON encoding
+    preserves nulls, literal strings and arrays without ambiguous separators.
     """
-    values = json.dumps(list(tokens.values()), ensure_ascii=False, separators=(",", ":"))
+    values = json.dumps(list(tokens.items()), ensure_ascii=False, separators=(",", ":"))
     return hashlib.md5(values.encode("utf-8")).hexdigest()
 
 
 @dataclass
 class Skit:
-    tokens: dict[str, str]
+    tokens: dict[str, Token]
     aggregates: dict[str, Any] = field(default_factory=dict)
     """What the profile asked for, keyed by its aggregate keys."""
     meta: dict[str, Any] = field(default_factory=dict)
@@ -101,10 +101,12 @@ class Sketch:
         """Duplicate-protection mark (STORY-FING-50): {path, max}; saved and loaded."""
         self.run: dict[str, Any] | None = None
         """Header of a run file (STORY-FING-48): what one run read. Saved if set; never loaded."""
+        self.derivation: dict[str, Any] | None = None
+        """Provenance of a derived sketch, preserved when subsequent events are merged."""
 
     def upsert(
         self,
-        tokens: dict[str, str],
+        tokens: dict[str, Token],
         record: Any,
         run: str | None = None,
         *,
@@ -153,10 +155,10 @@ class Sketch:
                 aggregate.merge(mine.meta, copied.meta)
         self.skipped_values += later.skipped_values
 
-    def _new_skit(self, tokens: dict[str, str], stored: Skit | None = None) -> Skit:
+    def _new_skit(self, tokens: dict[str, Token], stored: Skit | None = None) -> Skit:
         """A skit with every aggregate and built-in, in profile order: from `stored` (a loaded
         file) where it has them, else initial. Keys `stored` has beyond the profile follow."""
-        skit = Skit(dict(tokens))
+        skit = Skit(copy.deepcopy(tokens))
         for states, aggregates, old in (
             (skit.aggregates, self._aggregates, stored.aggregates if stored else {}),
             (skit.meta, builtin_aggregates(), stored.meta if stored else {}),
@@ -219,6 +221,8 @@ class Sketch:
             data["sequence"] = self.sequence
         if self.run is not None:
             data["run"] = self.run
+        if self.derivation is not None:
+            data["derivation"] = self.derivation
         data["skits"] = {sid: asdict(rec) for sid, rec in self._records.items()}
         # Insertion order, not alphabetical: header first, and each record leads with tokens.
         atomic_replace_file(path, ".sketch-", lambda stream: _yaml.dump(data, stream))
@@ -234,12 +238,16 @@ class Sketch:
             raise ProfileMismatchError(path, stored_profile, self.profile_id)
         self.last_run = data.get("last_run")
         self.sequence = data.get("sequence")
+        self.derivation = copy.deepcopy(data.get("derivation"))
         skits_raw = data["skits"] or {}
         if not isinstance(skits_raw, dict):
             raise SketchError(f"{path} has a malformed 'skits' mapping")
         try:
             stored = {sid: Skit(**rec) for sid, rec in skits_raw.items()}
-            self._records = {sid: self._new_skit(rec.tokens, rec) for sid, rec in stored.items()}
+            loaded = {sid: self._new_skit(rec.tokens, rec) for sid, rec in stored.items()}
+            for sid, skit in loaded.items():
+                _validate_skit(sid, skit)
+            self._records = loaded
         except (AttributeError, TypeError, ValueError) as exc:
             raise SketchError(f"{path} has a malformed skit entry: {exc}") from exc
 
@@ -268,7 +276,7 @@ def read_sketch_file(path: Path | str) -> dict[str, Any]:
     if type(data["version"]) is not int or data["version"] != SKETCH_VERSION:
         raise SketchError(
             f"{text_path} is sketch version {data['version']}; "
-            f"this tool reads version {SKETCH_VERSION}"
+            f"this tool reads version {SKETCH_VERSION}. Please recapture or rebuild the sketch."
         )
     return data
 
@@ -291,7 +299,7 @@ def load_sketch_with_header(
 def _validate_skit(key: Any, skit: Skit) -> None:
     if not isinstance(key, str) or not isinstance(skit.tokens, dict):
         raise ValueError("Malformed skit identity")
-    if any(not isinstance(k, str) or not isinstance(v, str) for k, v in skit.tokens.items()):
+    if any(not isinstance(k, str) or not is_token(v) for k, v in skit.tokens.items()):
         raise ValueError(f"Malformed tokens for skit {key!r}")
     if key != skit_id(skit.tokens):
         raise ValueError(f"Skit ID {key!r} does not match its tokens")
@@ -307,9 +315,8 @@ def load_ranked_skits(
     try:
         raw, sketch = load_sketch_with_header(path, profile_id=profile_id)
         rows = [(key, sketch.get(key)) for key in sketch]
-        for key, skit in rows:
+        for _, skit in rows:
             assert skit is not None
-            _validate_skit(key, skit)
     except (AttributeError, KeyError, TypeError) as exc:
         raise SketchError(f"Malformed sketch: {path}") from exc
     ranked = sorted(rows, key=lambda item: (-item[1].meta["count"], item[0]))

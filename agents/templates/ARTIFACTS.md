@@ -15,7 +15,10 @@ Template source lives in `bobp/templates/agents/templates/`; installed or dogfoo
 | Security review | `_template_SECURITY_REVIEW.md` | Switch | SECURITY REVIEW / Switch, reviewed by Trin or Morpheus |
 | Security finding | `_template_SECURITY_FINDING.md` | Switch | SECURITY FINDING / Switch, reviewed by Trin or Morpheus |
 | Lesson | `_template_LESSON.md` | Oracle | LESSON / Smith at sprint close |
+| Makefile (thin forwarding shim) | `_template_MAKEFILE.md` | Tank | MAKEFILE / Tank (and Morpheus or Switch at SDLC check) |
 | SDLC guide | `_template_SDLC.md` and language profiles | Tank | SDLC / Oracle when changed |
+| Taskfile (go-task v3) | `_template_TASKFILE.md` | Tank | TASKFILE / Tank, Trin, or Switch |
+| Toolchain pins (mise) | `_template_MISE.md` | Tank | MISE / Tank or Switch |
 | Sprint task board | `_template_task.md` | Mouse | PLAN / Morpheus at plan review |
 | Quality and test strategy | `_template_TEST_STRATEGY.md` | Trin | STRATEGY / Morpheus and Smith |
 | UAT plan and results | `_template_UAT_PLAN.md` | Trin | UAT / Smith or Morpheus |

@@ -14,6 +14,8 @@ from typing import Any
 
 from sketchtastic._io import history_dir_for, is_number, sample_locator
 from sketchtastic.aggregators import is_histogram_state
+from sketchtastic.coverage import coverage_payload
+from sketchtastic.profile import load_profile
 from sketchtastic.sketch import (
     SketchError,
     Skit,
@@ -348,8 +350,8 @@ def _resolve_default_weighting(default_weight: str | None, weightings: list[dict
 
 def _extract_run_skits(
     sketch_name: str, sketch: Any
-) -> tuple[dict[str, tuple[int, dict[str, str]]], int]:
-    skits_map: dict[str, tuple[int, dict[str, str]]] = {}
+) -> tuple[dict[str, tuple[int, dict[str, Any]]], int]:
+    skits_map: dict[str, tuple[int, dict[str, Any]]] = {}
     total_events = 0
     for sid in sketch:
         skit = sketch.get(sid)
@@ -365,7 +367,7 @@ def _extract_run_skits(
 
 def _load_run_file(
     entry: Path,
-) -> tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, str]]]]:
+) -> tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, Any]]]]:
     raw, sketch = load_sketch_with_header(entry)
     run_hdr = raw.get("run") if isinstance(raw.get("run"), dict) else {}
     run_id = str(run_hdr.get("id") or raw.get("last_run") or entry.stem)
@@ -374,6 +376,7 @@ def _load_run_file(
     skipped_val = run_hdr.get("skipped_lines", 0)
     info = {
         "id": run_id,
+        "profile_id": raw.get("profile_id"),
         "started": _json_safe(run_hdr.get("started")),
         "finished": _json_safe(run_hdr.get("finished")),
         "started_ms": _to_epoch_ms(run_hdr.get("started")),
@@ -388,7 +391,7 @@ def _load_run_file(
 
 
 def _drift_new_skits(
-    new_ids: set[str], curr_skits: dict[str, tuple[int, dict[str, str]]], curr_total: int
+    new_ids: set[str], curr_skits: dict[str, tuple[int, dict[str, Any]]], curr_total: int
 ) -> list[dict[str, Any]]:
     items = [
         {
@@ -404,7 +407,7 @@ def _drift_new_skits(
 
 
 def _drift_gone_skits(
-    gone_ids: set[str], prev_skits: dict[str, tuple[int, dict[str, str]]], prev_total: int
+    gone_ids: set[str], prev_skits: dict[str, tuple[int, dict[str, Any]]], prev_total: int
 ) -> list[dict[str, Any]]:
     items = [
         {
@@ -423,8 +426,8 @@ def _drift_gone_skits(
 
 def _drift_shifts(
     both_ids: set[str],
-    prev_skits: dict[str, tuple[int, dict[str, str]]],
-    curr_skits: dict[str, tuple[int, dict[str, str]]],
+    prev_skits: dict[str, tuple[int, dict[str, Any]]],
+    curr_skits: dict[str, tuple[int, dict[str, Any]]],
     totals: tuple[int, int],
 ) -> list[dict[str, Any]]:
     prev_total, curr_total = totals
@@ -452,9 +455,9 @@ def _drift_shifts(
 
 def _compute_run_drift(
     prev_info: dict[str, Any],
-    prev_skits: dict[str, tuple[int, dict[str, str]]],
+    prev_skits: dict[str, tuple[int, dict[str, Any]]],
     curr_info: dict[str, Any],
-    curr_skits: dict[str, tuple[int, dict[str, str]]],
+    curr_skits: dict[str, tuple[int, dict[str, Any]]],
 ) -> dict[str, Any]:
     prev_ids, curr_ids = set(prev_skits), set(curr_skits)
     new_ids = curr_ids - prev_ids
@@ -494,14 +497,17 @@ def _iter_history_yaml(directory: Path) -> list[Path]:
 
 def _load_history(
     sketch_path: Path | str, history_dir: Path | str | None
-) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    """Load run files from explicit or auto-detected history directory."""
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]], list[tuple[dict[str, Any], dict]]]:
+    """Load run files from explicit or auto-detected history directory.
+
+    Returns the payload section, run info by ID, and `(info, skits)` per run in run order.
+    """
     directory = _resolve_history_dir(sketch_path, history_dir)
     if directory is None:
-        return {"directory": None, "runs": [], "drift": [], "warnings": []}, {}
+        return {"directory": None, "runs": [], "drift": [], "warnings": []}, {}, []
 
     warnings: list[str] = []
-    loaded: list[tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, str]]]]] = []
+    loaded: list[tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, Any]]]]] = []
     for entry in _iter_history_yaml(directory):
         try:
             loaded.append(_load_run_file(entry))
@@ -515,12 +521,16 @@ def _load_history(
         _compute_run_drift(prev_info, prev_skits, curr_info, curr_skits)
         for (_, prev_info, prev_skits), (_, curr_info, curr_skits) in zip(loaded, loaded[1:])
     ]
-    return {
-        "directory": str(directory),
-        "runs": runs,
-        "drift": drift,
-        "warnings": warnings,
-    }, run_map
+    return (
+        {
+            "directory": str(directory),
+            "runs": runs,
+            "drift": drift,
+            "warnings": warnings,
+        },
+        run_map,
+        [(info, skits) for _, info, skits in loaded],
+    )
 
 
 def _build_seen_time_axis(
@@ -588,10 +598,11 @@ def _extract_sample_record(skit: Skit, slot: str) -> Any:
 def _serialize_skits(
     sketch_path: Path | str,
     rows: list[tuple[str, Skit]],
-    total: int,
     skit_weights: dict[str, dict[str, float | int]],
     skit_bounds: dict[str, dict[str, list[int]]],
+    covered: set[str] | None,
 ) -> list[dict[str, Any]]:
+    total = sum(skit.meta["count"] for _, skit in rows)
     skits_out: list[dict[str, Any]] = []
     cumulative = 0
     for sid, skit in rows:
@@ -614,6 +625,7 @@ def _serialize_skits(
                 "first_record": first_rec,
                 "last_record": None if last_rec == first_rec else last_rec,
                 "sample_locator": sample_locator(sketch_path, sid),
+                "covered": None if covered is None else sid in covered,
             }
         )
     return skits_out
@@ -637,13 +649,32 @@ def _assemble_time_axes(
     return time_axes
 
 
+def _regression_coverage(
+    regression: tuple[Path | str, Path | str] | None,
+    profile: Any,
+    rows: list[tuple[str, Skit]],
+    runs: list[tuple[dict[str, Any], dict]],
+) -> tuple[dict[str, Any] | None, set[str] | None]:
+    """Coverage payload and covered skit IDs, or `(None, None)` without a regression corpus."""
+    if regression is None:
+        return None, None
+    coverage = coverage_payload(profile, regression[1], rows, runs)
+    return coverage, set(coverage["covered_ids"])
+
+
 def analyze_sketch(
     sketch_path: Path | str,
     history_dir: Path | str | None = None,
     default_weight: str | None = None,
+    regression: tuple[Path | str, Path | str] | None = None,
 ) -> dict[str, Any]:
-    """Load a sketch once (plus optional history) into a lean JSON-safe dashboard payload."""
-    raw_header, rows = load_ranked_skits(sketch_path)
+    """Load a sketch once (plus optional history) into a lean JSON-safe dashboard payload.
+
+    `regression` is `(profile_path, corpus_path)`: the profile must be the sketch's own (its
+    `profile_id` is checked), and adds baseline and per-run coverage of the corpus.
+    """
+    profile = load_profile(str(regression[0])) if regression else None
+    raw_header, rows = load_ranked_skits(sketch_path, getattr(profile, "profile_id", None))
     total = sum(skit.meta["count"] for _, skit in rows)
     singletons = sum(1 for _, skit in rows if skit.meta["count"] == 1)
 
@@ -651,9 +682,10 @@ def analyze_sketch(
     agg_descriptors, agg_axes, skit_bounds = _describe_aggregates(rows)
     weightings, skit_weights = _discover_weightings(rows)
     resolved_weight = _resolve_default_weighting(default_weight, weightings)
-    history, run_map = _load_history(sketch_path, history_dir)
+    history, run_map, runs = _load_history(sketch_path, history_dir)
     time_axes = _assemble_time_axes(rows, agg_axes, skit_bounds, run_map)
-    skits_out = _serialize_skits(sketch_path, rows, total, skit_weights, skit_bounds)
+    coverage, covered = _regression_coverage(regression, profile, rows, runs)
+    skits_out = _serialize_skits(sketch_path, rows, skit_weights, skit_bounds, covered)
 
     return {
         "meta": {
@@ -673,5 +705,6 @@ def analyze_sketch(
         "weightings": weightings,
         "time_axes": time_axes,
         "history": history,
+        "coverage": coverage,
         "skits": skits_out,
     }

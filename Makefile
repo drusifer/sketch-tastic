@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: bluesky-install bluesky-capture bluesky test-bluesky
+.PHONY: bluesky-install bluesky-capture bluesky bluesky-live test-bluesky
 
 bluesky-install: ## Install optional Bluesky capture tools into .venv
 	@uv sync --group demo --quiet
@@ -9,9 +9,21 @@ bluesky-capture: ## Capture public Bluesky posts (ARGS="--seconds 60 --output da
 	$(need_venv)
 	@$(PYTHON) -m examples.bluesky.capture $(ARGS)
 
-bluesky: ## Build or print Bluesky ASCII demo (ARGS="--help")
+# One pipeline: (capture | file) -> unwrap -> sketch merge. Every stage streams; bash pipefail
+# keeps an upstream failure from being reported as success.
+BLUESKY_MERGE = $(PYTHON) -m sketchtastic merge -p examples/bluesky/profile.yaml -s "$(SKETCH)" -
+bluesky bluesky-live: SHELL := bash
+bluesky bluesky-live: .SHELLFLAGS := -o pipefail -c
+
+bluesky: ## Sketch a saved capture (INPUT=data/capture.jsonl SKETCH=data/bluesky.sketch.yaml)
 	$(need_venv)
-	@$(PYTHON) -m examples.bluesky.demo $(ARGS)
+	@test -n "$(INPUT)" -a -n "$(SKETCH)" || { echo "Set INPUT= and SKETCH="; exit 2; }
+	@$(PYTHON) -m examples.bluesky.unwrap "$(INPUT)" | $(BLUESKY_MERGE)
+
+bluesky-live: ## Capture live posts straight into a sketch (SKETCH=... ARGS="--seconds 1800")
+	$(need_venv)
+	@test -n "$(SKETCH)" || { echo "Set SKETCH="; exit 2; }
+	@$(PYTHON) -m examples.bluesky.capture --output - $(ARGS) | $(PYTHON) -m examples.bluesky.unwrap | $(BLUESKY_MERGE)
 
 test-bluesky: ## Run focused Bluesky demo tests
 	$(need_venv)

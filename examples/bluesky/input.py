@@ -1,19 +1,43 @@
 """Unwrap post-create observations without changing the original post record."""
 
-import json
-from collections import Counter
-from collections.abc import Iterator
-from pathlib import Path
+from collections import Counter, deque
+from collections.abc import Hashable
 
 POST = "app.bsky.feed.post"
 MAX_LINE_BYTES = 4 * 1024 * 1024
+MAX_DEDUP_IDS = 100_000
 
 
 def reject_constant(value: str) -> None:
     raise ValueError(f"non-JSON number {value}")
 
 
-def source_post(event: dict, counts: Counter, seen: set) -> dict | None:
+class BoundedSeen:
+    """Constant-memory set of the most recent `(did, rkey)` identities.
+
+    Duplicate creates come from Jetstream replaying events after a reconnect, so they arrive
+    close together; remembering a bounded recent window catches them without growing with
+    the stream.
+    """
+
+    def __init__(self, maxlen: int = MAX_DEDUP_IDS) -> None:
+        self._maxlen = maxlen
+        self._set: set[Hashable] = set()
+        self._order: deque[Hashable] = deque()
+
+    def __contains__(self, item: Hashable) -> bool:
+        return item in self._set
+
+    def add(self, item: Hashable) -> None:
+        if item in self._set:
+            return
+        if len(self._order) >= self._maxlen:
+            self._set.discard(self._order.popleft())
+        self._set.add(item)
+        self._order.append(item)
+
+
+def source_post(event: dict, counts: Counter, seen: BoundedSeen) -> dict | None:
     """Accept bare posts and v1/v2 create envelopes, deduplicating identified creates."""
     if event.get("$type") == POST:
         return event
@@ -41,30 +65,3 @@ def source_post(event: dict, counts: Counter, seen: set) -> dict | None:
         return None
     seen.add(identity)
     return record
-
-
-def posts(source: Path, counts: Counter, digest) -> Iterator[tuple[int, dict]]:
-    """Yield source line and unchanged post; hash all source bytes including blanks."""
-    seen = set()
-    with source.open("rb") as stream:
-        number = 0
-        while line := stream.readline(MAX_LINE_BYTES + 1):
-            number += 1
-            if len(line) > MAX_LINE_BYTES:
-                raise ValueError(
-                    f"{source}: line {number}: exceeds {MAX_LINE_BYTES} byte line limit"
-                )
-            digest.update(line)
-            if not line.strip():
-                continue
-            try:
-                event = json.loads(line, parse_constant=reject_constant)
-                if not isinstance(event, dict):
-                    raise ValueError("expected a JSON object")
-                counts["records"] += 1
-                record = source_post(event, counts, seen)
-            except (ValueError, TypeError, UnicodeError, RecursionError) as exc:
-                raise ValueError(f"{source}: line {number}: {exc}") from exc
-            if record is not None:
-                counts["posts"] += 1
-                yield number, record

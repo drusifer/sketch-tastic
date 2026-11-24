@@ -10,7 +10,7 @@ description: Post a message (max 512 chars) with a 'why?' explanation to the tea
 
 ## Overview
 
-The `chat` skill posts structured messages to `agents/CHAT.md`, the shared team communication log. All personas use this to coordinate work and hand off tasks.
+The `chat` skill posts structured messages to `agents/CHAT.md` (initialized from `agents/templates/_template_CHAT.md`), the shared team communication log. All personas use this to coordinate work and hand off tasks.
 
 Every post also regenerates `agents/CHAT.diagram.md` — a Mermaid sequence diagram view of the same log, for humans following the conversation flow. It's a derived file; don't hand-edit it or read it back into agent context. Regenerate on demand with `bobp chat-diagram` (see `bob-tools` skill).
 

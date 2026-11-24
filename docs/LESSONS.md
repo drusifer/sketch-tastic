@@ -1,5 +1,26 @@
 # Engineering lessons
 
+## [2026-11-24] Examples adapt the stream; they never re-implement ingestion
+
+> **Tags:** #architecture #streaming #dry #bluesky #Morpheus
+
+### Context
+The Bluesky example needed envelope unwrapping and deduplication before sketching.
+
+### Observation and Cause
+It got a whole `prepare` command instead: its own reader, unbounded dedup, a fold loop calling
+`Sketch.upsert`, and staged publication. `capture` also staged its output until the end. Both
+duplicated what `sketch merge` already does with streaming, history and back-pressure, and
+unwrapping existed twice. Reviews checked each piece in isolation, not against the core path.
+
+### Rule
+Application code in front of the core is a stdin→stdout filter with bounded state, piped into
+`sketch merge -`. When a design adds a reader, a fold loop or a publish step outside
+`sketch merge`, stop and reuse the core path. Review new example code against
+DOMAIN "Ingestion: one streaming path".
+
+- **References:** ADR-2026-11-24-b, `examples/bluesky/unwrap.py`, `docs/DOMAIN.md`.
+
 ## [2026-11-19] Preserve per-item correlations before sketching nested records
 
 **Historical scope; superseded for this demo by the 2026-11-20 lesson below.** The original
@@ -21,8 +42,8 @@ sketching. Preserve the original parent and item index, and verify that exported
 rows reproduce the full observed skit-ID set. Use original sketch weights for population counts.
 
 ### Evidence and Scope
-- **References:** `examples/bluesky/model.py`, `examples/bluesky/demo.py`,
-  `tests/test_bluesky.py`; implementation commit `f6d1365`.
+- **References:** implementation commit `f6d1365` (`examples/bluesky/model.py`,
+  `examples/bluesky/demo.py`, `tests/test_bluesky.py`; all since removed, see ADR-2026-11-24-b).
 - **Applies when:** grouping or selecting representative nested items by combined properties.
   ID-set preservation covers the selected profile on observed data, not all application paths.
 
@@ -109,3 +130,40 @@ HTML templates with untrusted data, always use single-pass regex/callback substi
   `src/sketchtastic/assets/dashboard/stats.js`, `tests/test_dashboard.py` (`SEC-S8-06` regression).
 - **Applies when:** building or refactoring single-file offline HTML renderers and interactive
   client-side analytics over Python-generated payloads.
+
+## [2026-11-24] Prove summary transformations from retained information before merging groups
+
+> **Tags:** #data-model #derivation #validation #Oracle
+
+### Context
+
+Sprint 9 added profile-based derivation of a new sketch and its history without replaying the
+original events. Early analysis encountered comma-joined sets and a NULL sentinel that could
+mean missing, explicit null or a literal string. The owner chose structured tokens and recapture.
+
+### Observation and Cause
+
+A smaller number of output groups is not itself proof that the transformation is correct:
+every event represented by one source group must have the same target identity. Representative
+samples cannot establish that for the entire population. Even structured arrays can represent
+either a directly selected array or multiple selected scalar values, which some modifiers treat
+differently. Separately, the generic sketch loader initializes absent aggregate state; using it
+before validating a source would silently turn unavailable statistics into plausible zeroes.
+Independent review caught missing predicate-token validation, invalid histogram-bin acceptance
+and unchecked sequence marks before release.
+
+### Rule
+
+Define a retained-token algebra and explicit supported transformation proofs. Reject mappings
+whose target identity cannot be determined for the whole source group; never infer population
+facts from samples. Validate complete raw statistics and continuation metadata before invoking
+loaders/reducers that fill defaults. Compare derived results with fresh target-profile folding
+of synthetic original events, and test refusal paths as carefully as successful coarsening.
+
+### Evidence and Scope
+
+- **References:** `ADR-2026-11-24`, commits `c7d53ec`, `d51518f`, `b9f4484`,
+  `src/sketchtastic/derive.py`, `src/sketchtastic/_derive_validation.py`,
+  `tests/test_derive.py`, `tests/test_derive_cli.py`, `docs/sprints/UAT_PLAN_SPRINT9.md`.
+- **Applies when:** deriving or migrating grouped summaries, sketches or aggregates after the
+  original event-level information has been discarded.

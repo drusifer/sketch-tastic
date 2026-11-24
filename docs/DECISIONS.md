@@ -139,8 +139,10 @@ Reporting is a core use case and must not be confined to a Bluesky application.
 
 ### Outcome and consequences
 The demo only unwraps create-event envelopes and deduplicates identified observations; all
-feature selection uses the saved profile. Original posts and source line locators are retained.
+feature selection uses the saved profile. Original posts are retained. (Amended by
+ADR-2026-11-24-b: the `prepare` command and its source line locators are retired.)
 `report`, `export` and `coverage` live in the package CLI and know nothing about Bluesky.
+(`report` was later retired in favour of the `analyze` dashboard; ADR-2026-11-24-c.)
 Coverage is unique baseline-kind intersection and the sum of original baseline counts for that
 intersection, divided by total baseline observations. Duplicate regression records never inflate
 coverage; unseen kinds are separate. Profile mismatch fails, empty denominators display N/A.
@@ -187,3 +189,152 @@ After Sprint 7 and follow-up dashboard features (boolean types, ablation, Cramé
 
 ### Outcome and consequences
 `src/sketchtastic/analysis.py` is now a lean, single-pass dashboard payload and `.history/` drift builder (`meta`, `fields` keys, `aggregates` metadata, `weightings`, `time_axes`, `history`, `skits`). All interactive dashboard CSS, HTML, and JS live as static package-data files under `src/sketchtastic/assets/dashboard/` (concatenated into one inline HTML file at render time via single-pass regex substitution under a hardened offline CSP including `base-uri 'none'; form-action 'none';`), with `stats.js` kept 100% pure and unit-tested directly via `node`. Shared internal primitives (`src/sketchtastic/_io.py`) and single-pass `sketch.load_ranked_skits` eliminate circular/private cross-module imports and double YAML parsing. All of `src/` now passes `bobp make quality` with 0 extended ruff warnings, 0 vulture hits, and 0 radon C+ functions.
+
+## ADR-2026-11-24: Structured tokens and validated sketch derivation
+
+**Status:** Accepted. **Date:** 2026-11-24. **Deciders:** Owner, Morpheus; Smith and Switch
+reviewed. **Related:** [Sprint 9 stories/architecture](sprints/USER_STORIES_SPRINT9.md),
+[Sprint 9 UAT](sprints/UAT_PLAN_SPRINT9.md), [Domain Model](DOMAIN.md).
+
+### 1. Context and problem statement
+
+The owner requested a new named sketch derived from retained summaries, including history,
+when the new profile only collapses distinctions. Format-0 tokens joined sets with commas and
+represented missing/null/literal NULL ambiguously, limiting safe proofs. The owner then
+explicitly requested structured tokens and rejected backward compatibility, accepting recapture.
+
+### 2. Decision drivers
+
+- Preserve observation totals and retained statistics while never fabricating missing detail.
+- Make missing, explicit null, literal strings and arrays distinguishable throughout ingestion,
+  identity, inspection and derivation.
+- Preserve source files and all available history under a new output name.
+- Keep dependencies/build tooling unchanged and implement bounded, reviewable proof rules.
+
+### 3. Considered options
+
+| Option | Benefits | Costs / risks | Decision |
+|---|---|---|---|
+| Keep format-0 strings and allow only provably safe legacy collapses | Reuses existing files immediately | Null/delimiter ambiguity rejects useful transforms and encourages unsafe inference | Superseded by owner's structured-token request |
+| Structured format 1 plus legacy readers/migration | New captures retain detail while old files remain inspectable | Dual contracts and irrecoverable ambiguity; cannot truthfully restore missing information | Rejected by owner: no compatibility, recapture accepted |
+| Structured format 1 only, conservative profile proofs and new output/history | Clear retained-value semantics; exact supported collapses; small implementation surface | Old files require recapture/replay; some array remaps remain unprovable | Selected |
+| Arbitrary token remapping or sample-based re-sketching | Flexible and easy to appear successful | May disagree with future target-profile ingestion or fabricate population statistics | Rejected: violates conservation/proof requirement |
+
+### 4. Decision outcome and justification
+
+Sketches now require format 1. Value-producing DEFAULT/REGSUB/TRUNC preserve missing by omitted
+keys and explicit null as real null. DEFAULT scalar values remain strings; native arrays become
+recursively canonical sets. Repeated path matches are deduplicated and scalarized when only one
+unique result remains. Boolean modifiers retain their explicit TRUE/FALSE behavior. Skit IDs
+hash ordered key/value pairs so omitted dimensions cannot alias other dimensions. Profile YAML
+stays version 0; no package release/version bump is implied. This owner-directed format decision
+supersedes the earlier convention that sketch files would remain version 0 before package v1.0.
+
+`sketch derive SOURCE --source-profile ORIGINAL -p TARGET -o NEWNAME` requires a fresh destination.
+It supports unchanged/drop/reorder/rename fields, untyped DEFAULT-to-presence, scalar/null/missing
+DEFAULT-to-IS_NULL/ANY/GLOB/REGEX/REGSUB, and typed time coarsening. Unsupported refinements and
+array mappings reject rather than guessing. Direct arrays versus several selected values can
+share the same set token but differ under a modifier, so structure alone does not prove every map.
+
+The supplied original profile is authoritative: its hash covers identity fields, not aggregate
+paths. Strict raw-state validation precedes reducers that might otherwise initialize absent
+statistics. Collisions merge sufficient statistics, reject incompatible extrema kinds, and
+recompute shares. Each available history file is transformed independently of the main sketch;
+run IDs/times/counts/sequence marks survive and provenance records source/target profile IDs.
+
+All outputs stage before no-clobber publication, with the main file published last. Handled
+failures remove only owned output links/directories. Source data must be quiescent. FIRST/LAST
+retain bounded matching samples, without claiming lost chronological order. A multi-path crash
+transaction and migration tooling are explicitly excluded.
+
+### Consequences
+
+- Supported derivation conserves observations and cannot increase skit count. UAT demonstrated
+  5 skits/5 observations -> 2 skits/5 observations with 1 preserved history run.
+- Exact-set inspection uses canonical value keys separate from display labels; per-member
+  charts and inherited field-name delimiter edge cases remain follow-up work.
+- Format-0 captures require recapture or replay of original events. Legacy data is not deleted
+  automatically. Source/target profiles and complete retained aggregate state remain necessary.
+- Phase commits: `c7d53ec` (structured tokens), `d51518f` (validated derivation), `b9f4484`
+  (CLI/history). Full 364-test suite, lint, quality and independent phase reviews passed before
+  SDLC closeout; final release remains separately governed.
+
+## ADR-2026-11-24-b: One streaming ingestion path; examples are stream filters
+
+**Status:** Accepted. **Date:** 2026-11-24. **Deciders:** Owner, Morpheus. **Amends:**
+ADR-2026-11-20 (Bluesky preparation).
+
+### Context
+`sketch merge` already reads a file or stdin as lines arrive, with back-pressure, run history and
+`--max-seconds`/`--max-events`. The Bluesky example nevertheless grew a second, batch-shaped
+ingestion path: `capture` staged its output and published only at the end, and `prepare` had its
+own reader, a dedup set that grew with every post, its own `Sketch.upsert` loop (no workers, no
+history) and a staged publish. Unwrapping was also implemented twice (`prepare` and
+`capture --unwrap-posts`). The owner rejected this as batch processing and a DRY violation.
+
+### Considered options
+| Option | Benefit | Cost | Decision |
+|---|---|---|---|
+| Keep `prepare`, bound its dedup set | Small change | Still a second fold path beside `merge` | Rejected |
+| Unwrap inside `capture` only (`--unwrap-posts`) | No extra module | Cannot process saved raw captures; capture mixes transport and domain | Rejected |
+| One stdin→stdout unwrap filter; `capture \| unwrap \| sketch merge -` | One mechanism for live and saved data | `samples.json` line locators and `summary.json` go away | Selected |
+
+### Outcome and consequences
+`capture` only captures: it streams raw frames, flushing each line, and writes `.meta.json` last
+(also on failure, with `stop_reason: "error"`). It has no default frame limit. `unwrap` is the
+only unwrapping code; its dedup window is bounded (100,000 recent identities). `prepare`
+(`examples/bluesky/demo.py`) is deleted. Representatives come from core `sketch export`;
+coverage from core `sketch analyze --regression`. Make targets: `bluesky` (saved capture) and `bluesky-live`
+(live), both one `bash -o pipefail` pipeline into `sketch merge -`.
+Lost: per-kind source line locators (meaningless for a live stream) and the input SHA-256
+summary. Live pipelines report capture counts on stderr only; persisting producer provenance in
+the sketch is a backlog item. Stdin merges fold in-process (no `-j` workers).
+
+## ADR-2026-11-24-c: The HTML dashboard is the one kind report
+
+**Status:** Accepted. **Date:** 2026-11-24. **Deciders:** Owner. **Amends:** ADR-2026-11-20,
+ADR-2026-11-21 ("Existing ASCII `report` ... remain unchanged").
+
+### Context
+`sketch report` printed a ranked ASCII kind list (IDs, counts, shares, tokens, aggregates, sample
+locators). The `analyze` dashboard's skit explorer shows the same ranking with search, sorting,
+weighting and retained samples. Two reports of one thing violate DRY.
+
+### Considered options
+| Option | Benefit | Cost | Decision |
+|---|---|---|---|
+| Keep both reports | Terminal-only users keep a text ranking | Two implementations of one view drift apart | Rejected |
+| Dashboard only | One report; richer filtering and samples | Needs a browser; breaking CLI change | Selected |
+
+### Outcome and consequences
+`sketch report` and `reporting.report` are removed. Kind exploration is `sketch analyze`; IDs for
+`export --id` are copied from the dashboard. `coverage` still prints its uncovered-kind list,
+which shares the row formatter; its tests now cover that formatter. This is a breaking CLI change
+(pre-1.0, no compatibility path).
+
+## ADR-2026-11-24-d: Regression coverage is part of the dashboard, per history run
+
+**Status:** Accepted. **Date:** 2026-11-24. **Deciders:** Owner, Morpheus. **Amends:**
+ADR-2026-11-20 (generic `coverage` command).
+
+### Context
+`sketch coverage` printed two percentages plus ranked uncovered-kind rows: a second kind report
+beside the dashboard, always exiting 0 (so no CI gate either). It ignored history, although each
+run file is a sketch of that run and coverage over time is what shows a new capture's gaps.
+
+### Considered options
+| Option | Benefit | Cost | Decision |
+|---|---|---|---|
+| Keep `sketch coverage` text output | Scriptable text | Duplicate kind report; no history; no gate anyway | Rejected |
+| Add history to the text command | History without a browser | Still a second report beside the dashboard | Rejected |
+| Fold into `analyze --regression`, per run | One report; live filters; per-run gaps | Browser needed; no CI exit gate yet | Selected |
+
+### Outcome and consequences
+`sketch coverage` and its text formatter are removed. `sketch analyze --regression FILE -p
+PROFILE` (both or neither) computes coverage in `sketchtastic.coverage` and adds it to the
+payload: a per-skit `covered` flag, unknown regression kinds, and per history run the run's own
+and cumulative kind / frequency-weighted coverage and the kinds it introduced that the corpus
+does not cover. The browser computes the headline percentages live over the current filters and
+weighting, and a Coverage filter (all / covered / uncovered) drives every view, so the explorer
+is the uncovered-kind list. Runs under another profile ID are marked not comparable. Lists are
+capped at 200 entries per run. No CI threshold/exit gate exists; add one to `analyze` if needed.

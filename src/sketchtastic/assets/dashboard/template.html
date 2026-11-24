@@ -30,6 +30,11 @@
         <option value="first">First appeared in window</option>
         <option value="contained">Fully contained in window</option>
       </select>
+      <select id="coverage-select" aria-label="Regression coverage filter">
+        <option value="all">Coverage: all kinds</option>
+        <option value="covered">Coverage: covered kinds only</option>
+        <option value="uncovered">Coverage: uncovered kinds only</option>
+      </select>
       <div id="slider-box" class="slider-box">
         <div class="slider-meta">
           <span id="slider-lo-label">From: -</span>
@@ -259,6 +264,44 @@
       <div class="chart-wrap" style="margin-top:10px">
         <canvas id="chart-agg"></canvas>
         <div id="agg-empty" class="empty-state" style="display:none"></div>
+      </div>
+    </section>
+
+    <section class="card" id="coverage-card" style="display:none">
+      <div class="card-hdr">
+        <h2>Regression Coverage</h2>
+      </div>
+      <div class="note">
+        A kind is <strong>covered</strong> when the regression corpus has at least one record with its skit ID under this sketch's profile. Figures follow the current filters and weighting; use the <em>Coverage</em> filter to list uncovered kinds in the explorer. This measures sample representation, not test execution or branch coverage.
+      </div>
+      <div id="coverage-kpis" class="kpi-grid"></div>
+      <h3 style="margin-top:14px">Coverage by Run</h3>
+      <div id="coverage-history-empty" class="empty-state">No comparable run history: coverage by run needs <code>&lt;sketch&gt;.history/</code> run files with this profile.</div>
+      <div id="coverage-history" style="display:none">
+        <div class="chart-wrap"><canvas id="chart-coverage"></canvas></div>
+        <div class="table-wrap" style="margin-top:12px">
+          <table>
+            <thead><tr><th>Run</th><th class="num">Kinds Covered</th><th class="num">Events Covered</th><th class="num">Cumulative Weighted</th><th class="num">New Kinds</th><th class="num">New Uncovered</th></tr></thead>
+            <tbody id="coverage-runs-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card-hdr" style="margin-top:14px">
+          <h3>Kinds a Run Introduced That the Corpus Does Not Cover</h3>
+          <select id="coverage-run-select" aria-label="Select run"></select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Skit</th><th class="num">Count in Run</th><th>Tokens</th></tr></thead>
+            <tbody id="coverage-new-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <h3 style="margin-top:14px">Regression Kinds Not in This Sketch</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Skit</th><th class="num">Records</th><th>Tokens</th></tr></thead>
+          <tbody id="coverage-unknown-tbody"></tbody>
+        </table>
       </div>
     </section>
 
