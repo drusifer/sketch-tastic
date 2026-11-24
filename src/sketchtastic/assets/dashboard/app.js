@@ -24,6 +24,7 @@ function render() {
   syncSankeySelectors(fields, ablation);
   renderSankey(skits, totalW, wm);
   renderAggregatesSection(aggs);
+  renderCoverageSection(skits, totalW, wm);
   renderExplorer(skits, totalW, wm);
   syncUrlState();
 }
@@ -111,6 +112,7 @@ function initHeaderControls() {
   document.getElementById("reset-btn").addEventListener("click", () => {
     state.fieldFilters.clear();
     state.search = "";
+    state.coverageFilter = "all";
     state.weighting = DEFAULT_WEIGHTING;
     state.sankeyCustom = false;
     state.sankeyFields = [];
@@ -285,6 +287,7 @@ function initControls() {
   initChartToggleControls();
   initExplorerControls();
   initCorrelationAndSankeyControls();
+  initCoverageControls();
   window.addEventListener("hashchange", () => {
     readUrlState();
     render();

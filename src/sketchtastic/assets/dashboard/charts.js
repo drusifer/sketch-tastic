@@ -639,37 +639,17 @@ function renderHistorySection() {
   badges.appendChild(el("span", { class: "badge danger" }, "-" + cur.disappeared_count + " Disappeared"));
   badges.appendChild(el("span", { class: "badge" }, cur.persisted_count + " Persisted"));
 
-  function fillDrift(tbodyId, rows, mapper) {
-    const tb = document.getElementById(tbodyId);
-    clear(tb);
-    if (!rows.length) {
-      const tr = el("tr");
-      tr.appendChild(el("td", { colspan: "4", class: "muted" }, "None"));
-      tb.appendChild(tr);
-      return;
-    }
-    for (const r of rows) {
-      const tr = el("tr");
-      for (const [txt, cls] of mapper(r)) tr.appendChild(el("td", { class: cls || "" }, txt));
-      tb.appendChild(tr);
-    }
-  }
-
-  function tokStr(toks) {
-    return Object.entries(toks || {}).filter(([, v]) => v !== null && v !== "FALSE").slice(0, 4).map(([k, v]) => k + "=" + tokenLabel(v)).join(", ") || "(all null/FALSE or missing)";
-  }
-
-  fillDrift("drift-new-tbody", cur.new_skits, r => [
-    [r.id.slice(0, 10), "mono"], [fmtInt(r.count), "num"], [fmtPct(r.weight_pct), "num"], [tokStr(r.tokens), "mono"]
+  fillRows("drift-new-tbody", 4, cur.new_skits, r => [
+    [r.id.slice(0, 10), "mono"], [fmtInt(r.count), "num"], [fmtPct(r.weight_pct), "num"], [tokenSummary(r.tokens), "mono"]
   ]);
-  fillDrift("drift-gone-tbody", cur.disappeared_skits, r => [
-    [r.id.slice(0, 10), "mono"], [fmtInt(r.prev_count), "num"], [fmtPct(r.prev_weight_pct), "num"], [tokStr(r.tokens), "mono"]
+  fillRows("drift-gone-tbody", 4, cur.disappeared_skits, r => [
+    [r.id.slice(0, 10), "mono"], [fmtInt(r.prev_count), "num"], [fmtPct(r.prev_weight_pct), "num"], [tokenSummary(r.tokens), "mono"]
   ]);
-  fillDrift("drift-shift-tbody", cur.top_shifts, r => [
+  fillRows("drift-shift-tbody", 4, cur.top_shifts, r => [
     [r.id.slice(0, 10), "mono"],
     [fmtInt(r.prev_count) + " -> " + fmtInt(r.curr_count), "num"],
     [(r.delta_pct >= 0 ? "+" : "") + r.delta_pct.toFixed(2) + " pp", "num"],
-    [tokStr(r.tokens), "mono"]
+    [tokenSummary(r.tokens), "mono"]
   ]);
 }
 

@@ -57,6 +57,9 @@ function renderExplorer(skits, totalW, wm) {
       }
     });
     idTd.appendChild(cpBtn);
+    if (s.covered !== null && s.covered !== undefined) {
+      idTd.appendChild(el("span", { class: "badge " + (s.covered ? "ok" : "warn"), style: "margin-left:6px" }, s.covered ? "covered" : "uncovered"));
+    }
     tr.appendChild(idTd);
 
     const metricTd = el("td", { class: "num", title: wm.isCount ? "" : (fmtInt(s.count) + " observations") }, fmtWeight(w, wm));

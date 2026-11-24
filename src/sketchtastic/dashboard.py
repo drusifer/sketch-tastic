@@ -32,6 +32,7 @@ _JS_MODULES = (
     "correlations.js",
     "sankey.js",
     "explorer.js",
+    "coverage.js",
     "url_state.js",
     "app.js",
 )

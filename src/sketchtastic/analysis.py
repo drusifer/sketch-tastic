@@ -14,6 +14,8 @@ from typing import Any
 
 from sketchtastic._io import history_dir_for, is_number, sample_locator
 from sketchtastic.aggregators import is_histogram_state
+from sketchtastic.coverage import coverage_payload
+from sketchtastic.profile import load_profile
 from sketchtastic.sketch import (
     SketchError,
     Skit,
@@ -374,6 +376,7 @@ def _load_run_file(
     skipped_val = run_hdr.get("skipped_lines", 0)
     info = {
         "id": run_id,
+        "profile_id": raw.get("profile_id"),
         "started": _json_safe(run_hdr.get("started")),
         "finished": _json_safe(run_hdr.get("finished")),
         "started_ms": _to_epoch_ms(run_hdr.get("started")),
@@ -494,11 +497,14 @@ def _iter_history_yaml(directory: Path) -> list[Path]:
 
 def _load_history(
     sketch_path: Path | str, history_dir: Path | str | None
-) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    """Load run files from explicit or auto-detected history directory."""
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]], list[tuple[dict[str, Any], dict]]]:
+    """Load run files from explicit or auto-detected history directory.
+
+    Returns the payload section, run info by ID, and `(info, skits)` per run in run order.
+    """
     directory = _resolve_history_dir(sketch_path, history_dir)
     if directory is None:
-        return {"directory": None, "runs": [], "drift": [], "warnings": []}, {}
+        return {"directory": None, "runs": [], "drift": [], "warnings": []}, {}, []
 
     warnings: list[str] = []
     loaded: list[tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, Any]]]]] = []
@@ -515,12 +521,16 @@ def _load_history(
         _compute_run_drift(prev_info, prev_skits, curr_info, curr_skits)
         for (_, prev_info, prev_skits), (_, curr_info, curr_skits) in zip(loaded, loaded[1:])
     ]
-    return {
-        "directory": str(directory),
-        "runs": runs,
-        "drift": drift,
-        "warnings": warnings,
-    }, run_map
+    return (
+        {
+            "directory": str(directory),
+            "runs": runs,
+            "drift": drift,
+            "warnings": warnings,
+        },
+        run_map,
+        [(info, skits) for _, info, skits in loaded],
+    )
 
 
 def _build_seen_time_axis(
@@ -591,6 +601,7 @@ def _serialize_skits(
     total: int,
     skit_weights: dict[str, dict[str, float | int]],
     skit_bounds: dict[str, dict[str, list[int]]],
+    covered: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     skits_out: list[dict[str, Any]] = []
     cumulative = 0
@@ -614,6 +625,7 @@ def _serialize_skits(
                 "first_record": first_rec,
                 "last_record": None if last_rec == first_rec else last_rec,
                 "sample_locator": sample_locator(sketch_path, sid),
+                "covered": None if covered is None else sid in covered,
             }
         )
     return skits_out
@@ -641,9 +653,15 @@ def analyze_sketch(
     sketch_path: Path | str,
     history_dir: Path | str | None = None,
     default_weight: str | None = None,
+    regression: tuple[Path | str, Path | str] | None = None,
 ) -> dict[str, Any]:
-    """Load a sketch once (plus optional history) into a lean JSON-safe dashboard payload."""
-    raw_header, rows = load_ranked_skits(sketch_path)
+    """Load a sketch once (plus optional history) into a lean JSON-safe dashboard payload.
+
+    `regression` is `(profile_path, corpus_path)`: the profile must be the sketch's own (its
+    `profile_id` is checked), and adds baseline and per-run coverage of the corpus.
+    """
+    profile = load_profile(str(regression[0])) if regression else None
+    raw_header, rows = load_ranked_skits(sketch_path, profile.profile_id if profile else None)
     total = sum(skit.meta["count"] for _, skit in rows)
     singletons = sum(1 for _, skit in rows if skit.meta["count"] == 1)
 
@@ -651,9 +669,13 @@ def analyze_sketch(
     agg_descriptors, agg_axes, skit_bounds = _describe_aggregates(rows)
     weightings, skit_weights = _discover_weightings(rows)
     resolved_weight = _resolve_default_weighting(default_weight, weightings)
-    history, run_map = _load_history(sketch_path, history_dir)
+    history, run_map, runs = _load_history(sketch_path, history_dir)
     time_axes = _assemble_time_axes(rows, agg_axes, skit_bounds, run_map)
-    skits_out = _serialize_skits(sketch_path, rows, total, skit_weights, skit_bounds)
+    coverage = (
+        coverage_payload(profile, regression[1], rows, runs) if profile and regression else None
+    )
+    covered = set(coverage["covered_ids"]) if coverage else None
+    skits_out = _serialize_skits(sketch_path, rows, total, skit_weights, skit_bounds, covered)
 
     return {
         "meta": {
@@ -673,5 +695,6 @@ def analyze_sketch(
         "weightings": weightings,
         "time_axes": time_axes,
         "history": history,
+        "coverage": coverage,
         "skits": skits_out,
     }

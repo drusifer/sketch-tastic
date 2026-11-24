@@ -35,6 +35,8 @@ const state = {
   corrMatMetric: "theils", // theils | cramers
   sankeyFields: [],
   sankeyCustom: false,
+  coverageFilter: "all", // all | covered | uncovered (only with DATA.coverage)
+  coverageRunIdx: -1, // index into DATA.coverage.runs; -1 = latest
   charts: {}
 };
 
@@ -214,6 +216,7 @@ function filterSkits() {
   const q = state.search.trim().toLowerCase();
   return DATA.skits.filter(skit => {
     if (!matchesRange(skit, axis, bounds)) return false;
+    if (state.coverageFilter !== "all" && skit.covered !== (state.coverageFilter === "covered")) return false;
     for (const [fk, allowed] of state.fieldFilters.entries()) {
       if (!allowed.size) continue;
       const val = fieldToken(skit.tokens, fk);
@@ -230,6 +233,28 @@ function filterSkits() {
   });
 }
 
+
+/** Short "key=value" list of a skit's informative tokens (null/FALSE/missing omitted). */
+function tokenSummary(toks) {
+  return Object.entries(toks || {}).filter(([, v]) => v !== null && v !== "FALSE").slice(0, 4).map(([k, v]) => k + "=" + tokenLabel(v)).join(", ") || "(all null/FALSE or missing)";
+}
+
+/** Fill a table body with one row per item; `mapper` returns [text, cssClass] cells. */
+function fillRows(tbodyId, colspan, rows, mapper) {
+  const tb = document.getElementById(tbodyId);
+  clear(tb);
+  if (!rows.length) {
+    const tr = el("tr");
+    tr.appendChild(el("td", { colspan: String(colspan), class: "muted" }, "None"));
+    tb.appendChild(tr);
+    return;
+  }
+  for (const r of rows) {
+    const tr = el("tr");
+    for (const [txt, cls] of mapper(r)) tr.appendChild(el("td", { class: cls || "" }, txt));
+    tb.appendChild(tr);
+  }
+}
 
 function themeColors() {
   const cs = getComputedStyle(document.documentElement);
@@ -310,6 +335,20 @@ function renderChips(wm) {
       chip.appendChild(btn);
       wrap.appendChild(chip);
     }
+  }
+  if (state.coverageFilter !== "all") {
+    any = true;
+    const chip = el("span", { class: "chip" });
+    chip.appendChild(el("span", null, "coverage: " + state.coverageFilter));
+    const btn = el("button", { type: "button", title: "Show covered and uncovered kinds" }, "×");
+    btn.addEventListener("click", () => {
+      state.coverageFilter = "all";
+      document.getElementById("coverage-select").value = "all";
+      state.page = 1;
+      render();
+    });
+    chip.appendChild(btn);
+    wrap.appendChild(chip);
   }
   if (state.search.trim()) {
     any = true;
