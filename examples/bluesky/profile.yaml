@@ -42,6 +42,8 @@ fields:
     modifier: IS_PRESENT
 
   - {key: facet_types, path: "$.facets[*].features[*]['$type']"}
+  # Only whether tags has a member matters; tag values do not define kinds.
+  - {key: tags, path: "$.tags[0]", modifier: IS_PRESENT}
   - {key: is_multi_lang, path: "$.langs[1]", modifier: IS_PRESENT}
   - {key: labels, path: "$.labels.values[*].val"}
 
