@@ -168,6 +168,20 @@ class DeriveCliTests(unittest.TestCase):
         self.assertFalse(history_dir_for(self.output).exists())
         self.assert_sources_unchanged()
 
+    def test_interruption_after_main_link_removes_only_our_published_pair(self):
+        real_link = os.link
+
+        def interrupted(src, dst, **kwargs):
+            real_link(src, dst, **kwargs)
+            if Path(dst) == self.output:
+                raise KeyboardInterrupt
+
+        with patch("os.link", interrupted):
+            self.assertEqual(self.derive()[0], 130)
+        self.assertFalse(self.output.exists())
+        self.assertFalse(history_dir_for(self.output).exists())
+        self.assert_sources_unchanged()
+
     def test_no_history_is_supported_and_does_not_invent_runs(self):
         for path in self.history.iterdir():
             path.unlink()

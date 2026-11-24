@@ -91,7 +91,6 @@ def _stage_history(
 def _publish(staged: Path, output: Path, history: list[Path], history_dir: Path) -> None:
     """Publish main last; undo only our own links if a handled publication fails."""
     created_directory = False
-    linked = []
     try:
         if history:
             history_dir.mkdir()  # exclusive: never adopt an existing directory
@@ -99,17 +98,22 @@ def _publish(staged: Path, output: Path, history: list[Path], history_dir: Path)
             for source in history:
                 destination = history_dir / source.name
                 os.link(source, destination)
-                linked.append((source, destination))
         os.link(staged, output)  # exclusive even if a competitor created output after validation
     except BaseException:
-        for source, destination in reversed(linked):
-            with contextlib.suppress(OSError):
-                if not destination.is_symlink() and source.samefile(destination):
-                    destination.unlink()
+        _unlink_owned(staged, output)
         if created_directory:
+            for source in reversed(history):
+                _unlink_owned(source, history_dir / source.name)
             with contextlib.suppress(OSError):
                 history_dir.rmdir()  # leave any files another writer created
         raise
+
+
+def _unlink_owned(source: Path, destination: Path) -> None:
+    # A signal can arrive after link() succeeds but before bookkeeping runs.
+    with contextlib.suppress(OSError):
+        if not destination.is_symlink() and source.samefile(destination):
+            destination.unlink()
 
 
 def derive_file(
