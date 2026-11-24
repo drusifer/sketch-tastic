@@ -14,6 +14,11 @@ existing sketch  +  stream of events  ->  updated sketch
 
 A million near-identical log lines become a handful of entries you can actually read.
 
+**Contents:** [Install](#install) · [Quickstart](#quickstart) · [Usage](#usage) ·
+[Regression data coverage](#regression-data-coverage) · [Derive a new sketch](#derive-a-new-sketch) ·
+[Profiles](#profiles) · [The sketch](#the-sketch) · [As a library](#as-a-library) ·
+[Bluesky demo](#bluesky-demo) · [Documentation](#documentation)
+
 ## Install
 
 ```sh
@@ -245,20 +250,19 @@ or KEY is not one of its columns (the message says why, and lists the columns).
 
 ## Regression data coverage
 
-The profile defines each kind of event (a skit). Use the generic CLI to locate retained samples,
-export regression data, and measure how much of an observed baseline that data represents:
+The profile defines each kind of event (a skit). Explore kinds in the HTML dashboard, export
+regression data, and measure how much of an observed baseline that data represents:
 
 ```sh
-sketch report baseline.sketch.yaml --limit 20
 sketch export baseline.sketch.yaml --output regression.jsonl
-sketch coverage baseline.sketch.yaml -p profile.yaml regression.jsonl
-sketch analyze baseline.sketch.yaml -o analysis.html
+sketch analyze baseline.sketch.yaml -o analysis.html --regression regression.jsonl -p profile.yaml
 ```
 
 ### Interactive HTML analysis dashboard
 
 ```
 sketch analyze SKETCH -o REPORT.html [--history DIR] [--title TEXT] [--weight KEY] [--force]
+               [--regression REGRESSION.jsonl -p PROFILE]
 ```
 
 Generates a single, 100% offline HTML dashboard bundling Chart.js (MIT) with a strict Content
@@ -302,25 +306,31 @@ explore:
 By default `analyze` refuses to overwrite an existing file (pass `--force` to replace a regular
 file; symlinks are always refused). Exit status: `0` written · `2` invalid input or output error.
 
-`report` ranks kinds by observation count, with full IDs, individual and cumulative frequency,
-tokens and retained-sample locations. `--limit 0` prints all rows. `export` writes one original
-retained record per kind to a **new** JSONL file. Repeat `--id FULL_ID` to export only selected
-kinds; omitting it exports all. Neither command needs application-specific preprocessing.
+The dashboard's skit explorer is the ranked kind report: full IDs, counts, shares, tokens,
+aggregates and retained samples. `export` writes one original retained record per kind to a
+**new** JSONL file, in frequency order. Repeat `--id FULL_ID` (copied from the dashboard) to export
+only selected kinds; omitting it exports all. Aggregates summarize observations without changing
+kind identity or the baseline-count weights used for coverage.
 
-When a sketch has aggregates, `report` also prints their values for each listed kind, including
-numeric summaries and typed timestamps. Aggregates summarize observations without changing kind
-identity or the baseline-count weights used for coverage.
-
-`coverage` applies the matching profile to the regression records and intersects their kind IDs
-with the baseline. It reports two separate measures:
+**Regression coverage** (`--regression FILE -p PROFILE`, always given together) adds a
+*Regression Coverage* card to the dashboard. The profile must be the sketch's own (a mismatched
+or missing profile ID is rejected); each regression record is tokenized with it, and a baseline
+kind is *covered* when at least one record has its skit ID. Two separate measures:
 
 - **Kind coverage:** distinct covered baseline kinds / all baseline kinds.
 - **Frequency-weighted coverage:** baseline observations in covered kinds / all baseline observations.
 
-Repeated regression examples of one kind do not increase coverage. Regression kinds absent from
-the baseline are listed separately, and missing baseline kinds are ranked by frequency to help
-choose the next samples. Empty-baseline percentages are N/A. Input is strict JSONL objects;
-malformed rows fail with line numbers. A mismatched or missing baseline profile ID is rejected.
+Both follow the dashboard's filters and weighting live. A *Coverage* filter (all / covered /
+uncovered) narrows every chart and the skit explorer, so the explorer ranks the uncovered kinds
+to sample next (`export --id`). Regression kinds absent from the baseline are listed separately.
+Repeated regression examples of one kind do not increase coverage; empty percentages are N/A.
+Input is strict JSONL objects, read as a stream; a malformed line fails with its line number and
+no dashboard is written.
+
+**History aware.** Each run in `<sketch>.history/` is a sketch of that run's events, so the card
+also charts, per run: the run's own kind and frequency-weighted coverage, cumulative coverage up
+to that run, and the kinds the run introduced that the corpus does not cover yet (listed per run).
+Runs written under another profile are marked not comparable.
 
 These numbers describe sample representation under this profile, not branch coverage or proof
 that tests ran successfully. Their real-world scope is the data represented by the baseline.
@@ -591,11 +601,24 @@ profile.tokens({"request": {"method": "GET", "path": "/items/17"}})
 Every modifier and aggregate function is a `Rule` subclass, registered by its `name`; the
 schema checks its arguments and the class checks the rest.
 
-## Bluesky ASCII demo
+## Bluesky demo
 
-The [Bluesky post demo](examples/bluesky/README.md) captures public metadata and sketches one
-unchanged post per row. Its profile defines post kinds using native JSONPath/modifiers, then
-the core `report`, `export` and `coverage` commands support regression-data selection.
+The [Bluesky post demo](examples/bluesky/README.md) streams public posts through a small unwrap
+filter into `sketch merge -`, one unchanged post per row. Its profile defines post kinds using
+native JSONPath/modifiers; the core `analyze` (with `--regression` coverage) and `export`
+commands then support regression-data selection.
+
+## Documentation
+
+| Document | What it holds |
+|---|---|
+| [docs/DOMAIN.md](docs/DOMAIN.md) | Domain model: glossary, contexts, invariants (incl. the one streaming ingestion path) |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture decision records, newest last |
+| [docs/LESSONS.md](docs/LESSONS.md) | Engineering lessons, newest first |
+| [docs/SDLC.md](docs/SDLC.md) | How the project is built, tested, changed and released (`make` targets) |
+| [examples/bluesky/README.md](examples/bluesky/README.md) | Live Bluesky capture → sketch → dashboard and coverage walkthrough |
+| [docs/sprints/](docs/sprints/) | Per-sprint user stories and UAT plans (historical) |
+| [AGENTS.md](AGENTS.md), [task.md](task.md) | Agent team operating rules and the sprint task board |
 
 ## License
 
