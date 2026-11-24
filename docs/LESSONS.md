@@ -77,3 +77,35 @@ escaping (`<`, `>`, `&`, U+2028/U+2029), and `Map`/safe-DOM rendering before clo
   `tests/test_analysis.py`, `tests/test_dashboard.py`, `docs/sprints/UAT_PLAN_SPRINT7.md`.
 - **Applies when:** building offline HTML/JS analysis views or aggregate summaries on top of
   mergeable sketches.
+
+## [2026-11-23] Keep one source of truth for interactive stats and use single-pass template substitution
+
+> **Tags:** #architecture #dashboard #security #refactoring #Oracle
+
+### Context
+Sprint 8 audited accumulated technical debt across `analysis.py` (1,146 lines, radon D(24)) and
+`dashboard.py` (3,582 lines of inline CSS/HTML/JS) after rapid interactive dashboard additions.
+
+### Observation and Cause
+1. Once interactive browser filtering and re-weighting required recomputing every chart and metric
+   client-side from `DATA.skits`, ~600 lines of Python statistical code in `analysis.py` became
+   unconsumed dead weight that bloated embedded HTML payloads and drove the highest complexity in
+   `src/`.
+2. When extracting the HTML template from an f-string into `template.html` with sequential
+   `document.replace(placeholder, replacement)` calls, independent security and architecture reviews
+   caught a High-severity second-order placeholder injection (`SEC-S8-06`): untrusted data or
+   titles containing literal `__APP_JS__` or `__CHARTJS__` would be expanded by later `.replace()`
+   iterations, bypassing `html.escape` and breaking JSON script parsing.
+
+### Rule
+When a browser view must recompute metrics dynamically over filtered client-side state, keep the
+server/CLI side as a lean payload builder and put the statistical functions in a pure, DOM-free JS
+module tested directly with `node` rather than maintaining two implementations. When assembling
+HTML templates with untrusted data, always use single-pass regex/callback substitution
+(`re.sub(pattern, lambda m: mapping[m.group(0)], template)`) — never sequential `.replace()` loops.
+
+### Evidence and Scope
+- **References:** `ADR-2026-11-23`, `src/sketchtastic/analysis.py`, `src/sketchtastic/dashboard.py`,
+  `src/sketchtastic/assets/dashboard/stats.js`, `tests/test_dashboard.py` (`SEC-S8-06` regression).
+- **Applies when:** building or refactoring single-file offline HTML renderers and interactive
+  client-side analytics over Python-generated payloads.

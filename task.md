@@ -5,7 +5,7 @@
 *   **Goal**: Formalize the domain model (`docs/DOMAIN.md`), untangle circular/private module boundaries and double YAML reads, slim `analysis.py` into a lean dashboard payload builder, decompose the 3,582-line `dashboard.py` into modular static web assets with `node` unit tests, and bring all of `src/` to 0 extended ruff warnings and 0 radon C+ functions while retiring legacy `fid`/`wh`/`fingerprint` internal names.
 *   **Tier**: Tier 2 (Tech Debt / Fast-track) · **Total Points**: 8 · **Branch**: `sprint-8`
 *   **Source**: `docs/sprints/USER_STORIES_SPRINT8.md` (`STORY-SKT-15`..`18`, `ADR-2026-11-23`) & `docs/DOMAIN.md`
-*   **Status**: Active — approved by Smith, Switch & Morpheus; starting Phase 1
+*   **Status**: Complete — launched 2026-11-24; merged locally to `main` (325 tests on Python 3.14 & 3.15, 4 wheel smoke tests, 0 extended ruff / 0 vulture / 0 radon C+ across `src/`, security-scan clean)
 
 ### Stage 0: SDLC Gate (Blocker)
 - [x] **Task 0.1 (L1):** Verify `docs/SDLC.md` exists and is current; create `sprint-8` branch from `main`. (*Owner: Mouse | Trace: N/A — sprint gate | Verification: `test -f docs/SDLC.md && git branch --show-current`*)
@@ -32,11 +32,11 @@
 - [x] **Task 3.4 (L2):** Code & architecture review of Phase 3; commit `refactor(cli): ...`. (*Owner: Morpheus | Trace: STORY-SKT-18 | Verification: review verdict in `agents/CHAT.md`*)
 
 ### Stage 3: Sprint Closeout
-- [ ] **Task C.1 (L2):** SDLC conformance check (preserve `data/` across `distclean`, run `install`, `lint`, `test`, `test-all` 3.14/3.15, `smoke`, `build`, `security-scan`, `uv lock --check`; verify `assets/dashboard/*` ships in wheel). (*Owner: Tank | Trace: N/A — closeout | Verification: `docs/SDLC.md` section 10 checks pass*)
-- [ ] **Task C.2 (L2):** Document grooming (`docs/DECISIONS.md` ADR-2026-11-23, `docs/LESSONS.md`, `README.md` check) and sprint chat report. (*Owner: Oracle | Trace: N/A — closeout | Verification: `bobp chat-report --moniker SPRINT_8 ...`*)
-- [ ] **Task C.3 (L2):** End-to-end user usability testing on live CLI & Bluesky dashboard, UAT rubric & lesson rubric review. (*Owner: Smith | Trace: STORY-SKT-15..18 | Verification: `*user approve` recorded in `agents/CHAT.md`*)
-- [ ] **Task C.4 (L1):** Sprint retrospective & backlog grooming. (*Owner: Mouse | Trace: N/A — closeout | Verification: Retros posted in `agents/CHAT.md`*)
-- [ ] **Task C.5 (L1):** Sprint launch announcement and local `--no-ff` merge to `main` (no push/release). (*Owner: Cypher | Trace: N/A — release decision | Verification: Cypher launch in `agents/CHAT.md` & `git log -n 2`*)
+- [x] **Task C.1 (L2):** SDLC conformance check (preserve `data/` across `distclean`, run `install`, `lint`, `test`, `test-all` 3.14/3.15, `smoke`, `build`, `security-scan`, `uv lock --check`; verify `assets/dashboard/*` ships in wheel). (*Owner: Tank | Trace: N/A — closeout | Verification: `docs/SDLC.md` section 10 checks pass*)
+- [x] **Task C.2 (L2):** Document grooming (`docs/DECISIONS.md` ADR-2026-11-23, `docs/LESSONS.md`, `README.md` check) and sprint chat report. (*Owner: Oracle | Trace: N/A — closeout | Verification: `bobp chat-report --moniker SPRINT_8 ...`*)
+- [x] **Task C.3 (L2):** End-to-end user usability testing on live CLI & Bluesky dashboard, UAT rubric & lesson rubric review. (*Owner: Smith | Trace: STORY-SKT-15..18 | Verification: `*user approve` recorded in `agents/CHAT.md`*)
+- [x] **Task C.4 (L1):** Sprint retrospective & backlog grooming. (*Owner: Mouse | Trace: N/A — closeout | Verification: Retros posted in `agents/CHAT.md`*)
+- [x] **Task C.5 (L1):** Sprint launch announcement and local `--no-ff` merge to `main` (no push/release). (*Owner: Cypher | Trace: N/A — release decision | Verification: Cypher launch in `agents/CHAT.md` & `git log -n 2`*)
 
 ---
 
@@ -202,11 +202,12 @@ Between Sprints 3 and 4 (owner review of Sprint 3): JSONPath via `jsonpath-rfc95
 - [x] Tank `*devops sdlc-check` · Oracle groom · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]
 
 ## Backlog (unscheduled)
+- Defense-in-depth hardening (Sprint 8 retro / Switch): scale subnormal floats (`5e-324`) in `aggregators.log_bin_key` & catch `OverflowError` in `as_number`; add dead-worker guard to `tasks.put` in `cli._fold_parallel`.
+- Bob Protocol tooling (Sprint 8 retro): run `bobp update` when convenient to sync project from bobp 0.2.0 to 0.3.0.
 - Interactive dashboard (`analyze`): optional `--no-samples` flag to omit retained sample payloads for ultra-compact HTML on very large sketches; optional CSV/JSON export of filtered skits from the browser; browser-side multi-field cross-tab heatmap (Sprint 7 retro).
 - Bluesky demo: collect a longer observation window to find rare gallery/enum combinations;
   continue to report unobserved values explicitly. No additional implementation required now.
 Carried over from fingerling's `task.md`:
-- Test-internal names still say fingerprint (`wh`, `fingerprints` variables, test class names) — rename (Sprint 1 retro).
 - `-o`: owner may revisit (keep or drop).
 - In-run duplicate detection if a stream needs it.
 - JSON Schema for sketch files; set-to-set (sketch-to-sketch) merge; more aggregate ops (`LEN`, `ABS`).

@@ -228,11 +228,12 @@ None. Distribution `sketch-tastic`, Python import `sketchtastic`, CLI command `s
 from `sketchtastic`/`skt` per owner request; sketch and skit vocabulary preserved).
 
 ---
-*Last verified: 2026-11-21 by Tank at Sprint 7 close (`*devops sdlc-check`). From-clean
+*Last verified: 2026-11-24 by Tank at Sprint 8 close (`*devops sdlc-check`). From-clean
 `bobp make distclean`, `install` (x2 idempotent), `lint`, `test`, `test-all` (3.14 and 3.15),
-`smoke` (including wheel/sdist build and bundled Chart.js asset check), `security-install`,
-`security-scan`, and `uv lock --check` passed. All 298 tests pass on both supported interpreters;
-four installed-wheel smoke tests pass. The virtualenv excludes system packages, `.githooks` is
-active, and existing `data/` captures were preserved and restored. Vendored Chart.js v4.4.9 (MIT)
-ships as package data under `src/sketchtastic/assets/`; package runtime dependencies and release
-workflows are unchanged. v0.2.0 remains the published release.*
+`smoke` (including wheel/sdist build and bundled Chart.js + 10 modular `assets/dashboard/*` files),
+`security-install`, `security-scan` (0 leaks, 0 vulns), and `uv lock --check` passed. All 325 tests
+pass on both supported interpreters; four installed-wheel smoke tests pass; `bobp make quality`
+reports 0 extended ruff warnings, 0 vulture hits, and 0 radon C+ functions across `src/`. The
+virtualenv excludes system packages, `.githooks` is active, and existing `data/` captures were
+preserved and restored. Package runtime dependencies and release workflows are unchanged. v0.2.0
+remains the published release.*
