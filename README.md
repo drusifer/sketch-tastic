@@ -336,8 +336,6 @@ These numbers describe sample representation under this profile, not branch cove
 that tests ran successfully. Their real-world scope is the data represented by the baseline.
 Completeness means all observed profile-defined kinds, not every theoretically possible input.
 
-From a repository checkout, invoke these commands through `bobp make -vvv run ARGS="..."`.
-
 ## Derive a new sketch
 
 Reuse captured observations when a new profile only collapses retained distinctions:
@@ -398,8 +396,6 @@ Continue capturing into the derived sketch with its target profile:
 ```sh
 sketch merge -p coarse-profile.yaml -s baseline-v2.sketch.yaml new-events.jsonl
 ```
-
-From this repository, invoke commands through `bobp make run ARGS="derive ..."`.
 
 ## Profiles
 
