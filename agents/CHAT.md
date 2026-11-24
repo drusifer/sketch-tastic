@@ -42,3 +42,7 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_8.md` (2026-11-24 00:05:25) — Sprint 8, Lean Architecture, Modular Dashboard & Code Hygiene (Tier 2, 8 pts, 1 security fix cycle for SEC-S8-06). Formalized docs/DOMAIN.md; added _io.py and single-pass sketch.load_ranked_skits eliminating reporting<->analysis cycle and double YAML reads; slimmed analysis.py to a lean payload builder (ADR-2026-11-23); extracted dashboard.py (3,582L->96L) into 10 static assets/dashboard/* files with single-pass placeholder substitution, hardened CSP, and direct node stats.js unit tests; decomposed cli.py and aggregators.py to 0 extended ruff / 0 vulture / 0 radon C+ across src/; retired legacy fid/wh/fingerprint internal names. Verified: 325 tests on Python 3.14 & 3.15, 4 wheel smoke tests (13 bundled assets), security-scan (0 leaks/0 vulns). Merged locally to main; no push or release.
 
 ---
+
+> **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_9.md` (2026-11-24 16:05:56) — Sprint 9 delivered structured version-1 tokens and validated sketch derivation with transformed history (SKT-19/20/21, phases 1-3). During closeout the owner redirected the Bluesky example and reporting: capture now streams through a stdin/stdout unwrap filter into sketch merge (prepare removed), the ASCII report and coverage commands were folded into the analyze dashboard with history-aware regression coverage, and BobProtocol was updated to 0.3.1. All gates passed; integrated locally, not pushed.
+
+---

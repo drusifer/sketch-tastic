@@ -1,5 +1,112 @@
 # Task Board
 
+## Sprint 9: Derive a Sketch Without Recapture
+
+* **Goal:** Derive a new named sketch and all available history using validated collapsing
+  transforms; preserve observations and retained statistics without replaying original events.
+* **Tier:** Tier 1 (new cross-boundary capability) · **Total Points:** 13 · **Branch:** `sprint-9`
+* **Source:** `docs/sprints/USER_STORIES_SPRINT9.md` (`STORY-SKT-19`..`21`, S9-D1..D7)
+* **Status:** Complete — launched 2026-11-24; merged locally to `main` (364 tests on Python 3.14
+  and 3.15, 4 wheel smoke tests, quality 0/0/0, security-scan clean). Owner-directed Phase 4
+  (streaming ingestion, one report, history-aware coverage) added during closeout. Not pushed.
+
+### Stage 0: SDLC Gate
+- [x] **Task 0.1 (L1):** Read `docs/SDLC.md`; create branch from current `main`. Existing pending
+  capture/profile/state edits carried unchanged and excluded from sprint commits; do not reset
+  or stash away the owner's work. (*Owner: Mouse | Trace: enabling gate | Verification:
+  `git status -sb`, SDLC inspected; no build-environment change*)
+
+### Phase 1 `*impl`: Structured Tokens and Inspection
+- [x] **Task 1.1 (L3):** Write failing tests and implement version1 string/null/array tokens,
+  omitted value-producing fields, recursive canonical sets and ordered key/value skit IDs.
+  Update CLI reporting and dashboard exact-set stats/filters with collision-free value keys;
+  reject version0 with no migration/compatibility code. (*Owner: Neo | Trace: SKT-21, S9-D6/D7 |
+  Verification: targeted `bobp make test ARGS=test_model`, `test_sketch`, `test_analysis`,
+  `test_dashboard`, followed by `bobp make lint`, `bobp make test`*)
+- [x] **Task 1.2 (L2):** Verify missing/null/literal/set distinctions, duplicate normalization,
+  nested arrays, round trips, keyed identity, version0 refusal and exact-set inspection/filter
+  behavior. (*Owner: Trin | Trace: SKT-21 AC1–6 | Verification: targeted tests and UAT evidence*)
+- [x] **Task 1.3 (L2):** Review structured input validation, identity collisions and escaped
+  display/filter keys, preserving CSP/prototype guards. (*Owner: Switch | Trace: revised design
+  threat model | Verification: `bobp make security-scan-secrets`, phase1 security verdict*)
+
+**Phase 1 review gate (L2, Morpheus):** Confirm S9-D6/D7 across core and inspection, source-owner
+changes preserved, then approve and commit only sprint changes after Trin/Switch gates.
+**Evidence:** Approved and committed as `c7d53ec`; independent core and inspection reviews,
+full364/lint/quality pass, structured display distinctions verified.
+
+### Phase 2 `*impl`: Validated Collapsing Transform and State Reduction
+- [x] **Task 2.1 (L3):** Write failing `test_derive` cases, then implement conservative field
+  mapping, strict retained-state validation and collision reduction. Cover drop/reorder/rename,
+  provable presence, untyped predicate/substitution transforms, typed temporal coarsening,
+  ambiguous/refining rejections, counts/aggregates/shares and representative samples.
+  (*Owner: Neo | Trace: SKT-19, S9-D1/D2/D5 | Verification:
+  `bobp make test ARGS=test_derive`, then `bobp make lint`, `bobp make test`*)
+- [x] **Task 2.2 (L2):** Verify SKT-19 AC1–6 against direct-fold fixtures, complete state failures
+  and unsupported transforms; record UAT evidence. (*Owner: Trin | Trace: SKT-19 |
+  Verification: reviewed tests/results and `docs/sprints/UAT_PLAN_SPRINT9.md`*)
+- [x] **Task 2.3 (L2):** Review parser/state-integrity and collapse failure paths; run secret scan.
+  (*Owner: Switch | Trace: design threat model | Verification: `bobp make security-scan-secrets`
+  and `security gate (phase 2): No blocking findings` in CHAT*)
+
+**Phase 2 review gate (L2, Morpheus):** Inspect the phase diff against S9-D1/D2/D5; approve after
+Trin and Switch, commit only this sprint's files with Conventional Commits. Evidence in CHAT.
+**Evidence:** Approved and committed as `d51518f`; 12 focused derivation tests, full364,
+strict-state/proof regressions and independent architecture/security gates pass.
+
+### Phase 3 `*impl`: CLI, History and Safe Publication
+- [x] **Task 3.1 (L3):** Write failing CLI/history tests, then expose
+  `derive SOURCE --source-profile OLD -p NEW -o NEWNAME`. Transform every available run,
+  preserve main/run metadata and provenance, publish staged outputs without clobbering and
+  clean owned files on handled errors. Document available-history and sample/crash limitations.
+  (*Owner: Neo | Trace: SKT-20, S9-D3/D4 | Verification:
+  `bobp make test ARGS=test_derive`, `bobp make lint`, `bobp make test`*)
+- [x] **Task 3.2 (L2):** Verify success, bad history, existing paths, symlinks/aliases, simulated
+  write failures, empty/no-history sketches, inspection commands and continued merge.
+  (*Owner: Trin | Trace: SKT-20 AC1–6 | Verification: UAT plan results and targeted tests*)
+- [x] **Task 3.3 (L2):** Review filesystem ownership/rollback, path trust, safe deserialization
+  and error surfaces. (*Owner: Switch | Trace: design threat model | Verification:
+  `bobp make security-scan-secrets`, `security gate (phase 3): No blocking findings`*)
+
+**Phase 3 review gate (L2, Morpheus):** Inspect the phase diff against S9-D3/D4 and CLI contract;
+approve after Trin and Switch, then commit only sprint changes. Evidence in CHAT.
+**Evidence:** Approved and committed as `b9f4484`; CLI8, full364, refusal/rollback scenarios
+pass. Actual Make-driven UAT: 5 source skits/5 observations -> 2 skits/5 observations, 1 history.
+
+### Phase 4 (owner-directed, 2026-11-24): One Streaming Ingestion Path and One Report
+Unplanned work the owner requested during closeout (Tier 2; ADR-2026-11-24-b/-c/-d).
+- [x] **Task 4.1 (L2):** `capture` streams and flushes each frame, sidecar last (also on error), no
+  default frame limit; `unwrap` stdin→stdout filter with bounded dedup is the only unwrap code;
+  `prepare` and `capture --unwrap-posts` removed; `make bluesky` / `bluesky-live` pipelines into
+  `sketch merge -`. (*Owner: Neo | Verification: `bobp make test-bluesky`; 30-min capture, 216,583
+  frames -> 207,882 posts -> 349 skits at ~45 MB RSS; 2-min live run 5,732 posts -> 128 skits*)
+- [x] **Task 4.2 (L2):** Remove `sketch report`; fold `sketch coverage` into
+  `analyze --regression FILE -p PROFILE`, history aware (per-run and cumulative coverage, new
+  uncovered kinds per run), live Coverage filter. (*Owner: Neo | Verification:
+  `tests/test_coverage.py`, `bobp make test-all`, node DOM smoke of the bundled dashboard*)
+- [x] **Task 4.3 (L2):** Verify, security-review and architecture-review Phase 4. (*Owner: Trin,
+  Switch, Morpheus | Verification: gate verdicts in CHAT; DOMAIN "Ingestion: one streaming path"*)
+
+### Stage 3: Sprint Closeout
+- [x] **Task C.1 (L2):** `*devops sdlc-check`; preserve existing data/captures before from-clean
+  checks, restore afterward. (*Owner: Tank | Trace: SDLC closeout | Verification: documented
+  from-clean install/lint/test/secrets/build, `bobp make test-all`, `bobp make smoke`, lock/hook
+  conformance; record owner's version1-only override of the old format0 convention in SDLC;
+  no dependency/toolchain change*)
+- [x] **Task C.2 (L2):** Groom docs, record derivation decisions and information-loss lesson;
+  produce sprint chat report. (*Owner: Oracle | Trace: S9-D1..D5 | Verification: docs agree with
+  implementation, `bobp chat-report --moniker SPRINT_9` with appropriate summary*)
+- [x] **Task C.3 (L2):** Exercise CLI help, derive success/refusal, history inspection and next
+  merge from the user's perspective; review lesson. (*Owner: Smith | Trace: SKT-19/20 |
+  Verification: actual commands/results in UAT plan, explicit user acceptance in CHAT*)
+- [x] **Task C.4 (L1):** Collect retrospective and update backlog. (*Owner: Mouse | Trace:
+  sprint close | Verification: team retrospective and actionable follow-ups in CHAT/task.md*)
+- [x] **Task C.5 (L1):** Launch after all gates and integrate locally per SDLC; no push/tag or
+  package version bump. (*Owner: Cypher | Trace: sprint launch | Verification: launch decision,
+  local merge commit, source-owner changes preserved*)
+
+---
+
 ## Sprint 8: Lean Architecture, Modular Dashboard & Code Hygiene
 
 *   **Goal**: Formalize the domain model (`docs/DOMAIN.md`), untangle circular/private module boundaries and double YAML reads, slim `analysis.py` into a lean dashboard payload builder, decompose the 3,582-line `dashboard.py` into modular static web assets with `node` unit tests, and bring all of `src/` to 0 extended ruff warnings and 0 radon C+ functions while retiring legacy `fid`/`wh`/`fingerprint` internal names.
@@ -202,13 +309,28 @@ Between Sprints 3 and 4 (owner review of Sprint 3): JSONPath via `jsonpath-rfc95
 - [x] Tank `*devops sdlc-check` · Oracle groom · Smith user test · retro + launch · chat report · merge [Tank, Oracle, Smith, All]
 
 ## Backlog (unscheduled)
+- Dashboard field-name encoding (Sprint9 independent review): replace inherited correlation
+  IDs formed with `field + '=' + label` by structured `[field, tokenKey]` keys; add delimiter
+  collision tests. URL filters must encode field/token pairs rather than split on the first
+  colon; add ':' field-name round-trip tests. Existing limitations, not introduced by token sets.
+- Optional enum-set member distributions/membership filters; Sprint9 intentionally preserves
+  exact-set chart categories and filter semantics.
 - Defense-in-depth hardening (Sprint 8 retro / Switch): scale subnormal floats (`5e-324`) in `aggregators.log_bin_key` & catch `OverflowError` in `as_number`; add dead-worker guard to `tasks.put` in `cli._fold_parallel`.
-- Bob Protocol tooling (Sprint 8 retro): run `bobp update` when convenient to sync project from bobp 0.2.0 to 0.3.0.
 - Interactive dashboard (`analyze`): optional `--no-samples` flag to omit retained sample payloads for ultra-compact HTML on very large sketches; optional CSV/JSON export of filtered skits from the browser; browser-side multi-field cross-tab heatmap (Sprint 7 retro).
 - Bluesky demo: collect a longer observation window to find rare gallery/enum combinations;
   continue to report unobserved values explicitly. No additional implementation required now.
+- Live-pipe provenance (Sprint 9 retro): `bluesky-live` keeps no capture endpoint/window record;
+  persist producer provenance in the sketch or run header.
+- Coverage CI gate (Sprint 9 retro): `analyze --regression` has no pass/fail threshold or exit
+  code; add one only if a CI consumer needs it.
+- `sketch show` (Sprint 9 retro, owner to decide): second terminal kind table beside the
+  dashboard; keep as a quick terminal view or retire under the one-report decision.
+- Event-time skew (Sprint 9 UAT): Bluesky `createdAt` values range years back and hours ahead;
+  consider documenting or clamping for the event-time axis.
 Carried over from fingerling's `task.md`:
 - `-o`: owner may revisit (keep or drop).
 - In-run duplicate detection if a stream needs it.
 - JSON Schema for sketch files; set-to-set (sketch-to-sketch) merge; more aggregate ops (`LEN`, `ABS`).
-- **Profile evolution (future sprint, owner 2026-10-15):** updating a sketch's profile, and what adding or removing fields does to existing skits. Revisit the two ids then: the skit id (token values) vs the profile id (a hash of the field specs that guards `merge`); e.g. store the fields in the sketch header instead of a hash, or drop the check.
+- **Profile evolution:** Validated collapsing derivation and keyed structured identities
+  delivered in Sprint9. Possible future extension: embed complete source profile/aggregate
+  definitions in sketch headers; current derivation requires the authoritative source profile.

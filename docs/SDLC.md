@@ -81,7 +81,8 @@ is a Mechanism-class change. `agents/` (BobProtocol tooling) and Markdown are ex
 project environment. It is not a package runtime dependency. `bobp make bluesky-capture
 ARGS="--seconds 60 --output data/bluesky.jsonl"` streams public JSON metadata to a file; `bobp make
 bluesky INPUT=... SKETCH=...` pipes a saved capture through `examples.bluesky.unwrap` into
-`sketch merge -`, and `bobp make bluesky-live SKETCH=... ARGS="--seconds N"` does the same live. Generic reporting, representative
+`sketch merge -`, and `bobp make bluesky-live SKETCH=... ARGS="--seconds N"` does the same live.
+Generic reporting, representative
 export and regression coverage live in the package CLI, via `bobp make run ARGS="analyze ..."`
 (coverage with `--regression FILE -p PROFILE`) and `export ...`. `bobp make test-bluesky` runs the focused input/profile tests;
 `bobp make test ARGS=test_reporting` runs generic reporting tests. Both run in the normal suite.
@@ -233,14 +234,14 @@ None. Distribution `sketch-tastic`, Python import `sketchtastic`, CLI command `s
 from `sketchtastic`/`skt` per owner request; sketch and skit vocabulary preserved).
 
 ---
-*Last verified: 2026-11-24 by Tank at Sprint 9 close (`*devops sdlc-check`). From-clean
-`bobp make distclean`, `install` (x2 idempotent), `lint`, `test`, `test-all` (3.14 and 3.15),
-`smoke` (including wheel/sdist build and bundled Chart.js + 10 modular `assets/dashboard/*` files),
-`security-install`, `security-scan` (131 commits; 0 leaks, 0 vulns), and `uv lock --check` passed. All 364 tests
-pass on both supported interpreters; four installed-wheel smoke tests pass; `bobp make quality`
-reports 0 extended ruff warnings, 0 vulture hits, and 0 radon C+ functions across `src/`. The
-virtualenv excludes system packages, `.githooks` is active, and existing `data/` captures were
-preserved and restored, together with the original virtualenv and its optional demo dependencies.
-Per-target evidence is in ignored `build/sprint9-conformance/`. The owner-approved version-1
-sketch policy above is the only SDLC policy change. Package runtime dependencies and release workflows are unchanged. v0.2.0
-remains the published release.*
+*Last verified: 2026-11-24 by Tank at Sprint 9 close (`*devops sdlc-check`, re-run after the
+owner-directed Phase 4). From-clean `bobp make distclean`, `install` (x2, tree unchanged), `lint`,
+`test`, `secrets`, `build`, `test-all` (364 tests on 3.14 and 3.15), `smoke` (4 installed-wheel
+tests, bundled Chart.js and 11 `assets/dashboard/*` files), `security-install`, `security-scan`
+(0 leaks, 0 vulns) and `uv lock --check` passed; `bobp make quality` reports 0 extended ruff,
+0 vulture and 0 radon C+ results. The virtualenv excludes system packages, `.githooks` is active,
+`.venv`, `dist` and `data` are ignored, and the 545 MB of `data/` captures were moved aside and
+restored. Phase 4 changed make targets (`bluesky` now pipes a saved capture through
+`examples.bluesky.unwrap` into `sketch merge -`; new `bluesky-live`; both use bash pipefail) and
+the CLI (`report` and `coverage` removed; `analyze --regression -p`). Package runtime
+dependencies and release workflows are unchanged. v0.2.0 remains the published release.*
