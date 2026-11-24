@@ -78,7 +78,6 @@ class DeriveCliTests(unittest.TestCase):
             self.assertEqual(raw["run"]["events"], old["run"]["events"])
             self.assertEqual(raw["run"]["sketch"], str(self.output))
             self.assertEqual(raw["profile_id"], derived["profile_id"])
-        self.assertEqual(self.command("show", self.output)[0], 0)
         self.assertEqual(
             self.command("analyze", self.output, "-o", self.root / "report.html")[0], 0
         )

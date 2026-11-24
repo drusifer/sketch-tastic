@@ -338,3 +338,24 @@ does not cover. The browser computes the headline percentages live over the curr
 weighting, and a Coverage filter (all / covered / uncovered) drives every view, so the explorer
 is the uncovered-kind list. Runs under another profile ID are marked not comparable. Lists are
 capped at 200 entries per run. No CI threshold/exit gate exists; add one to `analyze` if needed.
+
+## ADR-2026-11-24-e: Retire `sketch show`; the dashboard is the only kind view
+
+**Status:** Accepted. **Date:** 2026-11-24. **Deciders:** Owner. **Supersedes:**
+the owner decision of 2026-10-14, Sprint 2 (`show --sort KEY`).
+**Amends:** ADR-2026-11-24-c (one report).
+
+### Context
+After `report` and `coverage` were folded into the dashboard, `sketch show` remained as a
+second, terminal-only kind table, with its own column, sort and token-cell rules to maintain.
+
+### Considered options
+| Option | Benefit | Cost | Decision |
+|---|---|---|---|
+| Keep `show` as a quick terminal view | No browser needed | Second kind report; duplicated formatting rules | Rejected |
+| Remove `show`; use `analyze` | One kind view; less CLI code | A browser is needed to read a sketch | Selected |
+
+### Outcome and consequences
+`sketch show`, its `--sort` option and its table helpers are removed outright (pre-1.0, no
+alias). The CLI is `merge`, `check`, `analyze`, `export` and `derive`. Read a sketch or a history
+run file with `sketch analyze`, or as YAML.

@@ -52,7 +52,7 @@ The profile also summarizes observations without adding identity fields:
   default *First / Last Seen (Event Time)* slider in `sketch analyze`).
 
 `meta.count` remains the built-in post count used for regression frequency weighting. The
-`analyze` dashboard shows aggregate values per kind; `show` also exposes them as sortable columns. Rebuild
+`analyze` dashboard shows aggregate values per kind. Rebuild
 from the original capture to populate new aggregates for all observations; re-sketching only
 representatives cannot recover population statistics. Aggregates do not change the profile ID.
 

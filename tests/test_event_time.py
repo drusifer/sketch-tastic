@@ -113,12 +113,6 @@ class EventTimeMergeAndAnalysisTests(unittest.TestCase):
             self.assertIsNone(by_kind["broken_ts"].meta["first_seen"])
             self.assertIsNone(by_kind["missing_ts"].meta["first_seen"])
 
-            # `show` renders cleanly and sorts by FIRST RUN without error
-            code, out, err = _run_cli("show", "--sort", "FIRST RUN", str(sketch_path))
-            self.assertEqual(code, 0, err)
-            self.assertIn("2022-01-10", out)
-            self.assertIn("2024-11-05", out)
-
             # `analyze` detects event-time seen axis and renders valid offline dashboard
             analysis = analyze_sketch(sketch_path)
             self.assertTrue(analysis["time_axes"])

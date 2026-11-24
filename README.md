@@ -107,14 +107,8 @@ skits:
         count: 50.0
 ```
 
-To read a sketch without the YAML, print it as a table with `sketch show app.sketch.yaml`:
-
-```
-ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
-75171eba  1      25.0     261014-0001  261014-0001  db         TRUE    ERROR
-351065fb  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
-549439e5  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
-```
+To explore a sketch without reading the YAML, open it in the HTML dashboard:
+`sketch analyze app.sketch.yaml -o analysis.html` (see [Regression data coverage](#regression-data-coverage)).
 
 ## Usage
 
@@ -171,7 +165,7 @@ web.sketch.history/
 ```
 
 So `last_seen: 261014-0002` points straight at the file for that run. A run file is a sketch
-(counts, aggregates and shares from that run only), so `sketch show` reads it. It starts
+(counts, aggregates and shares from that run only). It starts
 with a `run:` header: `id`, `started`, `finished` (UTC), `source`, `events`, `skipped_lines` and
 `sketch`. A new run's number is one past the highest in the sketch and its history, so a rebuilt sketch
 never overwrites an old run file. History is always on; a run with `-o`, or one that writes
@@ -228,25 +222,6 @@ completes modifier names:
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/drusifer/sketch-tastic/main/src/sketchtastic/profile.schema.json
 ```
-
-### Show a sketch
-
-```
-sketch show [--sort KEY] SKETCH
-```
-
-Prints one row per skit, least frequent first: the first 8 characters of its ID, its count
-and `COUNT %` (its share of all events), the first and last run that saw it, then a value and
-a `%` column for each `SUM` or `COUNT` aggregate (`payload_bytes.SUM`, `payload_bytes.SUM %`), and
-one column per token. Shares come from the sketch file's `share` section; a sketch written before
-shares existed shows `-` until its next merge. A sketch with no skits prints
-`SKETCH: no skits`. Long values are not cut; pipe to `less -S` to scroll sideways.
-
-`--sort KEY` orders the rows by the column headed KEY, in any case, lowest first (default
-`COUNT`), so the largest are at the end: `sketch show --sort 'payload_bytes.SUM %'
-gh.sketch.yaml | tail` shows the heaviest skits. `-` sorts first, numbers before text, and
-equal values keep file order. Exit status: `0` printed · `2` the sketch file could not be read,
-or KEY is not one of its columns (the message says why, and lists the columns).
 
 ## Regression data coverage
 
@@ -511,8 +486,7 @@ and `LAST`. With one function the sketch stores its value directly (`count: 12`)
 map by function name (`{MIN: 1, MAX: 3}`). Every skit holds every aggregate, in the order the
 profile lists them (functions too), from its first event on: before any value, `SUM` and `COUNT`
 are `0`, `FIRST`/`LAST` are `[]`, `AVG` is `{avg: null, sum: 0, count: 0}`, and `MIN`/`MAX` are
-`null` (`-` in `show`). So the profile alone decides the order of keys in the file and of
-columns in `show`. Numbers and numeric strings count as numbers. A value
+`null`. So the profile alone decides the order of keys in the file. Numbers and numeric strings count as numbers. A value
 a function can't use (text for `SUM`, text after numbers for `MIN`) is skipped and counted in the
 summary as an unusable aggregate value. A record where the path matches nothing is simply not
 aggregated and is not counted.
