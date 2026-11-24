@@ -2,7 +2,6 @@
 
     sketch merge --profile P --sketch S [EVENTS|-]
     sketch check PROFILE [PROFILE ...]
-    sketch show [--sort KEY] SKETCH
 
 Folds a stream of JSONL events into a sketch that grows across runs.
 Knows nothing about where the events came from.
@@ -24,20 +23,19 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from multiprocessing import Process, Queue
 from queue import Empty
-from typing import IO, Any, Callable, Iterable, Iterator, NamedTuple
+from typing import IO, Any, Callable, Iterable, Iterator
 
 from sketchtastic import __version__
-from sketchtastic._io import history_dir_for, is_number, safe_text
+from sketchtastic._io import history_dir_for
 from sketchtastic.aggregators import as_number
 from sketchtastic.derive_cli import add_derive_command
-from sketchtastic.model import MISSING, Path
+from sketchtastic.model import Path
 from sketchtastic.profile import Profile, ProfileError, load_profile
 from sketchtastic.reporting import add_commands
 from sketchtastic.sketch import (
     ProfileMismatchError,
     Sketch,
     SketchError,
-    Skit,
 )
 
 EXIT_OK = 0
@@ -85,7 +83,7 @@ history:
   that saw them. Every run that updates SKETCH also writes just that run's
   skits, with a 'run:' header (id, times, source, counts), to
   <SKETCH without extension>.history/<run id>.yaml, e.g.
-  web.sketch.history/261015-0003.yaml; 'sketch show' reads it.
+  web.sketch.history/261015-0003.yaml.
   A run with --output writes no history and uses up no run id.
 
 duplicate protection:
@@ -113,28 +111,6 @@ keys and aggregate functions are checked as well. Every problem is listed.
 exit status:
   0  every profile is valid
   1  at least one profile has problems (listed on stdout)
-"""
-
-
-_SHOW_EPILOG = """\
-examples:
-  sketch show web.sketch.yaml
-  sketch show web.sketch.yaml | less -S    # long values: scroll sideways
-  sketch show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail
-
-ID is the start of the skit ID; FIRST RUN and LAST RUN are the ids of
-the first and last run that saw it (see 'sketch merge --help'); '-' means
-no metadata/statistic value. Token cells distinguish <missing>, null, and
-JSON arrays; ambiguous literal strings are quoted.
-Each % column is the skit's share of the sketch total: COUNT % of all
-events, and one value and % column per SUM or COUNT aggregate (key.FN when
-the aggregate has several functions).
-Rows are sorted by KEY, lowest first, so the largest are at the end; '-'
-sorts first, numbers before text, and equal values keep file order.
-
-exit status:
-  0  table printed
-  2  SKETCH could not be read, or KEY is not one of its columns
 """
 
 
@@ -249,23 +225,6 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("profiles", nargs="+", metavar="PROFILE", help="YAML profile to check")
     check.set_defaults(func=_cmd_check)
 
-    show = commands.add_parser(
-        "show",
-        help="print a sketch as a table",
-        description="Print one row per skit in SKETCH, least frequent first: "
-        "its count and share of all events, the first and last run that saw it, "
-        "its summed and counted aggregates with their shares, and its tokens.",
-        epilog=_SHOW_EPILOG,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    show.add_argument(
-        "--sort",
-        metavar="KEY",
-        default="COUNT",
-        help="sort by the column with this header, in any case (default: COUNT)",
-    )
-    show.add_argument("sketch_path", metavar="SKETCH", help="sketch file to show")
-    show.set_defaults(func=_cmd_show)
     add_commands(commands)
     add_derive_command(commands)
     return parser
@@ -283,155 +242,6 @@ def _cmd_check(args: argparse.Namespace) -> int:
         else:
             print(f"{path}: OK")
     return status
-
-
-def _table(rows: list[list[str]]) -> str:
-    """Rows of cells as text, each column padded to its widest cell."""
-    widths = [max(len(cell) for cell in column) for column in zip(*rows)]
-    return "\n".join(
-        "  ".join(cell.ljust(width) for cell, width in zip(row, widths)).rstrip() for row in rows
-    )
-
-
-def _lookup(values: dict, key: str, function: str | None) -> Any:
-    """`values[key]`, or `values[key][function]` for a multi-function aggregate; None if absent."""
-    value = values.get(key)
-    if function is not None:
-        value = value.get(function) if isinstance(value, dict) else None
-    return value
-
-
-def _cell(value: Any) -> str:
-    return "-" if value is None else str(value)
-
-
-def _token_cell(value: Any) -> str:
-    if value is MISSING:
-        return "<missing>"
-    if value is None or isinstance(value, list):
-        return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
-    if value in ("null", "<missing>") or value.startswith(("[", '"')):
-        return json.dumps(value, ensure_ascii=True)
-    return safe_text(value)
-
-
-def _percent(value: Any) -> str:
-    return "-" if value is None else f"{value:.1f}"
-
-
-def _shared_columns(records: Iterable[Skit]) -> list[tuple[str, str | None]]:
-    """(aggregate key, function or None) of every shared aggregate value, in first-seen order."""
-    columns: dict[tuple[str, str | None], None] = {}
-    for record in records:
-        for key, share in record.share.get("aggregates", {}).items():
-            for function in share if isinstance(share, dict) else [None]:
-                columns[key, function] = None
-    return list(columns)
-
-
-class _Column(NamedTuple):
-    """One `show` column: its header, its raw value for a skit, and how that value prints."""
-
-    header: str
-    value: Callable[[str, Skit], Any]
-    cell: Callable[[Any], str]
-
-
-def _show_columns(records: list[tuple[str, Skit]]) -> list[_Column]:
-    """ID, count and share, first/last run, each shared value and share, then each token key."""
-    columns = [
-        _Column("ID", lambda sid, _record: sid, lambda sid: sid[:8]),
-        _Column("COUNT", lambda _sid, record: record.meta.get("count"), _cell),
-        _Column(
-            "COUNT %",
-            lambda _sid, record: record.share.get("meta", {}).get("count"),
-            _percent,
-        ),
-        _Column("FIRST RUN", lambda _sid, record: record.meta.get("first_seen"), _cell),
-        _Column("LAST RUN", lambda _sid, record: record.meta.get("last_seen"), _cell),
-    ]
-    for key, function in _shared_columns(record for _, record in records):
-        name = key if function is None else f"{key}.{function}"
-        columns.append(
-            _Column(
-                name,
-                lambda _sid, record, k=key, f=function: _lookup(record.aggregates, k, f),
-                _cell,
-            )
-        )
-        columns.append(
-            _Column(
-                f"{name} %",
-                lambda _sid, record, k=key, f=function: _lookup(
-                    record.share.get("aggregates", {}), k, f
-                ),
-                _percent,
-            )
-        )
-    for key in sorted({key for _, record in records for key in record.tokens}):
-        columns.append(
-            _Column(key, lambda _sid, record, k=key: record.tokens.get(k, MISSING), _token_cell)
-        )
-    return columns
-
-
-class _NoColumn(Exception):
-    """`--sort` KEY names no column, or more than one; the message says which."""
-
-
-def _find_column(columns: list[_Column], key: str, sketch_path: str) -> _Column:
-    """The column headed KEY exactly, else the only one headed KEY in another case."""
-    for column in columns:
-        if column.header == key:
-            return column
-    matches = [column for column in columns if column.header.casefold() == key.casefold()]
-    if len(matches) == 1:
-        return matches[0]
-    if matches:
-        headers = ", ".join(column.header for column in matches)
-        raise _NoColumn(f"column {key!r} is ambiguous in {sketch_path}: {headers}")
-    headers = ", ".join(column.header for column in columns)
-    raise _NoColumn(f"no column {key!r} in {sketch_path}; columns: {headers}")
-
-
-def _sort_key(value: Any) -> tuple:
-    """Missing values first, then numbers by value, then everything else as text."""
-    if value is None or value is MISSING:
-        return (0, 0)
-    if is_number(value):
-        return (1, value)
-    return (2, str(value))
-
-
-def _show_table(records: list[tuple[str, Skit]], key: str, sketch_path: str) -> str:
-    """The `show` table: a header, then one row per skit, sorted by column KEY, lowest first."""
-    columns = _show_columns(records)
-    column = _find_column(columns, key, sketch_path)
-    records = sorted(records, key=lambda item: _sort_key(column.value(*item)))  # ties: file order
-    rows = [
-        [column.cell(column.value(sid, record)) for column in columns] for sid, record in records
-    ]
-    return _table([[column.header for column in columns]] + rows)
-
-
-def _cmd_show(args: argparse.Namespace) -> int:
-    sketch = Sketch()
-    try:
-        sketch.load(args.sketch_path)
-    except (SketchError, OSError) as exc:
-        _say(f"sketch: cannot use sketch file: {exc}")
-        return EXIT_NOT_WRITTEN
-    records = [(sid, sketch.get(sid)) for sid in sketch]
-    if not records:
-        print(f"{args.sketch_path}: no skits")
-        return EXIT_OK
-    try:
-        table = _show_table(records, args.sort, args.sketch_path)
-    except _NoColumn as exc:
-        _say(f"sketch: {exc}")
-        return EXIT_NOT_WRITTEN
-    print(table)
-    return EXIT_OK
 
 
 DROP = object()

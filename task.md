@@ -323,8 +323,6 @@ Between Sprints 3 and 4 (owner review of Sprint 3): JSONPath via `jsonpath-rfc95
   persist producer provenance in the sketch or run header.
 - Coverage CI gate (Sprint 9 retro): `analyze --regression` has no pass/fail threshold or exit
   code; add one only if a CI consumer needs it.
-- `sketch show` (Sprint 9 retro, owner to decide): second terminal kind table beside the
-  dashboard; keep as a quick terminal view or retire under the one-report decision.
 - Event-time skew (Sprint 9 UAT): Bluesky `createdAt` values range years back and hours ahead;
   consider documenting or clamping for the event-time axis.
 Carried over from fingerling's `task.md`:

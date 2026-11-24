@@ -14,7 +14,7 @@
 * **In-Scope Capabilities:** Profile validation and structured tokenization (`fields`), associative per-skit aggregation (`aggregates` + built-in `meta`), monotonic sequence deduplication, streaming and parallel folding, run history snapshots and drift comparison, validated sketch derivation with transformed history, representative sample export, baseline-weighted regression coverage, and offline interactive HTML dashboard generation.
 * **Out-of-Scope:** Application-specific event normalization (examples live outside the core package under `examples/` and may only be **stream filters** in front of `sketch merge`), external telemetry collectors or servers, browser build toolchains, and backwards-compatible schema migrations before v1.0.
 * **Upstream Contexts:** External JSONL event producers (log streams, trace pipelines, public firehose captures) and user-authored YAML profiles.
-* **Downstream Consumers:** Regression test suites consuming exported JSONL samples and coverage reports, engineers inspecting the offline HTML dashboard (`sketch analyze`, the one kind report) or a quick terminal table (`sketch show`), and Python callers importing the `sketchtastic` library.
+* **Downstream Consumers:** Regression test suites consuming exported JSONL samples and coverage reports, engineers inspecting the offline HTML dashboard (`sketch analyze`, the one kind report), and Python callers importing the `sketchtastic` library.
 
 ---
 

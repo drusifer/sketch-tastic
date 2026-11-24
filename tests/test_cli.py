@@ -1,4 +1,4 @@
-"""Tests for the `sketch merge`, `check` and `show` CLI."""
+"""Tests for the `sketch merge` and `check` CLI."""
 
 import contextlib
 import io
@@ -17,10 +17,8 @@ import yaml
 
 from sketchtastic import cli
 from sketchtastic._io import history_dir_for
-from sketchtastic.aggregators import Aggregate
 from sketchtastic.cli import _next_run_id, main
 from sketchtastic.profile import load_profile
-from sketchtastic.sketch import Sketch, skit_id
 
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ACCESS_PROFILE = os.path.join(PACKAGE_ROOT, "examples", "access_log.yaml")
@@ -567,219 +565,6 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class ShowTests(CliTestCase):
-    """`sketch show SET` (STORY-FING-42)."""
-
-    def save_set(self, observations):
-        """Build a set from (tokens, run id) pairs, in order, and save it."""
-        skits = Sketch()
-        for tokens, run in observations:
-            skits.upsert(tokens, {}, run=run)
-        skits.save(self.sketch_path)
-
-    def test_prints_one_row_per_skit_least_frequent_first(self):
-        a, b, c = {"kind": "a"}, {"kind": "b", "route": "/x"}, {"kind": "c"}
-        self.save_set(
-            [
-                (a, "261014-0001"),
-                (b, "261014-0001"),
-                (b, "261014-0002"),
-                (c, "261015-0003"),
-            ]
-        )
-        code, out, err = self.run_cli("show", self.sketch_path)
-        self.assertEqual((code, err), (0, ""))
-        ida, idb, idc = (skit_id(t)[:8] for t in (a, b, c))
-        self.assertEqual(
-            out.splitlines(),
-            [
-                "ID        COUNT  COUNT %  FIRST RUN    LAST RUN     kind  route",
-                f"{ida}  1      25.0     261014-0001  261014-0001  a     <missing>",
-                f"{idc}  1      25.0     261015-0003  261015-0003  c     <missing>",
-                f"{idb}  2      50.0     261014-0001  261014-0002  b     /x",
-            ],
-        )
-
-    def test_shared_aggregates_get_a_value_and_a_percent_column(self):
-        skits = Sketch(
-            [Aggregate("size", "$.size", ["SUM", "MAX"]), Aggregate("n", "$.size", "COUNT")]
-        )
-        for kind, size in (("a", 10), ("a", 30), ("b", 60)):
-            skits.upsert({"k": kind}, {"size": size}, run="261014-0001")
-        skits.save(self.sketch_path)
-        code, out, _ = self.run_cli("show", self.sketch_path)
-        self.assertEqual(code, 0)
-        rows = [re.split(r"\s{2,}", line) for line in out.splitlines()]
-        run = "261014-0001"
-        self.assertEqual(
-            [row[1:] for row in rows],
-            [
-                [
-                    "COUNT",
-                    "COUNT %",
-                    "FIRST RUN",
-                    "LAST RUN",
-                    "size.SUM",
-                    "size.SUM %",
-                    "n",
-                    "n %",
-                    "k",
-                ],
-                ["1", "33.3", run, run, "60", "60.0", "1", "33.3", "b"],
-                ["2", "66.7", run, run, "40", "40.0", "2", "66.7", "a"],
-            ],
-        )
-
-    def test_columns_follow_the_profile_whichever_skit_comes_first(self):
-        sketch = Sketch([Aggregate("commits", "$.size", "SUM"), Aggregate("bytes", "$.b", "SUM")])
-        sketch.upsert({"k": "issue"}, {"b": 7}, run="261014-0001")  # first skit: no commits
-        sketch.upsert({"k": "push"}, {"size": 3, "b": 9}, run="261014-0001")
-        sketch.save(self.sketch_path)
-        code, out, _ = self.run_cli("show", self.sketch_path)
-        self.assertEqual(code, 0)
-        header = re.split(r"\s{2,}", out.splitlines()[0])
-        self.assertEqual(header[5:9], ["commits", "commits %", "bytes", "bytes %"])
-
-    def test_set_without_shares_shows_dashes(self):
-        sid = skit_id({"k": "a"})
-        self.write(
-            "set.yaml",
-            f"""
-            version: 1
-            profile_id: null
-            skits:
-              {sid}:
-                tokens: {{k: a}}
-                aggregates: {{size: 5}}
-                meta: {{count: 1}}
-            """,
-        )
-        code, out, _ = self.run_cli("show", self.sketch_path)
-        self.assertEqual(code, 0)
-        header, row = (re.split(r"\s{2,}", line) for line in out.splitlines())
-        self.assertEqual(header, ["ID", "COUNT", "COUNT %", "FIRST RUN", "LAST RUN", "k"])
-        self.assertEqual(row[1:3], ["1", "-"])
-
-    def test_empty_set_says_so(self):
-        Sketch().save(self.sketch_path)
-        code, out, err = self.run_cli("show", self.sketch_path)
-        self.assertEqual((code, out, err), (0, f"{self.sketch_path}: no skits\n", ""))
-
-    def test_unusable_file_is_an_error_and_left_alone(self):
-        not_a_set = self.write("not_a_set.yaml", "just: text\n")
-        for path in (os.path.join(self.dir, "missing.yaml"), not_a_set):
-            with self.subTest(path=path):
-                code, out, err = self.run_cli("show", path)
-                self.assertEqual((code, out), (2, ""))
-                self.assertTrue(err.startswith("sketch: cannot use sketch file: "), err)
-                self.assertIn(os.path.basename(path), err)
-        with open(not_a_set) as f:
-            self.assertEqual(f.read(), "just: text\n")
-
-    def test_help_describes_show_with_an_example(self):
-        code, out, _ = self.run_cli("show", "--help")
-        self.assertEqual(code, 0)
-        self.assertIn("sketch show web.sketch.yaml", out)
-        self.assertIn("--sort KEY", out)
-        self.assertIn("sketch show --sort 'payload_bytes.SUM %' gh.sketch.yaml | tail", out)
-        self.assertIn("KEY is not one of its columns", out)
-        _, out, _ = self.run_cli("--help")
-        self.assertIn("show", out)
-
-
-class ShowSortTests(CliTestCase):
-    """`show --sort KEY`: lowest first, default COUNT (STORY-SKT-03)."""
-
-    def test_structured_cells_distinguish_missing_null_literal_and_empty_set(self):
-        sketch = Sketch()
-        for tokens in ({}, {"value": None}, {"value": "null"}, {"value": []}, {"value": "[]"}):
-            sketch.upsert(tokens, {}, run="261124-0001")
-        sketch.save(self.sketch_path)
-        code, out, err = self.run_cli("show", "--sort", "value", self.sketch_path)
-        self.assertEqual((code, err), (0, ""))
-        cells = [re.split(r"\s{2,}", row)[-1] for row in out.splitlines()[1:]]
-        self.assertEqual(set(cells), {"<missing>", "null", '"null"', "[]", '"[]"'})
-
-    def save_sizes(self, sizes):
-        """One skit per (kind, size) with a SUM aggregate on size, saved in that order."""
-        sketch = Sketch([Aggregate("size", "$.size", "SUM")])
-        for kind, size in sizes:
-            sketch.upsert({"kind": kind}, {"size": size}, run="261014-0001")
-        sketch.save(self.sketch_path)
-
-    def kinds(self, *args):
-        """The `kind` column of `show` with ARGS, top to bottom; asserts success."""
-        code, out, err = self.run_cli("show", *args, self.sketch_path)
-        self.assertEqual((code, err), (0, ""))
-        header, *rows = (re.split(r"\s{2,}", line) for line in out.splitlines())
-        return [row[header.index("kind")] for row in rows]
-
-    def test_sorts_by_an_aggregate_and_its_share_lowest_first(self):
-        self.save_sizes([("a", 40), ("b", 60), ("c", 5)])
-        for key in ("size", "size %", "SIZE %"):
-            with self.subTest(key=key):
-                self.assertEqual(self.kinds("--sort", key), ["c", "a", "b"])
-
-    def test_sorts_by_every_fixed_column(self):
-        a, b, c = {"kind": "a"}, {"kind": "b"}, {"kind": "c"}
-        sketch = Sketch()
-        for tokens, run in ((b, "261014-0002"), (c, "261014-0001"), (c, "261014-0003")):
-            sketch.upsert(tokens, {}, run=run)
-        sketch.upsert(a, {}, run="261014-0004")
-        sketch.save(self.sketch_path)
-        by_id = [t["kind"] for t in sorted((a, b, c), key=skit_id)]
-        self.assertEqual(self.kinds("--sort", "id"), by_id)
-        self.assertEqual(self.kinds("--sort", "count"), ["b", "a", "c"])
-        self.assertEqual(self.kinds("--sort", "Count %"), ["b", "a", "c"])
-        self.assertEqual(self.kinds("--sort", "first run"), ["c", "b", "a"])
-        self.assertEqual(self.kinds("--sort", "LAST RUN"), ["b", "c", "a"])
-        self.assertEqual(self.kinds("--sort", "kind"), ["a", "b", "c"])
-
-    def test_default_is_count_with_ties_in_file_order(self):
-        sketch = Sketch()
-        for kind in ("x", "y", "y", "z"):
-            sketch.upsert({"kind": kind}, {}, run="261014-0001")
-        sketch.save(self.sketch_path)
-        self.assertEqual(self.kinds(), ["x", "z", "y"])
-        self.assertEqual(self.kinds(), self.kinds("--sort", "COUNT"))
-
-    def test_missing_values_sort_first_and_numbers_before_text(self):
-        from sketchtastic.cli import _sort_key
-
-        # Numeric values belong to aggregate columns; format-1 scalar tokens are strings.
-        self.assertEqual(sorted(["a", 10, None, 9], key=_sort_key), [None, 9, 10, "a"])
-
-    def test_exact_header_wins_and_a_caseless_tie_is_ambiguous(self):
-        sketch = Sketch()
-        sketch.upsert({"kind": "a", "count": "2"}, {}, run="261014-0001")
-        sketch.upsert({"kind": "b", "count": "1"}, {}, run="261014-0001")
-        sketch.upsert({"kind": "b", "count": "1"}, {}, run="261014-0001")
-        sketch.save(self.sketch_path)
-        self.assertEqual(self.kinds("--sort", "count"), ["b", "a"])
-        self.assertEqual(self.kinds("--sort", "COUNT"), ["a", "b"])
-        code, out, err = self.run_cli("show", "--sort", "Count", self.sketch_path)
-        self.assertEqual((code, out), (2, ""))
-        self.assertEqual(
-            err,
-            f"sketch: column 'Count' is ambiguous in {self.sketch_path}: COUNT, count\n",
-        )
-
-    def test_unknown_key_lists_the_columns(self):
-        self.save_sizes([("a", 1)])
-        code, out, err = self.run_cli("show", "--sort", "bytes", self.sketch_path)
-        self.assertEqual((code, out), (2, ""))
-        self.assertEqual(
-            err,
-            f"sketch: no column 'bytes' in {self.sketch_path}; columns: "
-            "ID, COUNT, COUNT %, FIRST RUN, LAST RUN, size, size %, kind\n",
-        )
-
-    def test_empty_sketch_says_so_with_any_key(self):
-        Sketch().save(self.sketch_path)
-        code, out, err = self.run_cli("show", "--sort", "nothing", self.sketch_path)
-        self.assertEqual((code, out, err), (0, f"{self.sketch_path}: no skits\n", ""))
-
-
 class HistoryTests(CliTestCase):
     """Each merge also writes the run's own skits to <set>.history/ (FING-48)."""
 
@@ -826,12 +611,6 @@ class HistoryTests(CliTestCase):
         self.assertEqual(code, 0)
         run = self.load_set(os.path.join(self.history_dir(), self.run_files()[0]))
         self.assertEqual((run["run"]["source"], run["skits"]), ("stdin", {}))
-
-    def test_run_file_is_readable_by_show(self):
-        self.run_merge(self.write_events("one.jsonl", EVENTS[:2]))
-        code, out, _ = self.run_cli("show", os.path.join(self.history_dir(), self.run_files()[0]))
-        self.assertEqual(code, 0)
-        self.assertEqual(len(out.splitlines()), 3)  # header + 2 skits
 
     def test_trial_run_and_failed_run_write_no_history(self):
         events = self.write_events("one.jsonl", EVENTS)
