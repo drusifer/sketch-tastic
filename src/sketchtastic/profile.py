@@ -1,6 +1,6 @@
 """Skit profiles (STORY-FING-24, -37).
 
-A profile is a YAML file saying how to fingerprint an event stream:
+A profile is a YAML file saying how to sketch an event stream:
 `fields` define a skit's identity, `aggregates` are the statistics
 and samples tracked per skit.
 

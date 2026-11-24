@@ -1,4 +1,4 @@
-"""Tests for the fingerprint set (stateful upsert warehouse)."""
+"""Tests for the skit set (stateful upsert warehouse)."""
 
 import os
 import tempfile
@@ -21,7 +21,7 @@ SAMPLE_AGGREGATES = (
 )
 
 
-class FingerprintIdTests(unittest.TestCase):
+class SkitIdTests(unittest.TestCase):
     def test_hashes_the_values_in_profile_order_not_the_keys(self):
         self.assertEqual(skit_id({"a": "1", "b": "2"}), skit_id({"x": "1", "y": "2"}))
         self.assertNotEqual(skit_id({"a": "1", "b": "2"}), skit_id({"b": "2", "a": "1"}))
@@ -31,9 +31,9 @@ class FingerprintIdTests(unittest.TestCase):
         self.assertNotEqual(skit_id({"a": 'x","y'}), skit_id({"a": "x", "b": "y"}))
 
     def test_returns_32_char_hex_md5(self):
-        fid = skit_id({"a": "1"})
-        self.assertEqual(len(fid), 32)
-        int(fid, 16)  # raises ValueError if not valid hex
+        sid = skit_id({"a": "1"})
+        self.assertEqual(len(sid), 32)
+        int(sid, 16)  # raises ValueError if not valid hex
 
     def test_different_tokens_yield_different_ids(self):
         self.assertNotEqual(skit_id({"a": "1"}), skit_id({"a": "2"}))
@@ -41,24 +41,24 @@ class FingerprintIdTests(unittest.TestCase):
 
 class UpsertReconciliationTests(unittest.TestCase):
     def test_match_state_increments_occurrences_without_new_record(self):
-        wh = Sketch()
+        sketch = Sketch()
         tokens = {"hook_syscall": "sys_connect"}
 
         for run in ("261014-0001", "261014-0002", "261015-0003"):
-            wh.upsert(tokens, {"n": 1}, run=run)
+            sketch.upsert(tokens, {"n": 1}, run=run)
 
-        self.assertEqual(len(wh), 1)  # entry list count stays flat
-        record = wh.get(skit_id(tokens))
+        self.assertEqual(len(sketch), 1)  # entry list count stays flat
+        record = sketch.get(skit_id(tokens))
         self.assertEqual(record.meta["count"], 3)
         self.assertEqual(record.meta["first_seen"], "261014-0001")  # runs, not times
         self.assertEqual(record.meta["last_seen"], "261015-0003")
         self.assertEqual(record.tokens, tokens)  # the set explains what the ID means
 
     def test_first_and_last_records_are_kept_in_their_envelopes(self):
-        fingerprints = Sketch()
+        sketch = Sketch()
         for i in range(5):
-            fingerprints.upsert({"k": "v"}, {"n": i}, run=f"t{i}")
-        meta = fingerprints.get(skit_id({"k": "v"})).meta
+            sketch.upsert({"k": "v"}, {"n": i}, run=f"t{i}")
+        meta = sketch.get(skit_id({"k": "v"})).meta
 
         def envelopes(*ns):
             return [{"meta": {"run": f"t{i}"}, "record": {"n": i}} for i in ns]
@@ -67,93 +67,93 @@ class UpsertReconciliationTests(unittest.TestCase):
         self.assertEqual(meta["last"], envelopes(4))
 
     def test_record_fields_named_like_built_ins_do_not_clash(self):
-        fingerprints = Sketch(aggregates=[Aggregate("count", "$.count", "SUM")])
-        fingerprints.upsert({"k": "v"}, {"count": 10, "meta": "x"}, run="t")
-        record = fingerprints.get(skit_id({"k": "v"}))
+        sketch = Sketch(aggregates=[Aggregate("count", "$.count", "SUM")])
+        sketch.upsert({"k": "v"}, {"count": 10, "meta": "x"}, run="t")
+        record = sketch.get(skit_id({"k": "v"}))
         self.assertEqual(record.aggregates["count"], 10)
         self.assertEqual(record.meta["count"], 1)
         self.assertEqual(record.meta["first"][0]["record"], {"count": 10, "meta": "x"})
 
     def test_built_in_profile_does_not_count_toward_skipped_values(self):
-        fingerprints = Sketch()
-        fingerprints.upsert({"k": "v"}, {})
-        self.assertEqual(fingerprints.skipped_values, 0)
+        sketch = Sketch()
+        sketch.upsert({"k": "v"}, {})
+        self.assertEqual(sketch.skipped_values, 0)
 
     def test_drift_state_creates_new_record_block(self):
-        wh = Sketch()
-        wh.upsert({"a": "1"}, {}, run="t1")
-        wh.upsert({"a": "2"}, {}, run="t1")
+        sketch = Sketch()
+        sketch.upsert({"a": "1"}, {}, run="t1")
+        sketch.upsert({"a": "2"}, {}, run="t1")
 
-        self.assertEqual(len(wh), 2)
+        self.assertEqual(len(sketch), 2)
 
     def test_no_aggregators_keeps_only_built_in_counters(self):
-        wh = Sketch()
-        wh.upsert({"a": "1"}, {"duration_ms": 5.0}, run="t1")
-        self.assertEqual(wh.get(skit_id({"a": "1"})).aggregates, {})
-        self.assertEqual(wh.skipped_values, 0)
+        sketch = Sketch()
+        sketch.upsert({"a": "1"}, {"duration_ms": 5.0}, run="t1")
+        self.assertEqual(sketch.get(skit_id({"a": "1"})).aggregates, {})
+        self.assertEqual(sketch.skipped_values, 0)
 
 
 class AggregatedUpsertTests(unittest.TestCase):
     def test_min_max_aggregates_track_duration_bounds(self):
         # What the warehouse used to hardcode, now declared as MIN/MAX on $.duration_ms.
-        wh = Sketch(aggregates=SAMPLE_AGGREGATES)
+        sketch = Sketch(aggregates=SAMPLE_AGGREGATES)
         tokens = {"a": "1"}
         for i, duration in enumerate((5.0, 1.0, 9.0)):
-            wh.upsert(tokens, {"duration_ms": duration}, run=f"t{i}")
+            sketch.upsert(tokens, {"duration_ms": duration}, run=f"t{i}")
 
-        duration = wh.get(skit_id(tokens)).aggregates["duration_ms"]
+        duration = sketch.get(skit_id(tokens)).aggregates["duration_ms"]
         self.assertEqual(duration, {"MIN": 1.0, "MAX": 9.0})
 
     def test_last_aggregate_keeps_last_three_raw_events(self):
-        wh = Sketch(aggregates=SAMPLE_AGGREGATES)
+        sketch = Sketch(aggregates=SAMPLE_AGGREGATES)
         tokens = {"a": "1"}
         for i in range(5):
-            wh.upsert(tokens, {"seq": i, "duration_ms": 1.0}, run=f"t{i}")
+            sketch.upsert(tokens, {"seq": i, "duration_ms": 1.0}, run=f"t{i}")
 
-        samples = wh.get(skit_id(tokens)).aggregates["samples"]
+        samples = sketch.get(skit_id(tokens)).aggregates["samples"]
         # oldest (seq 0, 1) rotated out; newest 3 retained in order
         self.assertEqual([s["seq"] for s in samples], [2, 3, 4])
 
-    def test_aggregates_are_kept_per_fingerprint(self):
-        wh = Sketch(aggregates=[Aggregate("size", "$.size", ["SUM", "AVG"])])
-        wh.upsert({"kind": "a"}, {"size": 10}, run="t")
-        wh.upsert({"kind": "a"}, {"size": 30}, run="t")
-        wh.upsert({"kind": "b"}, {"size": 7}, run="t")
+    def test_aggregates_are_kept_per_skit(self):
+        sketch = Sketch(aggregates=[Aggregate("size", "$.size", ["SUM", "AVG"])])
+        sketch.upsert({"kind": "a"}, {"size": 10}, run="t")
+        sketch.upsert({"kind": "a"}, {"size": 30}, run="t")
+        sketch.upsert({"kind": "b"}, {"size": 7}, run="t")
 
-        a = wh.get(skit_id({"kind": "a"})).aggregates["size"]
-        b = wh.get(skit_id({"kind": "b"})).aggregates["size"]
+        a = sketch.get(skit_id({"kind": "a"})).aggregates["size"]
+        b = sketch.get(skit_id({"kind": "b"})).aggregates["size"]
         self.assertEqual(a, {"SUM": 40, "AVG": {"avg": 20.0, "sum": 40, "count": 2}})
         self.assertEqual(b["SUM"], 7)
 
     def test_unusable_values_are_counted_not_fatal(self):
-        wh = Sketch(aggregates=[Aggregate("size", "$.size", "SUM")])
-        wh.upsert({"k": "1"}, {"size": "big"}, run="t")
-        wh.upsert({"k": "1"}, {}, run="t")
-        wh.upsert({"k": "1"}, {"size": 2}, run="t")
+        sketch = Sketch(aggregates=[Aggregate("size", "$.size", "SUM")])
+        sketch.upsert({"k": "1"}, {"size": "big"}, run="t")
+        sketch.upsert({"k": "1"}, {}, run="t")
+        sketch.upsert({"k": "1"}, {"size": 2}, run="t")
 
-        record = wh.get(skit_id({"k": "1"}))
+        record = sketch.get(skit_id({"k": "1"}))
         self.assertEqual(record.meta["count"], 3)
         self.assertEqual(record.aggregates["size"], 2)
-        self.assertEqual(wh.skipped_values, 1)  # "big"; the event without size is not a skip
+        self.assertEqual(sketch.skipped_values, 1)  # "big"; the event without size is not a skip
 
 
 class PersistenceTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        self.path = os.path.join(self._tmp.name, "fingerprints.yaml")
+        self.path = os.path.join(self._tmp.name, "sketch.yaml")
 
     def test_save_and_load_round_trip(self):
-        wh = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
+        sketch = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
         tokens = {"a": "1"}
-        wh.upsert(tokens, {"x": 1, "duration_ms": 1.0}, run="t1")
-        wh.upsert(tokens, {"x": 2, "duration_ms": 2.0}, run="t2")
-        wh.save(self.path)
+        sketch.upsert(tokens, {"x": 1, "duration_ms": 1.0}, run="t1")
+        sketch.upsert(tokens, {"x": 2, "duration_ms": 2.0}, run="t2")
+        sketch.save(self.path)
 
         reloaded = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
         reloaded.load(self.path)
 
-        self.assertEqual(reloaded.get(skit_id(tokens)), wh.get(skit_id(tokens)))
+        self.assertEqual(reloaded.get(skit_id(tokens)), sketch.get(skit_id(tokens)))
 
     def test_tricky_values_round_trip_exactly(self):
         record = {
@@ -163,17 +163,17 @@ class PersistenceTests(unittest.TestCase):
             "numbers": [0, -1, 2**70, 0.1, 1e300, -2.5e-8],
             "other": [True, False, None, {}, [], {"nested": [{"deep": "v"}]}],
         }
-        wh = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
-        wh.upsert({"a": "1"}, record, run="t1")
-        wh.save(self.path)
+        sketch = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
+        sketch.upsert({"a": "1"}, record, run="t1")
+        sketch.save(self.path)
         reloaded = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
         reloaded.load(self.path)
-        self.assertEqual(reloaded.get(skit_id({"a": "1"})), wh.get(skit_id({"a": "1"})))
+        self.assertEqual(reloaded.get(skit_id({"a": "1"})), sketch.get(skit_id({"a": "1"})))
 
     def test_file_is_versioned_and_records_profile_id(self):
-        wh = Sketch(profile_id="p1")
-        wh.upsert({"a": "1"}, {}, run="t1")
-        wh.save(self.path)
+        sketch = Sketch(profile_id="p1")
+        sketch.upsert({"a": "1"}, {}, run="t1")
+        sketch.save(self.path)
 
         with open(self.path) as f:
             data = yaml.safe_load(f)
@@ -182,9 +182,9 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(list(data["skits"]), [skit_id({"a": "1"})])
 
     def test_file_reads_top_down_header_then_tokens_before_statistics(self):
-        wh = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
-        wh.upsert({"syscall": "sys_connect"}, {"duration_ms": 1.0}, run="t1")
-        wh.save(self.path)
+        sketch = Sketch(aggregates=SAMPLE_AGGREGATES, profile_id="p1")
+        sketch.upsert({"syscall": "sys_connect"}, {"duration_ms": 1.0}, run="t1")
+        sketch.save(self.path)
 
         with open(self.path) as f:
             text = f.read()
@@ -223,14 +223,14 @@ class PersistenceTests(unittest.TestCase):
         second.save(self.path)
         one_pass.save(self.path + ".one")
         self.assertEqual(len(second), len(one_pass))
-        for fid in one_pass:
-            self.assertEqual(second.get(fid), one_pass.get(fid))
+        for sid in one_pass:
+            self.assertEqual(second.get(sid), one_pass.get(sid))
 
     def test_load_refuses_a_set_built_with_another_profile(self):
         Sketch(profile_id="old").save(self.path)
-        wh = Sketch(profile_id="new")
+        sketch = Sketch(profile_id="new")
         with self.assertRaises(ProfileMismatchError) as ctx:
-            wh.load(self.path)
+            sketch.load(self.path)
         self.assertEqual(
             (ctx.exception.set_profile_id, ctx.exception.current_profile_id), ("old", "new")
         )
@@ -240,10 +240,10 @@ class PersistenceTests(unittest.TestCase):
         old.upsert({"a": "1"}, {}, run="t1")
         old.save(self.path)
 
-        wh = Sketch(profile_id="new")
-        wh.load(self.path, force=True)
-        self.assertEqual(len(wh), 1)
-        self.assertEqual(wh.profile_id, "new")
+        sketch = Sketch(profile_id="new")
+        sketch.load(self.path, force=True)
+        self.assertEqual(len(sketch), 1)
+        self.assertEqual(sketch.profile_id, "new")
 
     def test_load_rejects_pre_aggregator_format_with_clear_error(self):
         with open(self.path, "w") as f:
@@ -258,25 +258,25 @@ class PersistenceTests(unittest.TestCase):
         with self.assertRaises(SketchError):
             Sketch().load(self.path)
         with open(self.path, "w") as f:
-            f.write("fingerprints: [unclosed")
+            f.write("sketch: [unclosed")
         with self.assertRaises(SketchError):
             Sketch().load(self.path)
 
     def test_failed_save_leaves_previous_file_intact_and_no_temp_files(self):
-        wh = Sketch(profile_id="p1")
-        wh.upsert({"a": "1"}, {}, run="t1")
-        wh.save(self.path)
+        sketch = Sketch(profile_id="p1")
+        sketch.upsert({"a": "1"}, {}, run="t1")
+        sketch.save(self.path)
         with open(self.path) as f:
             before = f.read()
 
-        wh.upsert({"a": "2"}, {"bad": object()}, run="t2")
-        wh._records[skit_id({"a": "2"})].aggregates["x"] = {"LAST": [object()]}
+        sketch.upsert({"a": "2"}, {"bad": object()}, run="t2")
+        sketch._records[skit_id({"a": "2"})].aggregates["x"] = {"LAST": [object()]}
         with self.assertRaises(yaml.YAMLError):
-            wh.save(self.path)
+            sketch.save(self.path)
 
         with open(self.path) as f:
             self.assertEqual(f.read(), before)
-        self.assertEqual(os.listdir(self._tmp.name), ["fingerprints.yaml"])
+        self.assertEqual(os.listdir(self._tmp.name), ["sketch.yaml"])
 
 
 if __name__ == "__main__":
@@ -284,31 +284,31 @@ if __name__ == "__main__":
 
 
 class ShareTests(unittest.TestCase):
-    """Each fingerprint's share of every SUM and COUNT total, written on save (FING-46)."""
+    """Each skit's share of every SUM and COUNT total, written on save (FING-46)."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        self.path = os.path.join(self._tmp.name, "fingerprints.yaml")
+        self.path = os.path.join(self._tmp.name, "sketch.yaml")
 
-    def saved_shares(self, fingerprints):
-        fingerprints.save(self.path)
+    def saved_shares(self, sketch):
+        sketch.save(self.path)
         with open(self.path) as f:
             data = yaml.safe_load(f)
         return {rec["tokens"]["k"]: rec["share"] for rec in data["skits"].values()}
 
     def build(self, aggregates, events):
-        fingerprints = Sketch(aggregates=aggregates)
+        sketch = Sketch(aggregates=aggregates)
         for kind, record in events:
-            fingerprints.upsert({"k": kind}, record, run="2024-01-01T00:00:00Z")
-        return fingerprints
+            sketch.upsert({"k": kind}, record, run="2024-01-01T00:00:00Z")
+        return sketch
 
     def test_shares_of_counts_and_sums_mirror_the_value_layout(self):
-        fingerprints = self.build(
+        sketch = self.build(
             [Aggregate("size", "$.size", ["SUM", "MAX"]), Aggregate("n", "$.size", "COUNT")],
             [("a", {"size": 10}), ("a", {"size": 30}), ("b", {"size": 60})],
         )
-        shares = self.saved_shares(fingerprints)
+        shares = self.saved_shares(sketch)
         self.assertEqual(
             shares["a"],
             {"meta": {"count": 66.67}, "aggregates": {"size": {"SUM": 40.0}, "n": 66.67}},
@@ -319,11 +319,11 @@ class ShareTests(unittest.TestCase):
         )
 
     def test_zero_or_absent_total_has_no_share(self):
-        fingerprints = self.build(
+        sketch = self.build(
             [Aggregate("zero", "$.z", "SUM"), Aggregate("none", "$.missing", "SUM")],
             [("a", {"z": 0}), ("b", {"z": 0})],
         )
-        self.assertEqual(self.saved_shares(fingerprints)["a"], {"meta": {"count": 50.0}})
+        self.assertEqual(self.saved_shares(sketch)["a"], {"meta": {"count": 50.0}})
 
     def test_shares_are_recomputed_after_a_merge_and_never_read_back(self):
         aggregates = [Aggregate("size", "$.size", "SUM")]
@@ -338,8 +338,8 @@ class ShareTests(unittest.TestCase):
         self.assertEqual(merged.get(skit_id({"k": "a"})).aggregates, {"size": 10})
 
     def test_share_is_written_after_the_values(self):
-        fingerprints = self.build([], [("a", {})])
-        fingerprints.save(self.path)
+        sketch = self.build([], [("a", {})])
+        sketch.save(self.path)
         with open(self.path) as f:
             text = f.read()
         self.assertLess(text.index("meta:"), text.index("share:"))
@@ -353,11 +353,11 @@ class RunHeaderTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.path = os.path.join(self._tmp.name, "run.yaml")
 
-    def test_header_is_written_between_profile_id_and_fingerprints(self):
-        fingerprints = Sketch(profile_id="p1")
-        fingerprints.run = {"source": "stdin", "events": 1}
-        fingerprints.upsert({"a": "1"}, {}, run="2024-01-01T00:00:00Z")
-        fingerprints.save(self.path)
+    def test_header_is_written_between_profile_id_and_skits(self):
+        sketch = Sketch(profile_id="p1")
+        sketch.run = {"source": "stdin", "events": 1}
+        sketch.upsert({"a": "1"}, {}, run="2024-01-01T00:00:00Z")
+        sketch.save(self.path)
         with open(self.path) as f:
             text = f.read()
             data = yaml.safe_load(text)
@@ -386,9 +386,9 @@ class LastRunTests(unittest.TestCase):
     def test_last_run_is_saved_after_profile_id_and_loaded(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "set.yaml")
-            fingerprints = Sketch(profile_id="p1")
-            fingerprints.last_run = "261015-0003"
-            fingerprints.save(path)
+            sketch = Sketch(profile_id="p1")
+            sketch.last_run = "261015-0003"
+            sketch.save(path)
             with open(path) as f:
                 text = f.read()
             self.assertLess(text.index("profile_id:"), text.index("last_run: 261015-0003"))
@@ -411,10 +411,10 @@ class SequenceMarkTests(unittest.TestCase):
     def test_mark_is_saved_after_last_run_and_loaded(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "set.yaml")
-            fingerprints = Sketch()
-            fingerprints.last_run = "261015-0001"
-            fingerprints.sequence = {"path": "$.id", "max": 8}
-            fingerprints.save(path)
+            sketch = Sketch()
+            sketch.last_run = "261015-0001"
+            sketch.sequence = {"path": "$.id", "max": 8}
+            sketch.save(path)
             with open(path) as f:
                 text = f.read()
             self.assertLess(text.index("last_run:"), text.index("sequence:"))
@@ -493,8 +493,8 @@ class MergeTests(unittest.TestCase):
                 sketch = self.fold(self.EVENTS[:split], "r1")
                 sketch.merge(self.fold(self.EVENTS[split:], "r2"))
                 self.assertEqual(list(sketch), list(expected))
-                for fid in expected:
-                    self.assertEqual(sketch.get(fid), expected.get(fid))
+                for sid in expected:
+                    self.assertEqual(sketch.get(sid), expected.get(sid))
                 self.assertEqual(sketch.skipped_values, expected.skipped_values)
 
     def test_merge_into_an_empty_sketch_equals_the_run(self):
@@ -502,16 +502,16 @@ class MergeTests(unittest.TestCase):
         sketch = Sketch(self.AGGREGATES, profile_id="p")
         sketch.merge(run)
         self.assertEqual(list(sketch), list(run))
-        for fid in run:
-            self.assertEqual(sketch.get(fid), run.get(fid))
+        for sid in run:
+            self.assertEqual(sketch.get(sid), run.get(sid))
 
     def test_merged_skits_do_not_alias_the_run(self):
         run = self.fold(self.EVENTS[:1], "r1")
         sketch = Sketch(self.AGGREGATES, profile_id="p")
         sketch.merge(run)
-        fid = skit_id({"k": "a"})
-        run.get(fid).aggregates["last"].append(99)
-        self.assertEqual(sketch.get(fid).aggregates["last"], [4])
+        sid = skit_id({"k": "a"})
+        run.get(sid).aggregates["last"].append(99)
+        self.assertEqual(sketch.get(sid).aggregates["last"], [4])
 
     def test_aggregates_must_match(self):
         sketch = Sketch(self.AGGREGATES, profile_id="p")
@@ -553,14 +553,14 @@ class ProfileOrderTests(unittest.TestCase):
     def test_a_loaded_file_is_rebuilt_in_profile_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "s.yaml")
-            fid = skit_id({"k": "a"})
+            sid = skit_id({"k": "a"})
             with open(path, "w") as f:
                 yaml.safe_dump(
                     {
                         "version": 0,
                         "profile_id": None,
                         "skits": {
-                            fid: {
+                            sid: {
                                 "tokens": {"k": "a"},
                                 "aggregates": {"seen": {"LAST": ["x"], "MAX": "x"}, "commits": 2},
                                 "meta": {"count": 1},
@@ -572,7 +572,7 @@ class ProfileOrderTests(unittest.TestCase):
                 )
             sketch = Sketch(self.AGGREGATES)
             sketch.load(path)
-        skit = sketch.get(fid)
+        skit = sketch.get(sid)
         self.assertEqual(list(skit.aggregates), ["commits", "bytes", "seen"])
         self.assertEqual(skit.aggregates["seen"], {"MAX": "x", "LAST": ["x"]})
         self.assertEqual(skit.aggregates["commits"], 2)

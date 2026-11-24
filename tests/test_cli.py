@@ -1,4 +1,4 @@
-"""Tests for the `fingerprint merge`, `check` and `show` CLI."""
+"""Tests for the `sketch merge`, `check` and `show` CLI."""
 
 import contextlib
 import io
@@ -16,8 +16,9 @@ from unittest import mock
 import yaml
 
 from sketchtastic import cli
+from sketchtastic._io import history_dir_for
 from sketchtastic.aggregators import Aggregate
-from sketchtastic.cli import _history_dir, _next_run_id, main
+from sketchtastic.cli import _next_run_id, main
 from sketchtastic.profile import load_profile
 from sketchtastic.sketch import Sketch, skit_id
 
@@ -77,7 +78,7 @@ class CliTestCase(unittest.TestCase):
                     code = exc.code
         return code, out.getvalue(), err.getvalue()
 
-    def fingerprint(self, events_path, *extra, **kwargs):
+    def run_merge(self, events_path, *extra, **kwargs):
         return self.run_cli(
             "merge", "-p", self.profile, "-s", self.sketch_path, events_path, *extra, **kwargs
         )
@@ -98,7 +99,7 @@ class CliTestCase(unittest.TestCase):
                 meta[key] = [envelope["record"] for envelope in meta[key]]
             return {**rec, "meta": meta}
 
-        return {fid: strip(rec) for fid, rec in data["skits"].items()}
+        return {sid: strip(rec) for sid, rec in data["skits"].items()}
 
 
 EVENTS = [
@@ -113,7 +114,7 @@ EVENTS = [
 
 class CreateAndMergeTests(CliTestCase):
     def test_first_run_creates_the_set(self):
-        code, out, err = self.fingerprint(self.write_events("e.jsonl", EVENTS))
+        code, out, err = self.run_merge(self.write_events("e.jsonl", EVENTS))
 
         self.assertEqual(code, 0)
         self.assertEqual(out, "")  # AC7: stdout stays clean
@@ -133,15 +134,15 @@ class CreateAndMergeTests(CliTestCase):
         }
         self.assertEqual(by_kind["c"]["aggregates"]["size"], empty_size)  # every key, initial
 
-    def test_second_run_merges_into_existing_fingerprints(self):
-        self.fingerprint(self.write_events("run1.jsonl", EVENTS[:3]))
+    def test_second_run_merges_into_existing_skits(self):
+        self.run_merge(self.write_events("run1.jsonl", EVENTS[:3]))
         first = self.load_set()
-        code, _, err = self.fingerprint(self.write_events("run2.jsonl", EVENTS[3:]))
+        code, _, err = self.run_merge(self.write_events("run2.jsonl", EVENTS[3:]))
 
         self.assertEqual(code, 0)
         merged = self.load_set()
-        by_kind = {rec["tokens"]["kind"]: (fid, rec) for fid, rec in merged["skits"].items()}
-        fid_a, rec_a = by_kind["a"]
+        by_kind = {rec["tokens"]["kind"]: (sid, rec) for sid, rec in merged["skits"].items()}
+        _, rec_a = by_kind["a"]
         self.assertEqual(rec_a["meta"]["count"], 3)  # 2 + 1: counts add
         self.assertEqual(rec_a["aggregates"]["size"]["SUM"], 40.5)  # aggregates merge
         self.assertEqual(rec_a["aggregates"]["recent"], [3, 4])  # LAST continues
@@ -151,22 +152,22 @@ class CreateAndMergeTests(CliTestCase):
         self.assertEqual(rec_a["meta"]["first_seen"], f"{today}-0001")  # the run, not a time
         self.assertEqual(rec_a["meta"]["last_seen"], f"{today}-0002")
         self.assertEqual(rec_a["meta"]["last"][0]["meta"], {"run": f"{today}-0002"})
-        self.assertIn("c", by_kind)  # new fingerprint appended
+        self.assertIn("c", by_kind)  # new sketch appended
 
-    def _fingerprints_line(self, err):
+    def _skits_line(self, err):
         return next(line for line in err.splitlines() if "skits:" in line)
 
     def test_summary_reports_new_updated_total_and_skips(self):
-        _, _, err1 = self.fingerprint(self.write_events("run1.jsonl", EVENTS[:3]))
+        _, _, err1 = self.run_merge(self.write_events("run1.jsonl", EVENTS[:3]))
         self.assertIn("3 events read", err1)
-        self.assertIn("2 new, 0 updated, 2 total in sketch", self._fingerprints_line(err1))
+        self.assertIn("2 new, 0 updated, 2 total in sketch", self._skits_line(err1))
 
-        _, _, err2 = self.fingerprint(self.write_events("run2.jsonl", EVENTS[3:]))
-        self.assertIn("1 new, 2 updated, 3 total in sketch", self._fingerprints_line(err2))
+        _, _, err2 = self.run_merge(self.write_events("run2.jsonl", EVENTS[3:]))
+        self.assertIn("1 new, 2 updated, 3 total in sketch", self._skits_line(err2))
         self.assertIn("0 malformed lines, 0 unusable aggregate values", err2)  # no size: not a skip
 
     def test_present_but_unusable_value_is_counted(self):
-        _, _, err = self.fingerprint(self.write_events("bad.jsonl", [{"kind": "a", "size": "big"}]))
+        _, _, err = self.run_merge(self.write_events("bad.jsonl", [{"kind": "a", "size": "big"}]))
         self.assertIn("0 malformed lines, 1 unusable aggregate values", err)
 
     def test_batch_and_split_runs_produce_equivalent_sets(self):
@@ -209,12 +210,12 @@ class CreateAndMergeTests(CliTestCase):
                 self.assertEqual(len(self.load_set(sketch_path)["skits"]), 3)
 
     def test_output_flag_leaves_the_set_untouched(self):
-        self.fingerprint(self.write_events("run1.jsonl", EVENTS[:3]))
+        self.run_merge(self.write_events("run1.jsonl", EVENTS[:3]))
         with open(self.sketch_path) as f:
             before = f.read()
         preview = os.path.join(self.dir, "preview.yaml")
 
-        code, _, err = self.fingerprint(self.write_events("run2.jsonl", EVENTS[3:]), "-o", preview)
+        code, _, err = self.run_merge(self.write_events("run2.jsonl", EVENTS[3:]), "-o", preview)
 
         self.assertEqual(code, 0)
         with open(self.sketch_path) as f:
@@ -270,7 +271,7 @@ class BadInputTests(CliTestCase):
             "[1, 2, 3]\n"
             '{"id": 2, "kind": "a", "size": 2}\n',
         )
-        code, _, err = self.fingerprint(path)
+        code, _, err = self.run_merge(path)
 
         self.assertEqual(code, 1)
         self.assertIn("line 2: invalid JSON", err)
@@ -281,7 +282,7 @@ class BadInputTests(CliTestCase):
 
     def test_many_bad_lines_do_not_flood_stderr(self):
         path = self.write("bad.jsonl", "nope\n" * 50)
-        code, _, err = self.fingerprint(path)
+        code, _, err = self.run_merge(path)
         self.assertEqual(code, 1)
         self.assertEqual(err.count("invalid JSON"), 10)
         self.assertIn("further skipped lines are counted but not listed", err)
@@ -312,7 +313,7 @@ class BadInputTests(CliTestCase):
         self.assertEqual(code, 2)
         self.assertIn("/no/such.yaml", err)
 
-        code, _, err = self.fingerprint(os.path.join(self.dir, "missing.jsonl"))
+        code, _, err = self.run_merge(os.path.join(self.dir, "missing.jsonl"))
         self.assertEqual(code, 2)
         self.assertIn("missing.jsonl", err)
         self.assertFalse(os.path.exists(self.sketch_path))
@@ -320,7 +321,7 @@ class BadInputTests(CliTestCase):
     def test_unusable_set_file_is_refused_and_left_alone(self):
         with open(self.sketch_path, "w") as f:
             f.write("just: some other yaml\n")
-        code, _, err = self.fingerprint(self.write_events("e.jsonl", EVENTS))
+        code, _, err = self.run_merge(self.write_events("e.jsonl", EVENTS))
         self.assertEqual(code, 2)
         self.assertIn("not a sketch", err)
         with open(self.sketch_path) as f:
@@ -345,7 +346,7 @@ class BadInputTests(CliTestCase):
 
 
 class CheckTests(CliTestCase):
-    """STORY-FING-37: fingerprint check."""
+    """STORY-FING-37: sketch check."""
 
     def test_valid_profiles_print_ok_and_exit_0(self):
         good = self.write("good.yaml", PROFILE)
@@ -410,7 +411,7 @@ class CheckTests(CliTestCase):
         self.assertFalse(os.path.exists(self.sketch_path))
 
 
-class GoldenFingerprintTests(CliTestCase):
+class GoldenSketchTests(CliTestCase):
     """STORY-FING-39 AC5: the README quickstart gives the ids it has always documented."""
 
     QUICKSTART_PROFILE = """
@@ -436,7 +437,7 @@ aggregates:
         {"level": "INFO", "logger": "http", "msg": "GET /health", "took_ms": 0.4},
     ]
 
-    def test_profile_id_and_fingerprint_ids_are_stable(self):
+    def test_profile_id_and_skit_ids_are_stable(self):
         profile = self.write("profile.yaml", self.QUICKSTART_PROFILE)
         events = self.write_events("events.jsonl", self.QUICKSTART_EVENTS)
         code, _, _ = self.run_cli("merge", "-p", profile, "-s", self.sketch_path, events)
@@ -453,7 +454,7 @@ aggregates:
 class ProfileMismatchTests(CliTestCase):
     def setUp(self):
         super().setUp()
-        self.fingerprint(self.write_events("run1.jsonl", EVENTS))
+        self.run_merge(self.write_events("run1.jsonl", EVENTS))
         with open(self.sketch_path) as f:
             self.before = f.read()
         self.other = self.write("other.yaml", OTHER_PROFILE)
@@ -486,7 +487,7 @@ class ProfileMismatchTests(CliTestCase):
 
 class AtomicWriteTests(CliTestCase):
     def test_failed_write_leaves_previous_set_intact(self):
-        self.fingerprint(self.write_events("run1.jsonl", EVENTS[:3]))
+        self.run_merge(self.write_events("run1.jsonl", EVENTS[:3]))
         with open(self.sketch_path) as f:
             before = f.read()
 
@@ -494,7 +495,7 @@ class AtomicWriteTests(CliTestCase):
             "os.replace",
             side_effect=OSError(28, "No space left on device"),
         ):
-            code, _, err = self.fingerprint(self.write_events("run2.jsonl", EVENTS[3:]))
+            code, _, err = self.run_merge(self.write_events("run2.jsonl", EVENTS[3:]))
 
         self.assertEqual(code, 2)
         self.assertIn("cannot write", err)
@@ -567,14 +568,14 @@ if __name__ == "__main__":
 
 
 class ShowTests(CliTestCase):
-    """`fingerprint show SET` (STORY-FING-42)."""
+    """`sketch show SET` (STORY-FING-42)."""
 
     def save_set(self, observations):
         """Build a set from (tokens, run id) pairs, in order, and save it."""
-        fingerprints = Sketch()
+        skits = Sketch()
         for tokens, run in observations:
-            fingerprints.upsert(tokens, {}, run=run)
-        fingerprints.save(self.sketch_path)
+            skits.upsert(tokens, {}, run=run)
+        skits.save(self.sketch_path)
 
     def test_prints_one_row_per_skit_least_frequent_first(self):
         a, b, c = {"kind": "a"}, {"kind": "b", "route": "/x"}, {"kind": "c"}
@@ -600,12 +601,12 @@ class ShowTests(CliTestCase):
         )
 
     def test_shared_aggregates_get_a_value_and_a_percent_column(self):
-        fingerprints = Sketch(
+        skits = Sketch(
             [Aggregate("size", "$.size", ["SUM", "MAX"]), Aggregate("n", "$.size", "COUNT")]
         )
         for kind, size in (("a", 10), ("a", 30), ("b", 60)):
-            fingerprints.upsert({"k": kind}, {"size": size}, run="261014-0001")
-        fingerprints.save(self.sketch_path)
+            skits.upsert({"k": kind}, {"size": size}, run="261014-0001")
+        skits.save(self.sketch_path)
         code, out, _ = self.run_cli("show", self.sketch_path)
         self.assertEqual(code, 0)
         rows = [re.split(r"\s{2,}", line) for line in out.splitlines()]
@@ -640,14 +641,14 @@ class ShowTests(CliTestCase):
         self.assertEqual(header[5:9], ["commits", "commits %", "bytes", "bytes %"])
 
     def test_set_without_shares_shows_dashes(self):
-        fid = skit_id({"k": "a"})
+        sid = skit_id({"k": "a"})
         self.write(
             "set.yaml",
             f"""
             version: 0
             profile_id: null
             skits:
-              {fid}:
+              {sid}:
                 tokens: {{k: a}}
                 aggregates: {{size: 5}}
                 meta: {{count: 1}}
@@ -772,7 +773,7 @@ class ShowSortTests(CliTestCase):
 
 
 class HistoryTests(CliTestCase):
-    """Each merge also writes the run's own fingerprints to <set>.history/ (FING-48)."""
+    """Each merge also writes the run's own skits to <set>.history/ (FING-48)."""
 
     def history_dir(self):
         return os.path.join(self.dir, "set.history")
@@ -783,8 +784,8 @@ class HistoryTests(CliTestCase):
         return sorted(os.listdir(self.history_dir()))
 
     def test_each_merge_writes_a_run_file_with_only_that_runs_data(self):
-        self.fingerprint(self.write_events("one.jsonl", EVENTS[:3]))
-        _, _, err = self.fingerprint(self.write_events("two.jsonl", EVENTS[3:]))
+        self.run_merge(self.write_events("one.jsonl", EVENTS[:3]))
+        _, _, err = self.run_merge(self.write_events("two.jsonl", EVENTS[3:]))
         files = self.run_files()
         self.assertEqual(len(files), 2)
         for name in files:
@@ -802,7 +803,7 @@ class HistoryTests(CliTestCase):
 
     def test_run_header_says_what_the_run_read(self):
         events = self.write("mixed.jsonl", json.dumps(EVENTS[0]) + "\nnot json\n")
-        self.fingerprint(events)
+        self.run_merge(events)
         run = self.load_set(os.path.join(self.history_dir(), self.run_files()[0]))
         header = run["run"]
         self.assertEqual(list(run)[:3], ["version", "profile_id", "run"])
@@ -813,20 +814,20 @@ class HistoryTests(CliTestCase):
         self.assertLessEqual(header["started"], header["finished"])
 
     def test_stdin_source_and_empty_run(self):
-        code, _, _ = self.fingerprint("-", stdin=FakeStdin(""))
+        code, _, _ = self.run_merge("-", stdin=FakeStdin(""))
         self.assertEqual(code, 0)
         run = self.load_set(os.path.join(self.history_dir(), self.run_files()[0]))
         self.assertEqual((run["run"]["source"], run["skits"]), ("stdin", {}))
 
     def test_run_file_is_readable_by_show(self):
-        self.fingerprint(self.write_events("one.jsonl", EVENTS[:2]))
+        self.run_merge(self.write_events("one.jsonl", EVENTS[:2]))
         code, out, _ = self.run_cli("show", os.path.join(self.history_dir(), self.run_files()[0]))
         self.assertEqual(code, 0)
-        self.assertEqual(len(out.splitlines()), 3)  # header + 2 fingerprints
+        self.assertEqual(len(out.splitlines()), 3)  # header + 2 skits
 
     def test_trial_run_and_failed_run_write_no_history(self):
         events = self.write_events("one.jsonl", EVENTS)
-        self.fingerprint(events, "-o", os.path.join(self.dir, "preview.yaml"))
+        self.run_merge(events, "-o", os.path.join(self.dir, "preview.yaml"))
         self.run_cli(
             "merge", "-p", self.write("bad.yaml", "fields: []"), "-s", self.sketch_path, events
         )
@@ -835,7 +836,7 @@ class HistoryTests(CliTestCase):
     def test_unwritable_history_still_updates_the_set_and_exits_3(self):
         self.write("set.history", "a file, not a directory")
         events = self.write("mixed.jsonl", json.dumps(EVENTS[0]) + "\nnot json\n")
-        code, _, err = self.fingerprint(events)
+        code, _, err = self.run_merge(events)
         self.assertEqual(code, 3)  # takes precedence over 1 (a line was skipped)
         self.assertIn(f"sketch: {self.sketch_path} updated, but history not written: ", err)
         self.assertEqual(len(self.load_set()["skits"]), 1)
@@ -853,24 +854,22 @@ class HistoryTests(CliTestCase):
         self.assertEqual(_next_run_id(None, history, today), "261015-0008")
 
     def test_run_file_is_named_by_run_id_and_header_carries_it(self):
-        self.fingerprint(self.write_events("one.jsonl", EVENTS[:2]))
-        self.fingerprint(self.write_events("two.jsonl", EVENTS[2:]))
+        self.run_merge(self.write_events("one.jsonl", EVENTS[:2]))
+        self.run_merge(self.write_events("two.jsonl", EVENTS[2:]))
         today = datetime.now(UTC).strftime("%y%m%d")
         self.assertEqual(self.run_files(), [f"{today}-0001.yaml", f"{today}-0002.yaml"])
         run = self.load_set(os.path.join(self.history_dir(), f"{today}-0002.yaml"))
         self.assertEqual(run["run"]["id"], f"{today}-0002")
 
     def test_history_dir_drops_only_the_last_extension(self):
-        self.assertEqual(
-            _history_dir("data/app.fingerprints.yaml"), "data/app.fingerprints.history"
-        )
-        self.assertEqual(_history_dir("data/myset"), "data/myset.history")
+        self.assertEqual(str(history_dir_for("data/app.sketch.yaml")), "data/app.sketch.history")
+        self.assertEqual(str(history_dir_for("data/myset")), "data/myset.history")
 
     def test_trial_run_does_not_use_up_a_run_id(self):
         events = self.write_events("one.jsonl", EVENTS)
-        self.fingerprint(events)
-        self.fingerprint(events, "-o", os.path.join(self.dir, "preview.yaml"))
-        self.fingerprint(events)
+        self.run_merge(events)
+        self.run_merge(events, "-o", os.path.join(self.dir, "preview.yaml"))
+        self.run_merge(events)
         today = datetime.now(UTC).strftime("%y%m%d")
         self.assertEqual(self.load_set()["last_run"], f"{today}-0002")
 
@@ -889,14 +888,14 @@ class SequenceTests(CliTestCase):
         return sum(rec["meta"]["count"] for rec in data["skits"].values())
 
     def test_first_run_records_the_highest_sequence(self):
-        code, _, err = self.fingerprint(self.events("one.jsonl", [3, 1, 5, 2]))
+        code, _, err = self.run_merge(self.events("one.jsonl", [3, 1, 5, 2]))
         self.assertEqual(code, 0)
         self.assertEqual(self.load_set()["sequence"], {"path": "$.id", "max": 5})
         self.assertIn("  dropped: 0 events already merged (no earlier mark)", err)
 
     def test_events_at_or_below_the_mark_are_dropped(self):
-        self.fingerprint(self.events("one.jsonl", [1, 2, 3, 4, 5]))
-        code, _, err = self.fingerprint(self.events("two.jsonl", [3, 5, 6, 8]))
+        self.run_merge(self.events("one.jsonl", [1, 2, 3, 4, 5]))
+        code, _, err = self.run_merge(self.events("two.jsonl", [3, 5, 6, 8]))
         self.assertEqual(code, 0)
         self.assertIn("4 events read", err)
         self.assertIn("  dropped: 2 events already merged (sequence ≤ 5)", err)
@@ -909,9 +908,9 @@ class SequenceTests(CliTestCase):
 
     def test_rerun_over_the_same_input_adds_nothing(self):
         events = self.events("one.jsonl", ["10", "11", "12"])  # numeric strings count
-        self.fingerprint(events)
+        self.run_merge(events)
         before = self.load_set()
-        code, _, err = self.fingerprint(events)
+        code, _, err = self.run_merge(events)
         self.assertEqual(code, 0)
         self.assertIn("  dropped: 3 events already merged (sequence ≤ 12)", err)
         after = self.load_set()
@@ -921,7 +920,7 @@ class SequenceTests(CliTestCase):
         self.assertNotIn("sequence", run["run"])  # nothing merged in this run
 
     def test_event_without_a_usable_sequence_fails_the_whole_run(self):
-        self.fingerprint(self.events("one.jsonl", [1, 2]))
+        self.run_merge(self.events("one.jsonl", [1, 2]))
         with open(self.sketch_path) as f:
             before = f.read()
         history = os.path.join(self.dir, "set.history")
@@ -929,7 +928,7 @@ class SequenceTests(CliTestCase):
         for bad in ({"kind": "a"}, {"id": "abc", "kind": "a"}, {"id": True, "kind": "a"}):
             with self.subTest(bad=bad):
                 lines = [{"id": 7, "kind": "a"}, bad, {"id": 8, "kind": "a"}]
-                code, _, err = self.fingerprint(self.write_events("bad.jsonl", lines))
+                code, _, err = self.run_merge(self.write_events("bad.jsonl", lines))
                 self.assertEqual(code, 2)
                 self.assertIn("sketch: line 2: no usable sequence at $.id", err)
                 self.assertIn("nothing written", err)
@@ -938,17 +937,17 @@ class SequenceTests(CliTestCase):
                 self.assertEqual(os.listdir(history), runs_before)  # no run file
 
     def test_changed_sequence_path_ignores_the_old_mark(self):
-        self.fingerprint(self.events("one.jsonl", [1, 2, 3]))
+        self.run_merge(self.events("one.jsonl", [1, 2, 3]))
         data = self.load_set()
         data["sequence"]["path"] = "$.old"
         with open(self.sketch_path, "w") as f:
             yaml.safe_dump(data, f)
-        _, _, err = self.fingerprint(self.events("two.jsonl", [2]))
+        _, _, err = self.run_merge(self.events("two.jsonl", [2]))
         self.assertIn("sketch: sequence path changed ($.old -> $.id); previous mark ignored", err)
         self.assertEqual(self.load_set()["sequence"], {"path": "$.id", "max": 2})
 
     def test_profile_without_sequence_keeps_the_mark_and_drops_nothing(self):
-        self.fingerprint(self.events("one.jsonl", [1, 2, 3]))
+        self.run_merge(self.events("one.jsonl", [1, 2, 3]))
         plain = self.write("plain.yaml", PROFILE)
         _, _, err = self.run_cli(
             "merge", "-p", plain, "-s", self.sketch_path, self.events("two.jsonl", [1])
@@ -986,10 +985,10 @@ class ParallelMergeTests(CliTestCase):
     def without_samples(data):
         """Sketch contents minus FIRST/LAST samples, which may differ between job counts."""
         skits = {}
-        for fid, skit in data["skits"].items():
+        for sid, skit in data["skits"].items():
             meta = {k: v for k, v in skit["meta"].items() if k not in ("first", "last")}
             aggregates = {k: v for k, v in skit["aggregates"].items() if k != "recent"}
-            skits[fid] = {**skit, "meta": meta, "aggregates": aggregates}
+            skits[sid] = {**skit, "meta": meta, "aggregates": aggregates}
         return {**data, "skits": skits}
 
     @staticmethod
@@ -1040,9 +1039,7 @@ class ParallelMergeTests(CliTestCase):
     def test_jobs_must_be_at_least_one(self):
         for jobs in ("0", "-2", "two"):
             with self.subTest(jobs=jobs):
-                code, _, err = self.fingerprint(
-                    self.write_events("e.jsonl", self.events), "-j", jobs
-                )
+                code, _, err = self.run_merge(self.write_events("e.jsonl", self.events), "-j", jobs)
                 self.assertEqual(code, 2)
                 self.assertIn("must be a whole number of at least 1", err)
 
@@ -1059,7 +1056,7 @@ class StreamingLimitTests(CliTestCase):
             json.dumps({"kind": "d", "size": 40}),
         ]
         path = self.write("stream.jsonl", "\n".join(lines) + "\n")
-        code, _, err = self.fingerprint(path, "--max-events", "2")
+        code, _, err = self.run_merge(path, "--max-events", "2")
         self.assertEqual(code, 1)  # 1 malformed line skipped, 2 valid events read
         self.assertIn("2 events read", err)
         self.assertIn("stopped: reached --max-events 2", err)
@@ -1161,6 +1158,6 @@ class StreamingLimitTests(CliTestCase):
             ("--max-seconds", "inf"),
         ):
             with self.subTest(flag=flag, bad=bad):
-                code, _, err = self.fingerprint(events, flag, bad)
+                code, _, err = self.run_merge(events, flag, bad)
                 self.assertEqual(code, 2)
                 self.assertTrue(err)

@@ -2,23 +2,21 @@
 
 ## Context
 ### Recent Decisions
-- 2026-11-23: Sprint 8 Phase 2 (`STORY-SKT-17`) passed Trin UAT, Switch security gate (after 1 fix cycle for `SEC-S8-06`), and Morpheus review, and committed on `sprint-8`. Starting Phase 3 (`STORY-SKT-18`).
+- 2026-11-23: Sprint 8 Phases 1–3 complete and committed on `sprint-8`. Entering Stage 3 Sprint Closeout (`Tank` → `Oracle` → `Smith` → `Retro` → `Cypher`).
 
 ## Current Task
-**Status:** Phase 3 active (Neo implementing Task 3.1).
-**Assigned to:** Neo (`*swe`)
+**Status:** Stage 3 Sprint Closeout active (Task C.1 Tank `*devops sdlc-check`).
+**Assigned to:** Tank (`*devops`)
 **Started:** 2026-11-23
 
 ### Progress
 - [x] Stage 0 & Stage 1 planning
-- [x] Phase 1 (`STORY-SKT-15`, `STORY-SKT-16`) — committed
-- [x] Phase 2 (`STORY-SKT-17`) — committed
-- [ ] Phase 3 (`STORY-SKT-18`) — in progress
-- [ ] Stage 3 Sprint Closeout
+- [x] Phase 1, 2, 3 committed
+- [ ] Stage 3 Sprint Closeout (Tasks C.1–C.5)
 
 ## Next Steps
 ### Immediate Next Action
-Track Phase 3 (`STORY-SKT-18`) through Neo → Trin → Switch → Morpheus, then coordinate Stage 3 closeout (`Tank` → `Oracle` → `Smith` → `Retro` → `Cypher`).
+Track Tank `*devops sdlc-check`, Oracle `*ora groom`, Smith `*user test sprint-8`, team retro, and Cypher `*pm launch sprint-8` + local `--no-ff` merge to `main`.
 
 ---
-*Last updated: 2026-11-23T23:47:00-05:00*
+*Last updated: 2026-11-23T23:59:30-05:00*

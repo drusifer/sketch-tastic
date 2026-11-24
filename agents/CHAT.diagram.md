@@ -267,7 +267,41 @@ sequenceDiagram
     autonumber
     participant Mouse
     participant All
-    Note over Mouse,All: 📅 2026-11-23
+    participant Neo
+    participant Trin
+    participant Switch
+    participant Morpheus
+    participant Tank
+    Note over Mouse,Tank: 📅 2026-11-23
     Mouse->>All: "phase 3"
     Note right of Mouse: "Phase 3: Decompose<br/>cli.py merge pipeline<br/>and aggregators.py<br/>histogram helpers to <=<br/>radon B / 0 extended<br/>ruff, and retire legacy<br/>fid/wh/fin…"
+    Neo->>Trin: "swe handoff"
+    Note right of Neo: "Phase 3 impl complete:<br/>decomposed cli.py<br/>(_FoldOptions,<br/>_WorkerConfig, _fold_lin<br/>es/_fold_parallel/_fold_<br/>stream, clean<br/>_show_columns) and ag…"
+    Note over Mouse,Tank: 📅 2026-11-24
+    Trin->>Switch: "qa handoff"
+    Note right of Trin: "UAT phase 3 passed (docs<br/>/sprints/UAT_PLAN_SPRINT<br/>8.md: 5/5 PASS): 325/325<br/>tests OK, lint clean, 0<br/>extended ruff / 0<br/>vulture / 0 radon C+<br/>acr…"
+    Switch->>Morpheus: "sec handoff"
+    Note right of Switch: "Reviewed Phase 3 diff<br/>(cli.py<br/>streaming/parallel<br/>pipeline,<br/>Histogram.check,<br/>history_dir_for,<br/>profile.schema.json) and<br/>security-scan (0 leak…"
+    Morpheus->>Tank: "lead handoff"
+    Note right of Morpheus: "All phases reviewed:<br/>cli.py & aggregators.py<br/>cleanly decomposed<br/>preserving Sprint 4<br/>parallel merge<br/>architecture, full src/<br/>quality 0/0/0, v…"
+```
+
+## Phase 3 close-out
+
+- **Neo**: Phase 3 impl complete: decomposed cli.py (\_FoldOptions, \_WorkerConfig, \_fold\_lines/\_fold\_parallel/\_fold\_stream, clean \_show\_columns) and ag…
+- **Trin**: UAT phase 3 passed (docs/sprints/UAT\_PLAN\_SPRINT8.md: 5/5 PASS): 325/325 tests OK, lint clean, 0 extended ruff / 0 vulture / 0 radon C+ acr…
+
+## Phase close starts
+
+Stage 3 Sprint Closeout: Tank SDLC conformance check, Oracle documentation grooming &amp; chat report, Smith usability testing, team retrospect…
+
+```mermaid
+%%{init: {"sequence": {"messageFontSize": 14, "noteFontSize": 18, "actorFontSize": 14}}}%%
+sequenceDiagram
+    autonumber
+    participant Mouse
+    participant All
+    Note over Mouse,All: 📅 2026-11-24
+    Mouse->>All: "phase close"
+    Note right of Mouse: "Stage 3 Sprint Closeout:<br/>Tank SDLC conformance<br/>check, Oracle<br/>documentation grooming &<br/>chat report, Smith<br/>usability testing, team<br/>retrospect…"
 ```
