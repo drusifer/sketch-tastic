@@ -29,6 +29,7 @@ from typing import IO, Any, Callable, Iterable, Iterator, NamedTuple
 from sketchtastic import __version__
 from sketchtastic._io import history_dir_for, is_number, safe_text
 from sketchtastic.aggregators import as_number
+from sketchtastic.derive_cli import add_derive_command
 from sketchtastic.model import MISSING, Path
 from sketchtastic.profile import Profile, ProfileError, load_profile
 from sketchtastic.reporting import add_commands
@@ -266,6 +267,7 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("sketch_path", metavar="SKETCH", help="sketch file to show")
     show.set_defaults(func=_cmd_show)
     add_commands(commands)
+    add_derive_command(commands)
     return parser
 
 

@@ -64,14 +64,14 @@ Four events, three skits: the two successful `db` queries share one. Run the sam
 again and the counts add up instead of new entries appearing — that is the merge. Each run also
 leaves a file with just its own skits in `app.sketch.history/` (see History below).
 
-`app.sketch.yaml` now starts like this (the other two skits follow):
+`app.sketch.yaml` now uses sketch format 1 (the other two skits follow):
 
 ```yaml
-version: 0
+version: 1
 profile_id: 3f0dd0d9f280ba32064a891dcd3b17cb
 last_run: 261014-0001
 skits:
-  9312137ea290aa8d196e7036cd687af8:
+  549439e519c9cad471036ab7ebb4e2a6:
     tokens:
       level: INFO
       component: db
@@ -106,9 +106,9 @@ To read a sketch without the YAML, print it as a table with `sketch show app.ske
 
 ```
 ID        COUNT  COUNT %  FIRST RUN    LAST RUN     component  failed  level
-d7d629a1  1      25.0     261014-0001  261014-0001  db         TRUE    ERROR
-f5189272  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
-9312137e  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
+75171eba  1      25.0     261014-0001  261014-0001  db         TRUE    ERROR
+351065fb  1      25.0     261014-0001  261014-0001  http       FALSE   INFO
+549439e5  2      50.0     261014-0001  261014-0001  db         FALSE   INFO
 ```
 
 ## Usage
@@ -328,6 +328,69 @@ Completeness means all observed profile-defined kinds, not every theoretically p
 
 From a repository checkout, invoke these commands through `bobp make -vvv run ARGS="..."`.
 
+## Derive a new sketch
+
+Reuse captured observations when a new profile only collapses retained distinctions:
+
+```sh
+sketch derive baseline.sketch.yaml --source-profile baseline-profile.yaml \
+  --profile coarse-profile.yaml --output baseline-v2.sketch.yaml
+```
+
+The output name is required and must be unused, including its companion history directory.
+The source is unchanged. Source and output sketches use structured-token format 1; legacy files
+require recapture or replay of original events. The suffix `v2` is your dataset name/version,
+not the sketch serialization version or package version.
+
+Supported changes are dropping, reordering and renaming retained fields; changing an untyped
+`DEFAULT` field to `IS_PRESENT`; scalar `DEFAULT` values to `IS_NULL`, `ANY`, `GLOB`, `REGEX`
+or `REGSUB`; and coarsening typed dates/timestamps with `TRUNC`. Selection paths and value
+types must match an original field. Adding a genuinely new distinction, refining a truncated
+time, or an unsupported change is rejected with an explanation. Aggregate specifications,
+`sequence` and `event_time` must remain unchanged.
+
+For example, change only the modifier on an existing tag selection:
+
+```yaml
+# Original field
+- {key: tags, path: $.tags}
+# Target field
+- {key: tags, path: $.tags, modifier: IS_PRESENT}
+```
+
+For this parent-array selection, missing becomes `FALSE`; explicit null, empty arrays and
+populated arrays become `TRUE`. To distinguish empty from populated arrays, the original
+profile must already select a member such as `$.tags[0]`. Changing the path during derivation
+is conservatively rejected. `IS_NULL` is a different predicate: it tests explicit null, not
+absence. Scalar-to-predicate changes preserve real nulls and literal strings distinctly.
+Array transformations beyond presence may be rejected because a selected array and several
+selected values can have the same stored set but different modifier behavior.
+
+Each original skit maps to exactly one new skit. Collisions merge counts, SUM/COUNT/MIN/MAX,
+AVG sum/count and histogram states; shares are recalculated. **Observation totals stay the
+same and skit counts cannot increase.** Incompatible MIN/MAX value kinds or incomplete retained
+statistics are rejected. The original profile is authoritative for aggregate definitions:
+the stored profile hash covers identity fields, not aggregate paths.
+
+Every available run in the source's companion `.history/` directory is transformed by the
+same rules. Run IDs, times, counts and sequence marks are preserved; run headers point to the
+new sketch. Provenance records source and target profile IDs and survives subsequent merges.
+Missing history is not invented. FIRST/LAST samples remain bounded, matching original records;
+cross-skit chronological ordering cannot be reconstructed from the summary alone.
+
+All main/history files are validated and staged before publication. Existing files and symlinks
+are refused; handled failures remove only files created by the operation. Keep the source
+quiescent during derivation. Publishing the sketch and its history is not crash-atomic across
+two paths. Exit status is `0` on success, `2` for rejection/failure, or `130` for interruption.
+
+Continue capturing into the derived sketch with its target profile:
+
+```sh
+sketch merge -p coarse-profile.yaml -s baseline-v2.sketch.yaml new-events.jsonl
+```
+
+From this repository, invoke commands through `bobp make run ARGS="derive ..."`.
+
 ## Profiles
 
 ```yaml
@@ -356,21 +419,31 @@ aggregates:
 **Paths** are standard JSONPath ([RFC 9535](https://www.rfc-editor.org/rfc/rfc9535), evaluated by
 [jsonpath-rfc9535](https://github.com/jg-rp/python-jsonpath-rfc9535)), with no extensions: dot and bracket access, `[*]`, slices, negative indexes, unions,
 recursive descent (`..`) and filters. If a path selects several values, each is tokenized and the
-results are de-duplicated, sorted and joined, so array order never changes a skit.
+results are de-duplicated and sorted into structured arrays; a single distinct match remains
+a scalar. Directly selected arrays remain arrays, including empty and singleton arrays, and
+are recursively sorted/deduplicated. Array order and repetition never create a new skit.
+
+Sketch format **1** distinguishes omitted keys (missing), YAML `null` (explicit null), the
+literal string `"NULL"`, and array sets such as `["xyz", null]`. `DEFAULT`, `REGSUB` and `TRUNC`
+omit missing or unconvertible values and retain explicit nulls. A wildcard with no matches
+cannot distinguish a missing parent from an empty parent array; select the parent itself if
+that distinction matters. Skit IDs include field names as well as values. Legacy format-0
+sketches are rejected: recapture or replay original events; there is no migration layer.
+Profile YAML still uses `version: 0`; its schema has not changed.
 
 **Modifiers** turn the selected value into a token. Pick ones that collapse high-cardinality
 values (IDs, timestamps, sizes) so similar events share a skit:
 
 | Modifier | Arguments | Token |
 |---|---|---|
-| `DEFAULT` | — | the value as a string; `NULL` if absent |
+| `DEFAULT` | — | scalar as a string, null as null, arrays as sets; missing key omitted |
 | `IS_PRESENT` | — | `TRUE` if the key exists, even when its value is `null` |
 | `IS_NULL` | — | `TRUE` only if the key exists and is set to `null` (a missing key is `FALSE`) |
 | `IN_RANGE` | `low`, `high` (numbers) | `TRUE` if `low <= value <= high` |
 | `ANY` | `values` (a list) | `TRUE` if the value is one of those listed |
 | `GLOB` | `pattern` | `TRUE` if the whole value matches the shell-style pattern (`*`, `?`, `[a-z]`), case-sensitive |
 | `REGEX` | `pattern`, optional `flags` | `TRUE` if the regular expression matches anywhere in the value; anchor with `^` and `$` |
-| `REGSUB` | `pattern`, `replace`, optional `flags` | the value with every match replaced (`\1` refers to a group); `NULL` if absent |
+| `REGSUB` | `pattern`, `replace`, optional `flags` | the value with every match replaced (`\1` refers to a group); missing omitted, null retained |
 | `TRUNC` | `unit` | a `DATE`/`DATETIME` value cut to `year` … `second`, e.g. hour → `2024-01-01T15` |
 
 A modifier without arguments is written as its bare name (`modifier: IS_PRESENT`); one with
