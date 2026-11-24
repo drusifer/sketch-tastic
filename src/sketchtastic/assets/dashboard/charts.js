@@ -132,7 +132,7 @@ function renderPareto(skits, totalW, wm) {
             afterTitle: items => {
               const s = slice[items[0].dataIndex];
               if (!s) return "";
-              const preview = Object.entries(s.tokens).filter(([, v]) => v !== "NULL" && v !== "FALSE").slice(0, 3).map(([k, v]) => k + "=" + v).join(", ");
+              const preview = Object.entries(s.tokens).filter(([, v]) => v !== null && v !== "FALSE").slice(0, 3).map(([k, v]) => k + "=" + tokenLabel(v)).join(", ");
               return (preview || s.id) + (wm.isCount ? "" : " (" + fmtInt(s.count) + " obs)");
             }
           }
@@ -167,7 +167,7 @@ function renderFieldsSection(fields, wm) {
     state.selectedField = fields[0].key;
   }
   for (const f of fields) {
-    const typeLabel = f.field_type === "boolean" ? "Boolean" : f.field_type === "numeric" ? "Numeric" : "Enum";
+    const typeLabel = f.field_type === "boolean" ? "Boolean" : f.field_type === "numeric" ? "Numeric" : f.field_type === "enumset" ? "Enum set" : "Enum";
     const opt = el("option", { value: f.key }, f.key + " [" + typeLabel + ", " + f.cardinality + "]");
     if (f.key === state.selectedField) opt.selected = true;
     sel.appendChild(opt);
@@ -182,7 +182,7 @@ function renderFieldsSection(fields, wm) {
     const typeTd = el("td");
     if (f.field_type === "boolean") typeTd.appendChild(el("span", { class: "badge ok" }, "Boolean"));
     else if (f.field_type === "numeric") typeTd.appendChild(el("span", { class: "badge" }, "Numeric"));
-    else typeTd.appendChild(el("span", { class: "muted" }, "Enum"));
+    else typeTd.appendChild(el("span", { class: "muted" }, f.field_type === "enumset" ? "Enum set" : "Enum"));
     tr.appendChild(typeTd);
     tr.appendChild(el("td", { class: "num" }, fmtInt(f.cardinality)));
     tr.appendChild(el("td", { class: "mono clip", title: fmtAny(f.min) }, fmtAny(f.min)));
@@ -236,12 +236,14 @@ function renderFieldChartAndValues(field, wm) {
     metaBox.textContent = "No observed values in current filter.";
     return;
   }
-  const typeLabel = field.field_type === "boolean" ? "Boolean" : field.field_type === "numeric" ? "Numeric" : "Enum";
+  const typeLabel = field.field_type === "boolean" ? "Boolean" : field.field_type === "numeric" ? "Numeric" : field.field_type === "enumset" ? "Enum set" : "Enum";
   metaBox.textContent =
     field.key + " [" + typeLabel + "] — Min: " + fmtAny(field.min) + " | Max: " + fmtAny(field.max) +
     (field.is_boolean && field.true_pct !== null ? " | True rate: " + fmtPct(field.true_pct) : "") +
     (field.is_numeric ? " | Weighted Mean: " + fmtNum(field.weighted_mean) + " | Weighted Median: " + fmtNum(field.weighted_median) : "") +
     (wm.isCount ? "" : " | Weighted by " + wm.label) +
+    (field.field_type === "enumset" ? " | Exact set combinations" : "") +
+    " | Missing: " + fmtPct(field.missing_pct) + " | Null: " + fmtPct(field.null_pct) +
     " (click any bar or row to filter)";
 
   const isObs = state.weightMode === "observations";
@@ -251,9 +253,9 @@ function renderFieldChartAndValues(field, wm) {
 
   const activeSet = state.fieldFilters.get(field.key);
   for (const v of sortedVals.slice(0, 100)) {
-    const isSel = activeSet && activeSet.has(v.value);
+    const isSel = activeSet && activeSet.has(v.token);
     const tr = el("tr", { class: "clickable" + (isSel ? " selected" : "") });
-    tr.addEventListener("click", () => toggleFieldFilter(field.key, v.value));
+    tr.addEventListener("click", () => toggleFieldFilter(field.key, v.token));
     tr.appendChild(el("td", { class: "mono" }, v.value));
     tr.appendChild(el("td", { class: "num" }, fmtWeight(v.count, wm)));
     tr.appendChild(el("td", { class: "num" }, fmtPct(v.weight_pct)));
@@ -268,7 +270,7 @@ function renderFieldChartAndValues(field, wm) {
   const labels = chartItems.map(v => v.value.length > 36 ? v.value.slice(0, 33) + "..." : v.value);
   const values = chartItems.map(v => isObs ? Number((v.weight_pct || 0).toFixed(2)) : Number((v.skit_pct || 0).toFixed(2)));
   const colors = chartItems.map((v, i) => {
-    if (activeSet && activeSet.has(v.value)) return "#bc8cff";
+    if (activeSet && activeSet.has(v.token)) return "#bc8cff";
     if (field.is_boolean) {
       const b = asBool(v.value);
       if (b === true) return "#3fb950";
@@ -305,7 +307,7 @@ function renderFieldChartAndValues(field, wm) {
         if (!els.length) return;
         const idx = els[0].index;
         if (idx < chartItems.length) {
-          toggleFieldFilter(field.key, chartItems[idx].value);
+          toggleFieldFilter(field.key, chartItems[idx].token);
         }
       },
       scales: {
@@ -517,7 +519,7 @@ function renderAggOutliers(canvas, agg, tc) {
           callbacks: {
             afterLabel: ctx => {
               const it = items[ctx.dataIndex];
-              return "Skit count: " + fmtInt(it.count) + " | " + Object.entries(it.tokens).filter(([, v]) => v !== "NULL" && v !== "FALSE").slice(0, 3).map(([k, v]) => k + "=" + v).join(", ");
+              return "Skit count: " + fmtInt(it.count) + " | " + Object.entries(it.tokens).filter(([, v]) => v !== null && v !== "FALSE").slice(0, 3).map(([k, v]) => k + "=" + tokenLabel(v)).join(", ");
             }
           }
         }
@@ -654,7 +656,7 @@ function renderHistorySection() {
   }
 
   function tokStr(toks) {
-    return Object.entries(toks || {}).filter(([, v]) => v !== "NULL" && v !== "FALSE").slice(0, 4).map(([k, v]) => k + "=" + v).join(", ") || "(all NULL/FALSE)";
+    return Object.entries(toks || {}).filter(([, v]) => v !== null && v !== "FALSE").slice(0, 4).map(([k, v]) => k + "=" + tokenLabel(v)).join(", ") || "(all null/FALSE or missing)";
   }
 
   fillDrift("drift-new-tbody", cur.new_skits, r => [

@@ -17,6 +17,20 @@ from sketchtastic.reporting import coverage, export_samples, report
 
 
 class ReportingTests(unittest.TestCase):
+    def test_report_preserves_structured_tokens_without_conflating_missing_and_null(self):
+        profile = load_profile(str(self.profile_path))
+        sketch = Sketch(profile_id=profile.profile_id)
+        for record in ({}, {"kind": None}, {"kind": []}, {"kind": [None, "NULL"]}):
+            sketch.upsert(profile.tokens(record), record)
+        path = self.root / "structured.yaml"
+        sketch.save(str(path))
+        text = report(path, limit=0)
+        self.assertIn('"kind":null', text)
+        self.assertIn('"kind":[]', text)
+        self.assertIn('"kind":[', text)
+        self.assertIn("{}", text)
+        self.assertEqual(len(sketch), 4)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)

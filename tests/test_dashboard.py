@@ -25,9 +25,15 @@ def _extract_app_script(html_text: str) -> str:
     return match.group(1)
 
 
-def _run_stats_js(expression: str, payload: dict | None = None) -> dict:
+def _run_stats_js(
+    expression: str, payload: dict | None = None, extra_modules: tuple[str, ...] = ()
+) -> dict:
     """Execute a JS snippet against `assets/dashboard/stats.js` via Node and return parsed JSON."""
     stats_src = files("sketchtastic").joinpath("assets/dashboard/stats.js").read_text("utf-8")
+    for module in extra_modules:
+        stats_src += "\n" + files("sketchtastic").joinpath("assets/dashboard", module).read_text(
+            "utf-8"
+        )
     input_json = json.dumps(payload or {})
     runner = (
         f"const INPUT = {input_json};\n"
@@ -225,6 +231,75 @@ class DashboardRenderingTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("node"), "node is required for JS stats engine unit tests")
 class DashboardStatsJsUnitTests(unittest.TestCase):
+    def test_structured_tokens_distinguish_missing_null_literal_and_arrays(self) -> None:
+        payload = {
+            "skits": [
+                {"id": "missing", "count": 2, "tokens": {}},
+                {"id": "null", "count": 3, "tokens": {"tags": None}},
+                {"id": "literal", "count": 5, "tokens": {"tags": "null"}},
+                {"id": "empty", "count": 7, "tokens": {"tags": []}},
+                {"id": "set-a", "count": 11, "tokens": {"tags": [None, "a"]}},
+                {"id": "set-b", "count": 13, "tokens": {"tags": [None, "a"]}},
+            ]
+        }
+        result = _run_stats_js(
+            """
+            const rows = INPUT.skits;
+            return {
+              keys: rows.map(s => tokenKey(s.tokens.tags)),
+              labels: rows.map(s => tokenLabel(s.tokens.tags)),
+              fields: computeFields(rows, ["tags"], 41, {isCount:true}),
+              ablation: computeAblation(rows, ["tags"]),
+              nullMatches: rows.map(s => matchesTokenFilter(s.tokens.tags, tokenKey(null))),
+              emptyMatches: rows.map(s => matchesTokenFilter(s.tokens.tags, tokenKey([]))),
+            };
+            """,
+            payload,
+        )
+        self.assertEqual(len(set(result["keys"])), 5)
+        self.assertEqual(len(set(result["labels"])), 5)
+        self.assertEqual(result["nullMatches"], [False, True, False, False, False, False])
+        self.assertEqual(result["emptyMatches"], [False, False, False, True, False, False])
+        self.assertEqual(result["ablation"][0]["cardinality"], 5)
+        self.assertEqual(result["ablation"][0]["remaining_skits"], 1)
+
+    def test_correlations_group_structured_values_by_content(self) -> None:
+        payload = {
+            "skits": [
+                {"id": "a", "count": 5, "tokens": {"x": [None, "tag"], "y": "a"}},
+                {"id": "b", "count": 5, "tokens": {"x": [None, "tag"], "y": "a"}},
+                {"id": "c", "count": 5, "tokens": {"x": None, "y": "b"}},
+                {"id": "d", "count": 5, "tokens": {"y": "c"}},
+            ]
+        }
+        result = _run_stats_js(
+            """
+            const c = computeCorrelations(INPUT.skits, ["x", "y"], 20, {isCount:true});
+            return {v: c.cramers.get("x").get("y"), u: c.theils.get("x").get("y")};
+            """,
+            payload,
+        )
+        self.assertAlmostEqual(result["v"], 1)
+        self.assertAlmostEqual(result["u"], 1)
+
+    def test_sankey_groups_equal_sets_and_preserves_null_and_missing(self) -> None:
+        result = _run_stats_js(
+            """
+            const rows = [
+              {tokens: {}, count: 1},
+              {tokens: {x: null}, count: 2},
+              {tokens: {x: []}, count: 3},
+              {tokens: {x: [null, "a"]}, count: 4},
+              {tokens: {x: [null, "a"]}, count: 5}
+            ];
+            return buildSankeyStages(["x"], rows, {isCount: true}).stageNodes[0];
+            """,
+            extra_modules=("sankey.js",),
+        )
+        self.assertEqual(len(result), 4)
+        self.assertEqual(sorted(row["count"] for row in result), [1, 2, 3, 9])
+        self.assertEqual(len({row["label"] for row in result}), 4)
+
     def test_medians_concentration_and_field_classification(self) -> None:
         profile = Profile(
             fields=(
@@ -294,7 +369,7 @@ class DashboardStatsJsUnitTests(unittest.TestCase):
         self.assertEqual(fields["present"]["min"], "FALSE")
         self.assertEqual(fields["present"]["max"], "TRUE")
         self.assertTrue(fields["env"]["is_constant"])
-        self.assertEqual(fields["missing"]["min"], "NULL")
+        self.assertNotIn("missing", fields)  # no retained key means no observed dimension
 
         # Under bytes weighting, present=TRUE has (90 + 500) / 650 = 90.769%
         fields_b = {f["key"]: f for f in out["fieldsBytes"]}

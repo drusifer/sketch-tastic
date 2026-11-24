@@ -27,9 +27,9 @@ from queue import Empty
 from typing import IO, Any, Callable, Iterable, Iterator, NamedTuple
 
 from sketchtastic import __version__
-from sketchtastic._io import history_dir_for, is_number
+from sketchtastic._io import history_dir_for, is_number, safe_text
 from sketchtastic.aggregators import as_number
-from sketchtastic.model import Path
+from sketchtastic.model import MISSING, Path
 from sketchtastic.profile import Profile, ProfileError, load_profile
 from sketchtastic.reporting import add_commands
 from sketchtastic.sketch import (
@@ -123,7 +123,8 @@ examples:
 
 ID is the start of the skit ID; FIRST RUN and LAST RUN are the ids of
 the first and last run that saw it (see 'sketch merge --help'); '-' means
-no value.
+no metadata/statistic value. Token cells distinguish <missing>, null, and
+JSON arrays; ambiguous literal strings are quoted.
 Each % column is the skit's share of the sketch total: COUNT % of all
 events, and one value and % column per SUM or COUNT aggregate (key.FN when
 the aggregate has several functions).
@@ -302,6 +303,16 @@ def _cell(value: Any) -> str:
     return "-" if value is None else str(value)
 
 
+def _token_cell(value: Any) -> str:
+    if value is MISSING:
+        return "<missing>"
+    if value is None or isinstance(value, list):
+        return json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+    if value in ("null", "<missing>") or value.startswith("[") or value.startswith('"'):
+        return json.dumps(value, ensure_ascii=True)
+    return safe_text(value)
+
+
 def _percent(value: Any) -> str:
     return "-" if value is None else f"{value:.1f}"
 
@@ -356,7 +367,9 @@ def _show_columns(records: list[tuple[str, Skit]]) -> list[_Column]:
             )
         )
     for key in sorted({key for _, record in records for key in record.tokens}):
-        columns.append(_Column(key, lambda _sid, record, k=key: record.tokens.get(k), _cell))
+        columns.append(
+            _Column(key, lambda _sid, record, k=key: record.tokens.get(k, MISSING), _token_cell)
+        )
     return columns
 
 
@@ -381,7 +394,7 @@ def _find_column(columns: list[_Column], key: str, sketch_path: str) -> _Column:
 
 def _sort_key(value: Any) -> tuple:
     """Missing values first, then numbers by value, then everything else as text."""
-    if value is None:
+    if value is None or value is MISSING:
         return (0, 0)
     if is_number(value):
         return (1, value)

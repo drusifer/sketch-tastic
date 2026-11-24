@@ -22,8 +22,8 @@ SAMPLE_AGGREGATES = (
 
 
 class SkitIdTests(unittest.TestCase):
-    def test_hashes_the_values_in_profile_order_not_the_keys(self):
-        self.assertEqual(skit_id({"a": "1", "b": "2"}), skit_id({"x": "1", "y": "2"}))
+    def test_hashes_keys_and_values_in_profile_order(self):
+        self.assertNotEqual(skit_id({"a": "1", "b": "2"}), skit_id({"x": "1", "y": "2"}))
         self.assertNotEqual(skit_id({"a": "1", "b": "2"}), skit_id({"b": "2", "a": "1"}))
 
     def test_values_containing_separators_do_not_collide(self):
@@ -177,7 +177,7 @@ class PersistenceTests(unittest.TestCase):
 
         with open(self.path) as f:
             data = yaml.safe_load(f)
-        self.assertEqual(data["version"], 0)
+        self.assertEqual(data["version"], 1)
         self.assertEqual(data["profile_id"], "p1")
         self.assertEqual(list(data["skits"]), [skit_id({"a": "1"})])
 
@@ -432,12 +432,12 @@ class SequenceMarkTests(unittest.TestCase):
 
 
 class VocabularyTests(unittest.TestCase):
-    """STORY-SKT-02: sketches hold skits; ids are unchanged by the rename."""
+    """Public sketch/skit vocabulary and the structured-identity quickstart example."""
 
     def test_skit_id_of_the_readme_quickstart(self):
-        # token values in profile order (level, component, failed), as the README shows
+        # token key/value pairs in profile order (level, component, failed)
         tokens = {"level": "INFO", "component": "db", "failed": "FALSE"}
-        self.assertEqual(skit_id(tokens), "9312137ea290aa8d196e7036cd687af8")
+        self.assertEqual(skit_id(tokens), "549439e519c9cad471036ab7ebb4e2a6")
 
     def test_library_names(self):
         import sketchtastic
@@ -557,7 +557,7 @@ class ProfileOrderTests(unittest.TestCase):
             with open(path, "w") as f:
                 yaml.safe_dump(
                     {
-                        "version": 0,
+                        "version": 1,
                         "profile_id": None,
                         "skits": {
                             sid: {

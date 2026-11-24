@@ -348,8 +348,8 @@ def _resolve_default_weighting(default_weight: str | None, weightings: list[dict
 
 def _extract_run_skits(
     sketch_name: str, sketch: Any
-) -> tuple[dict[str, tuple[int, dict[str, str]]], int]:
-    skits_map: dict[str, tuple[int, dict[str, str]]] = {}
+) -> tuple[dict[str, tuple[int, dict[str, Any]]], int]:
+    skits_map: dict[str, tuple[int, dict[str, Any]]] = {}
     total_events = 0
     for sid in sketch:
         skit = sketch.get(sid)
@@ -365,7 +365,7 @@ def _extract_run_skits(
 
 def _load_run_file(
     entry: Path,
-) -> tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, str]]]]:
+) -> tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, Any]]]]:
     raw, sketch = load_sketch_with_header(entry)
     run_hdr = raw.get("run") if isinstance(raw.get("run"), dict) else {}
     run_id = str(run_hdr.get("id") or raw.get("last_run") or entry.stem)
@@ -388,7 +388,7 @@ def _load_run_file(
 
 
 def _drift_new_skits(
-    new_ids: set[str], curr_skits: dict[str, tuple[int, dict[str, str]]], curr_total: int
+    new_ids: set[str], curr_skits: dict[str, tuple[int, dict[str, Any]]], curr_total: int
 ) -> list[dict[str, Any]]:
     items = [
         {
@@ -404,7 +404,7 @@ def _drift_new_skits(
 
 
 def _drift_gone_skits(
-    gone_ids: set[str], prev_skits: dict[str, tuple[int, dict[str, str]]], prev_total: int
+    gone_ids: set[str], prev_skits: dict[str, tuple[int, dict[str, Any]]], prev_total: int
 ) -> list[dict[str, Any]]:
     items = [
         {
@@ -423,8 +423,8 @@ def _drift_gone_skits(
 
 def _drift_shifts(
     both_ids: set[str],
-    prev_skits: dict[str, tuple[int, dict[str, str]]],
-    curr_skits: dict[str, tuple[int, dict[str, str]]],
+    prev_skits: dict[str, tuple[int, dict[str, Any]]],
+    curr_skits: dict[str, tuple[int, dict[str, Any]]],
     totals: tuple[int, int],
 ) -> list[dict[str, Any]]:
     prev_total, curr_total = totals
@@ -452,9 +452,9 @@ def _drift_shifts(
 
 def _compute_run_drift(
     prev_info: dict[str, Any],
-    prev_skits: dict[str, tuple[int, dict[str, str]]],
+    prev_skits: dict[str, tuple[int, dict[str, Any]]],
     curr_info: dict[str, Any],
-    curr_skits: dict[str, tuple[int, dict[str, str]]],
+    curr_skits: dict[str, tuple[int, dict[str, Any]]],
 ) -> dict[str, Any]:
     prev_ids, curr_ids = set(prev_skits), set(curr_skits)
     new_ids = curr_ids - prev_ids
@@ -501,7 +501,7 @@ def _load_history(
         return {"directory": None, "runs": [], "drift": [], "warnings": []}, {}
 
     warnings: list[str] = []
-    loaded: list[tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, str]]]]] = []
+    loaded: list[tuple[str, dict[str, Any], dict[str, tuple[int, dict[str, Any]]]]] = []
     for entry in _iter_history_yaml(directory):
         try:
             loaded.append(_load_run_file(entry))

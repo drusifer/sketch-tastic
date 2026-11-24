@@ -25,11 +25,11 @@
 | **Event** | Value Object | One raw JSON object from an input JSONL stream. | `dict[str, Any]` |
 | **Path** | Value Object | A compiled RFC 9535 JSONPath expression selecting zero or more values from an Event. | `sketchtastic.model.Path` |
 | **Rule** | Value Object (base) | A schema-validated, immutable named behavior (`Modifier`, `ValueType`, `Op`, or `Aggregator`). | `sketchtastic.model.Rule` |
-| **Modifier** | Value Object | Reduces one selected value (or `MISSING`) to a deterministic string token (`DEFAULT`, `IS_PRESENT`, `IS_NULL`, `IN_RANGE`, `ANY`, `GLOB`, `REGEX`, `REGSUB`, `TRUNC`). | `sketchtastic.model.Modifier` |
+| **Modifier** | Value Object | Reduces one selected value (or `MISSING`) to a deterministic structured token (string, null or array; missing value fields omitted) (`DEFAULT`, `IS_PRESENT`, `IS_NULL`, `IN_RANGE`, `ANY`, `GLOB`, `REGEX`, `REGSUB`, `TRUNC`). | `sketchtastic.model.Modifier` |
 | **ValueType** | Value Object | Parses and normalizes raw text into comparable UTC typed values (`DATETIME`, `DATE`). | `sketchtastic.model.ValueType` |
 | **Op** | Value Object | Transforms a selected value into a derived measurement before aggregation (`SIZE` in UTF-8 / compact JSON bytes). | `sketchtastic.aggregators.Op` |
 | **Aggregator** | Value Object | An associative monoid `(initial, accept, fold, merge)` over YAML-serializable state (`SUM`, `MIN`, `MAX`, `AVG`, `COUNT`, `FIRST`, `LAST`, `HISTOGRAM`). | `sketchtastic.aggregators.Aggregator` |
-| **Field** | Value Object | One identity dimension `(key, Path, Modifier, ValueType?)`; multi-match tokens are deduplicated, sorted, and comma-joined. | `sketchtastic.model.Field` |
+| **Field** | Value Object | One identity dimension `(key, Path, Modifier, ValueType?)`; multi-match tokens are deduplicated and sorted as structured arrays. | `sketchtastic.model.Field` |
 | **Aggregate** | Value Object | One per-skit statistic or sample specification `(key, Path, fn, Op?, ValueType?)`; never affects identity. | `sketchtastic.aggregators.Aggregate` |
 | **Profile** | Aggregate Root | Immutable specification of `fields`, `aggregates`, optional `sequence`, and optional `event_time`. | `sketchtastic.profile.Profile` |
 | **Skit** | Entity | One distinct observed event shape keyed by `skit_id`, holding `tokens`, `aggregates`, `meta`, and derived `share`. | `sketchtastic.sketch.Skit` |
@@ -90,7 +90,7 @@ flowchart LR
 
 ### Entities vs. Value Objects Summary
 * **Entities (Identity-based):**
-  * `Skit`: Identity defined by `skit_id` (MD5 of JSON-encoded token values in profile order). Mutable aggregate/meta state accumulated across observations.
+  * `Skit`: Identity defined by `skit_id` (MD5 of JSON-encoded key/value pairs in profile order). Mutable aggregate/meta state accumulated across observations.
   * `Sketch`: Persistent inventory identified by its file path and guarded by `profile_id`. Mutable across merges, saved atomically.
 * **Value Objects (Attribute-based):**
   * `Path`, `Rule` (`Modifier`, `ValueType`, `Op`, `Aggregator`), `Field`, `Aggregate`, `Profile`, `Run` header: Immutable (`frozen=True`); equality by value.
@@ -105,13 +105,13 @@ flowchart LR
 * **Business Invariants (Must ALWAYS Be True):**
   1. *Schema & semantic validity:* Every `Profile` passes `profile.schema.json` plus semantic checks (valid JSONPath, valid regex/replace, `low <= high`, strictly increasing finite `HISTOGRAM` buckets, `TRUNC` paired with `DATE`/`DATETIME`, unique keys per section).
   2. *Identity stability:* `profile_id` hashes `fields` in profile order only. Adding, removing, or modifying `aggregates`, `sequence`, or `event_time` never changes `profile_id`.
-  3. *Order-independent multi-match:* When a `Field`'s `Path` matches multiple values on one event, tokens are deduplicated, sorted, and comma-joined so array ordering never creates spurious skits.
+  3. *Order-independent multi-match:* When a `Field`'s `Path` matches multiple values on one event, tokens are deduplicated and sorted as structured arrays so array ordering never creates spurious skits.
 
 ### Aggregate Root: `Sketch`
 * **Root:** `Sketch`
 * **Boundary Members:** `Skit` map (`skits`), `profile_id`, `last_run`, `sequence` high-water mark, optional `run` header, built-in `meta` (`builtin.yaml`).
 * **Business Invariants (Must ALWAYS Be True):**
-  1. *Token-ID integrity:* Every skit key equals `skit_id(skit.tokens)`, computed from token values in profile order.
+  1. *Token-ID integrity:* Every skit key equals `skit_id(skit.tokens)`, computed from structured key/value pairs in profile order.
   2. *Profile-ordered completeness:* Every `Skit` contains every profile aggregate and every built-in `meta` entry in profile order from its first event on.
   3. *Associative merge:* Splitting events across runs or parallel workers and merging via `Sketch.merge()` yields exact equality for `count`, `SUM`, `COUNT`, `MIN`, `MAX`, `AVG`, `HISTOGRAM`, `first_seen`/`last_seen`, and `sequence` bounds.
   4. *Profile guard:* Loading or merging refuses a mismatched `profile_id` unless `--force-profile` is explicitly passed.

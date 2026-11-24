@@ -106,7 +106,7 @@ class FullJsonPathSyntaxTests(unittest.TestCase):
             )
         ]
         # 6379 -> FALSE, 443 -> TRUE, 80 -> TRUE; deduplicated + sorted.
-        self.assertEqual(tokenize(MULTI_ARG_RECORD, profile), {"sock_ports": "FALSE,TRUE"})
+        self.assertEqual(tokenize(MULTI_ARG_RECORD, profile), {"sock_ports": ["FALSE", "TRUE"]})
 
 
 class InvalidPathTests(unittest.TestCase):
@@ -136,11 +136,9 @@ class MatchCountSemanticsTests(unittest.TestCase):
         self.assertEqual(wildcard, indexed)
         self.assertEqual(wildcard, {"p": "443"})
 
-    def test_list_valued_single_match_is_not_expanded(self):
+    def test_list_valued_single_match_is_a_canonical_array(self):
         record = {"tags": ["b", "a"]}
-        self.assertEqual(
-            tokenize(record, [MaskEntry("t", "$.tags", "DEFAULT")]), {"t": "['b', 'a']"}
-        )
+        self.assertEqual(tokenize(record, [MaskEntry("t", "$.tags", "DEFAULT")]), {"t": ["a", "b"]})
 
     def test_empty_wildcard_is_missing(self):
         record = {"args": []}
@@ -153,9 +151,8 @@ class ApplyModifierTests(unittest.TestCase):
     def test_default_passes_literal_value(self):
         self.assertEqual(apply_modifier("sys_connect", "DEFAULT"), "sys_connect")
 
-    def test_default_missing_yields_null(self):
-
-        self.assertEqual(apply_modifier(MISSING, "DEFAULT"), "NULL")
+    def test_default_missing_stays_missing(self):
+        self.assertIs(apply_modifier(MISSING, "DEFAULT"), MISSING)
 
     def test_is_present_true_for_pid(self):
         # Verification Task: pid: 14205 + IS_PRESENT -> "TRUE"
@@ -202,7 +199,7 @@ class ApplyModifierTests(unittest.TestCase):
     # AC4: "absent OR null" must both degrade gracefully - these exercise an
     # actual JSON `null` value, distinct from an absent/missing path.
     def test_default_explicit_null_yields_null(self):
-        self.assertEqual(apply_modifier(None, "DEFAULT"), "NULL")
+        self.assertIsNone(apply_modifier(None, "DEFAULT"))
 
     def test_is_present_true_for_explicit_null(self):
         self.assertEqual(apply_modifier(None, "IS_PRESENT"), "TRUE")
@@ -267,7 +264,6 @@ class TokenizeTests(unittest.TestCase):
                 "isolation_pid": "TRUE",
                 "network_dest_port": "TRUE",
                 "kernel_return_state": "TRUE",
-                "missing_field": "NULL",
             },
         )
 
@@ -284,8 +280,7 @@ class WildcardAndRecursiveDescentTests(unittest.TestCase):
         }
         profile = [MaskEntry("ports", "$.process_kprobe.args[*].sock_arg.dport", "DEFAULT")]
         tokens = tokenize(record, profile)
-        # Expected sorted and joined: "443,6379"
-        self.assertEqual(tokens, {"ports": "443,6379"})
+        self.assertEqual(tokens, {"ports": ["443", "6379"]})
 
     def test_recursive_descent_resolution(self):
         record = {
@@ -299,15 +294,13 @@ class WildcardAndRecursiveDescentTests(unittest.TestCase):
         }
         profile = [MaskEntry("all_ports", "$.process_kprobe..dport", "DEFAULT")]
         tokens = tokenize(record, profile)
-        # Expected sorted, deduplicated and joined: "443,6379,80" (sorted alphabetically: "443,6379,80" -> wait, str sort: '443', '6379', '80')
-        # Let's verify str sort order: '443' < '6379' < '80' because '6' < '8'. Yes! "443,6379,80"
-        self.assertEqual(tokens, {"all_ports": "443,6379,80"})
+        self.assertEqual(tokens, {"all_ports": ["443", "6379", "80"]})
 
-    def test_missing_wildcard_resolves_to_null_and_never_raises(self):
+    def test_missing_wildcard_omits_the_field_and_never_raises(self):
         record = {"process_kprobe": {}}
         profile = [MaskEntry("ports", "$.process_kprobe.args[*].sock_arg.dport", "DEFAULT")]
         tokens = tokenize(record, profile)
-        self.assertEqual(tokens, {"ports": "NULL"})
+        self.assertEqual(tokens, {})
 
 
 if __name__ == "__main__":
@@ -378,14 +371,14 @@ class PatternModifierTests(unittest.TestCase):
             self.assertEqual(apply_modifier(value, {"name": "GLOB", "pattern": "*"}), "FALSE")
             self.assertEqual(apply_modifier(value, {"name": "REGEX", "pattern": ".*"}), "FALSE")
             regsub = {"name": "REGSUB", "pattern": ".*", "replace": "x"}
-            self.assertEqual(apply_modifier(value, regsub), "NULL")
+            self.assertIs(apply_modifier(value, regsub), value)
 
     def test_several_matches_are_tokenized_individually(self):
         record = {"paths": ["/tmp/a1", "/tmp/b22", "/etc/passwd"]}
         glob = MaskEntry("p", "$.paths[*]", {"name": "GLOB", "pattern": "/tmp/*"})
-        self.assertEqual(tokenize(record, [glob]), {"p": "FALSE,TRUE"})
+        self.assertEqual(tokenize(record, [glob]), {"p": ["FALSE", "TRUE"]})
         regsub = MaskEntry("p", "$.paths[*]", {"name": "REGSUB", "pattern": r"\d+", "replace": "N"})
-        self.assertEqual(tokenize(record, [regsub]), {"p": "/etc/passwd,/tmp/aN,/tmp/bN"})
+        self.assertEqual(tokenize(record, [regsub]), {"p": ["/etc/passwd", "/tmp/aN", "/tmp/bN"]})
 
 
 class ModifierObjectTests(unittest.TestCase):

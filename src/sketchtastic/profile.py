@@ -22,7 +22,7 @@ import yaml
 
 from sketchtastic import _yaml
 from sketchtastic.aggregators import Aggregate
-from sketchtastic.model import DatetimeType, Field, Path, tokens
+from sketchtastic.model import DatetimeType, Field, Path, Token, tokens
 from sketchtastic.schema import schema_errors
 
 _SECTIONS = {"fields": Field, "aggregates": Aggregate}
@@ -57,7 +57,7 @@ class Profile:
         """Depends on `fields` only: editing aggregates never invalidates an existing sketch."""
         return profile_id(self.fields)
 
-    def tokens(self, event: Any) -> dict[str, str]:
+    def tokens(self, event: Any) -> dict[str, Token]:
         """The tokens this profile's fields make of `event`, by key."""
         return tokens(event, self.fields)
 

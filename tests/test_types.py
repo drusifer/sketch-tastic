@@ -4,7 +4,7 @@ import unittest
 from datetime import date, datetime, timezone
 
 from sketchtastic.aggregators import Aggregate
-from sketchtastic.model import Field, ValueType
+from sketchtastic.model import MISSING, Field, ValueType
 from sketchtastic.profile import ProfileError, parse_profile
 
 UTC = timezone.utc
@@ -87,7 +87,7 @@ class TypedFieldTests(unittest.TestCase):
         )
 
     def test_unparseable_value_tokenizes_as_missing(self):
-        self.assertEqual(Field("t", "$.t", type="DATETIME").token({"t": "nope"}), "NULL")
+        self.assertIs(Field("t", "$.t", type="DATETIME").token({"t": "nope"}), MISSING)
 
     def test_trunc_buckets_times(self):
         event = {"t": "2024-01-01T15:04:05Z"}

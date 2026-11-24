@@ -13,7 +13,7 @@ const state = {
   sliderLo: 0,
   sliderHi: 1000,
   rangeMode: "overlap", // overlap | first | contained
-  fieldFilters: new Map(), // fieldKey -> Set(values)
+  fieldFilters: new Map(), // fieldKey -> Set(canonical token keys)
   search: "",
   weightMode: "observations", // observations | skits
   selectedField: DATA.fields.length ? DATA.fields[0].key : "",
@@ -216,13 +216,13 @@ function filterSkits() {
     if (!matchesRange(skit, axis, bounds)) return false;
     for (const [fk, allowed] of state.fieldFilters.entries()) {
       if (!allowed.size) continue;
-      const val = Object.prototype.hasOwnProperty.call(skit.tokens, fk) ? skit.tokens[fk] : "NULL";
-      if (!allowed.has(val)) return false;
+      const val = fieldToken(skit.tokens, fk);
+      if (![...allowed].some(key => matchesTokenFilter(val, key))) return false;
     }
     if (q) {
       if (skit.id.toLowerCase().includes(q)) return true;
       for (const [k, v] of Object.entries(skit.tokens)) {
-        if (k.toLowerCase().includes(q) || String(v).toLowerCase().includes(q)) return true;
+        if (k.toLowerCase().includes(q) || tokenLabel(v).toLowerCase().includes(q)) return true;
       }
       return false;
     }
@@ -299,7 +299,7 @@ function renderChips(wm) {
     for (const v of vals) {
       any = true;
       const chip = el("span", { class: "chip" });
-      chip.appendChild(el("span", null, fk + " = " + v));
+      chip.appendChild(el("span", null, fk + " = " + tokenKeyLabel(v)));
       const btn = el("button", { type: "button", title: "Remove filter" }, "×");
       btn.addEventListener("click", () => {
         vals.delete(v);
