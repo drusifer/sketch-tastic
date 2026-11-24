@@ -63,7 +63,7 @@ Determine which persona is currently executing work:
 - If between tasks or coordinating sprints: **Mouse** (`*sm`) or **Bob** (`*prompt`) handles the checkpoint.
 
 ### 2. Flush Working Memory to `agents/[persona]/state.md`
-Update the active persona's single state file (`agents/[persona]/state.md`) across all three mandatory sections:
+Update the active persona's single state file (`agents/[persona]/state.md`, following `agents/templates/_template_state.md` and its `STATE` check) across all three mandatory sections:
 
 #### A. `## Context`
 - Record all critical discoveries, architectural constraints, API contracts, or bug root causes identified during the session.

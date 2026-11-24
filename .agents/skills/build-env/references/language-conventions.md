@@ -23,24 +23,52 @@ Notes:
 - `sudo` drops the environment: a target that needs root must call the venv interpreter by path
   (`sudo .venv/bin/python ...`), never `sudo python3`.
 
-```make
-UV := uv
+```toml
+# mise.toml
+[tools]
+task = "3"
+python = "3.13"
+uv = "latest"
+gitleaks = "8"
+```
 
-install: ## Sync the project environment from pyproject.toml and uv.lock
-	$(UV) sync
+```yaml
+# Taskfile.yml (fronted by a thin Makefile shim)
+version: '3'
 
-test: ## Run the test suite
-	$(UV) run pytest $(ARGS)
+env:
+  PATH: '{{.HOME}}/.local/share/mise/shims:{{.HOME}}/.local/bin:/snap/bin:{{.PATH}}'
 
-distclean: clean ## Also remove the virtualenv
-	rm -rf .venv
+tasks:
+  default:
+    aliases: [help]
+    desc: Show available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  install:
+    desc: Sync the project environment from pyproject.toml and uv.lock
+    cmds:
+      - uv sync
+
+  test:
+    desc: Run the test suite
+    cmds:
+      - uv run pytest {{.CLI_ARGS}}
+
+  distclean:
+    desc: Remove build outputs and the virtualenv
+    deps: [clean]
+    cmds:
+      - rm -rf .venv .task
 ```
 
 ### JavaScript / TypeScript
 
 | Concern | Convention |
 |---|---|
-| Manifest | `package.json`. Tasks live in its `scripts`; the Makefile calls those scripts rather than duplicating their commands. |
+| Manifest | `package.json`. Tasks live in its `scripts`; `Taskfile.yml` calls those scripts rather than duplicating their commands. |
 | Environment | `node_modules/` at the repo root. |
 | Package manager | Whichever lockfile is present: `package-lock.json` → npm, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lock`/`bun.lockb` → bun. If none, npm. Honour a `packageManager` field if set. |
 | Dev dependencies | `devDependencies`. |
@@ -49,15 +77,23 @@ distclean: clean ## Also remove the virtualenv
 | Version pin | `engines.node` in the manifest and `.nvmrc` (or `.node-version`). |
 | Lockfile | Always committed. |
 
-```make
-install: ## Install dependencies exactly as locked
-	npm ci
+```yaml
+# Taskfile.yml (fronted by a thin Makefile shim)
+tasks:
+  install:
+    desc: Install dependencies exactly as locked
+    cmds:
+      - npm ci
 
-test: ## Run the test suite
-	npm run test -- $(ARGS)
+  test:
+    desc: Run the test suite
+    cmds:
+      - npm run test -- {{.CLI_ARGS}}
 
-lint: ## Static checks
-	npm run lint
+  lint:
+    desc: Static checks
+    cmds:
+      - npm run lint
 ```
 
 ### Go
@@ -87,4 +123,3 @@ what is the manifest, is there a lockfile, where does a project-local environmen
 the canonical install command, and where is the runtime version pinned. If the ecosystem has
 competing tools and the repo gives no hint, choose the one the language's own docs present first
 and state that in the handoff.
-

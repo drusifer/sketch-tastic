@@ -1,6 +1,6 @@
 ## Loop Effectiveness Rubric (`LOOP_SPRINT`)
 
-Reviewed by Morpheus (at Step 3a Plan Review) or Smith/Oracle (at Sprint Close) or during `*judge sprint`.  
+Reviewed by Morpheus (at Step 3a Plan Review) or Smith/Oracle (at Sprint Close) or during `*judge sprint`.
 Verdict line in `agents/CHAT.md`: `rubric LOOP_SPRINT: SDLC=L DECOMP=L GATES=L CADENCE=L RETRO=L`
 
 | Code | Criterion | Weak (W) | Acceptable (A) | Strong (S) |

@@ -1,16 +1,17 @@
 ---
 name: build-env
-description: Set up a project's build environment the way its language expects (Python pyproject.toml + .venv, JavaScript package.json + lockfile, Go, Rust, ...), with the Makefile as the single front door, and record it in docs/SDLC.md. Tank runs this for initial setup, when a language is added, to write or update the SDLC doc, and to check for drift at sprint close.
+description: Set up a project's build environment with mise (mise.toml), Task (Taskfile.yml), and a thin Makefile forwarding shim alongside the language's manifest (Python pyproject.toml + .venv, JavaScript package.json + lockfile, Go, Rust, ...), and record it in docs/SDLC.md. Tank runs this for initial setup, when a language is added, to write or update the SDLC doc, and to check for drift at sprint close.
 ---
 
-One-line summary: Tank bootstraps a build environment using the language's own manifest and tools, isolated inside the project, and exposes it through a standard set of `make` targets.
+One-line summary: Tank bootstraps a build environment using `mise.toml` for pinned tools, `Taskfile.yml` (go-task v3) for build instructions, a thin `Makefile` forwarding shim, and the language's own manifest isolated inside the project.
 
 TLDR:
-    Detect what exists first; never replace a package manager or manifest the project already chose.
+    Detect what exists first; never replace a package manager, manifest, or traditional Makefile the project already chose unless migration is requested.
+    For new projects: pin runtimes and CLI tools in `mise.toml`, put build/test/ops tasks in `Taskfile.yml` (go-task v3), and keep `Makefile` as a thin forwarding shim (`bobp make <target>` -> `task <target>`).
     For new Python projects, use uv by default.
-    The language's manifest is the source of truth (pyproject.toml, package.json, go.mod, Cargo.toml); the Makefile only fronts the native tool.
-    Everything installs inside the project (.venv, node_modules) — never system-wide, never with sudo.
-    Done means: from a clean checkout, `bobp make install && bobp make test` works, and docs/SDLC.md describes it.
+    The language's manifest is the source of truth (pyproject.toml, package.json, go.mod, Cargo.toml); `Taskfile.yml` invokes the native tool.
+    Everything installs inside the project (.venv, node_modules) or via `mise install` — never system-wide, never with sudo.
+    Done means: from a clean checkout, `mise install` (when present) and `bobp make install && bobp make test` work, and docs/SDLC.md describes it.
     Tank owns docs/SDLC.md. No sprint starts without it; Tank checks the project against it at every sprint close.
 
 # Build Environment Skill
@@ -51,30 +52,24 @@ These explain the choices below, so apply them to languages this skill doesn't l
    gitignored. Never install into the system or user interpreter, never use `sudo`, never pass
    override flags such as `--break-system-packages` or `npm install -g`. System installs collide
    with the OS package manager and make the project unreproducible.
-4. **The Makefile is the front door; the native tool does the work.** Every routine task is one
-   `make` target with the same name in every project, so people and agents never need to know
-   which language they are in. Recipes are one or two lines that call the native tool. If a recipe
-   grows logic, that logic belongs in the manifest's script section or a checked-in script.
-5. **Reproducible by default.** Commit the lockfile when the ecosystem has one. Pin the
-   language/runtime version in the place that ecosystem reads it. `install` must be safe to run
-   twice.
+4. **`Taskfile.yml` holds the build instructions; `Makefile` is a thin forwarding shim; the native tool does the work.** Every routine task has the same name in every project, so people and agents never need to know which language they are in. For new setups, pin runtimes and CLI tools (`task = "3"`, `gitleaks = "8"`, etc.) in `mise.toml`, declare recipes in `Taskfile.yml` calling the native tool, and forward `make <target>` / `bobp make <target>` through a thin `Makefile` shim. Preserve an existing traditional `Makefile` unless migration is requested.
+5. **Reproducible by default.** Commit `mise.toml` and the language lockfile when the ecosystem has one. Pin runtime and CLI versions cleanly. `install` must be safe to run twice.
 6. **Prove it from clean.** Setup is not done until it has been deleted and rebuilt once.
 
 ## Procedure
 
-1. **Survey.** List manifests, lockfiles, version pins, existing Makefile targets, CI config and
+1. **Survey.** List manifests, lockfiles, `mise.toml`, `Taskfile.yml`, version pins, existing Makefile targets, CI config and
    any install instructions in docs. Check which tools are actually on the machine
-   (`command -v uv npm pnpm go cargo ...`) and whether the system interpreter is managed by the OS.
+   (`command -v mise task uv npm pnpm go cargo ...`) and whether the system interpreter is managed by the OS.
 2. **Decide and say why.** Pick the manifest, package manager and environment location. Prefer, in
    order: what the repo already uses → what a present lockfile implies → the ecosystem default in
-   the tables below. Post the choice and the reason to CHAT.md before writing files.
-3. **Write the manifest.** Project metadata, runtime dependencies, a separate dev/test dependency
+   the tables below. For new build automation, default to `mise.toml` + `Taskfile.yml` + thin `Makefile` shim. Post the choice and the reason to CHAT.md before writing files.
+3. **Write `mise.toml` and the manifest.** Pin `task = "3"`, `gitleaks = "8"`, and project runtimes/CLIs in `mise.toml`. In the language manifest, declare project metadata, runtime dependencies, a separate dev/test dependency
    group, tool configuration, and entry points for any CLI. Migrate existing dependency lists
    into it without changing versions.
-4. **Wire the Makefile.** Add the standard targets (next section). Keep existing target names
-   working; add to the project's Makefile, never replace it.
-5. **Ignore and pin.** Add the environment directory to `.gitignore`. Add the runtime version pin.
-6. **Verify from clean.** Remove the environment directory, then `bobp make install` followed by
+4. **Write `Taskfile.yml` and wire the thin `Makefile` shim.** Define the standard tasks in `Taskfile.yml` (`version: '3'`, `env: PATH` including `{{.HOME}}/.local/share/mise/shims`, `default` / `help` running `task --list`) and front them with a thin `Makefile` forwarding shim (next section). If an existing repo already has a traditional `Makefile`, keep its targets working and add to it unless migrating.
+5. **Ignore and pin.** Add the environment directory and `.task/` (Task checksum cache) to `.gitignore`. Add the runtime version pin.
+6. **Verify from clean.** Remove the environment directory, then run `mise install` (when applicable) and `bobp make install` followed by
    `bobp make test`. Run `bobp make install` a second time to confirm it is idempotent.
 7. **Write `docs/SDLC.md`** (see below) so the choices outlive this session.
 8. **Hand off.** Update the README setup section to the two commands above, post the summary to
@@ -133,7 +128,8 @@ Start from a template rather than a blank page — they live with the team's oth
 |---|---|
 | `agents/templates/_template_SDLC.python.md` | Python: `pyproject.toml` + uv + `.venv` |
 | `agents/templates/_template_SDLC.javascript.md` | JavaScript / TypeScript: `package.json` + lockfile |
-| `agents/templates/_template_SDLC.md` | Any other language, or a repo with several languages |
+| `agents/templates/_template_SDLC.md` | Any other language, or multi-language repo |
+| `agents/templates/_template_MISE.md` / `_template_TASKFILE.md` / `_template_MAKEFILE.md` | `mise.toml`, `Taskfile.yml`, thin `Makefile` shim (each with its own rubric) |
 
 Copy the one that fits to `docs/SDLC.md`, replace every `{placeholder}`, and delete the review
 rubric at the end of the template (from `RUBRIC-START` to `RUBRIC-END`). The language
@@ -196,47 +192,43 @@ Outcome, posted to CHAT.md:
 - **Drift that is a regression** → `@Neo *swe fix <issue>`; the sprint does not close until Tank
   re-checks. The usual fix-loop limit applies.
 
-## Standard Makefile contract
+## Standard `Taskfile.yml` & Thin `Makefile` Contract
 
-Use these names. Omit a target only when it has no meaning for the project; never rename one.
+Use these names in `Taskfile.yml` (forwarded by the thin `Makefile` shim). Omit a task only when it has no meaning for the project; never rename one.
 
-| Target | Does | Notes |
+| Task / Target | Does | Notes |
 |---|---|---|
-| `install` | Create the local environment and install all dependencies, including dev tools | Idempotent. The only target allowed to touch the network. |
+| `install` | Create the local environment and install all dependencies, including dev tools | Idempotent. The only task allowed to touch the network (besides `mise install`). |
 | `test` | Run the test suite | The gate Trin and CI use — must be the same command in both. |
 | `lint` | Static checks (style, types) without changing files | |
 | `format` | Rewrite files to the project style | |
 | `build` | Produce the distributable artifact | Only if the project ships one. |
-| `run` | Start the app / primary entry point | Use `ARGS="..."` for arguments. |
-| `clean` | Remove build outputs and caches | Leaves the environment in place. |
+| `run` | Start the app / primary entry point | Pass extra arguments via `ARGS="..."` (`{{.CLI_ARGS}}`). |
+| `clean` | Remove build outputs and caches (including `.task/`) | Leaves the environment in place. |
 | `distclean` | `clean` plus remove the local environment | Used for the from-clean check. |
-| `help` | List targets with descriptions | Parse `## comment` suffixes. |
+| `help` | List tasks with descriptions | `default:` task with `aliases: [help]` running `task --list`. |
 
-Rules for recipes:
+Rules for `mise.toml`, `Taskfile.yml`, and the thin `Makefile` shim:
 
-- Call tools through the local environment so no one has to activate anything
-  (`.venv/bin/python -m pytest`, `npm run test`), usually via a variable at the top of the file.
-- Fail with a one-line hint when the environment is missing ("run `make install`"), not with a
-  raw import or command-not-found error.
-- Pass extra arguments through `ARGS` (`make test ARGS="-k name"`).
-- In a repo with more than one language, add suffixed targets (`install-py`, `install-js`,
-  `test-py`, `test-js`) and make the unsuffixed target depend on all of them.
-- Agents invoke targets with `bobp make <target>` (see the `make` skill).
+- Pin `task = "3"`, `gitleaks = "8"`, and project runtimes/CLIs in `mise.toml`.
+- Prepend `{{.HOME}}/.local/share/mise/shims` to `PATH` in `Taskfile.yml` (`env:`) and `Makefile` (`export PATH := ...`) so tools resolve without `mise activate`.
+- Run language tools via the local environment (`uv run pytest`, `npm run test`).
+- Fail fast with a one-line hint when `task` or the local env is missing (`_check-task` in `Makefile`, `preconditions:` in `Taskfile.yml`).
+- Guard build files from `%:` (`Makefile Taskfile.yml mise.toml: ;`) and forward `ARGS` via `$(if $(ARGS),-- $(ARGS))` to `{{.CLI_ARGS}}`.
+- Keep pre-Task scripts (`doctor`, `init`) in `Makefile` only when they must run before `task` is installed.
+- Use `method: checksum` + `sources:` for expensive steps and gitignore `.task/`.
+- Multi-language repos: add suffixed tasks (`install-py`, `test-py`, ...) composed under the unsuffixed task.
+- Agents invoke tasks via `bobp make <target>` (see the `make` skill).
 
 Read [language conventions](references/language-conventions.md) when creating or changing a language-specific build environment.
 
 ## Done when
 
-- [ ] The manifest declares every dependency the code imports, with dev tools in a dev group.
-- [ ] `install`, `test` and `help` exist; `lint`, `format`, `build`, `run`, `clean`, `distclean`
-      exist where meaningful.
-- [ ] The environment directory is gitignored; the lockfile (if any) is committed.
-- [ ] The runtime version is pinned where the ecosystem expects it.
-- [ ] Removing the environment and running `bobp make install` then `bobp make test` succeeds,
-      and a second `bobp make install` changes nothing.
-- [ ] Nothing was installed outside the project directory.
-- [ ] `docs/SDLC.md` exists, covers every section above, and carries a Last verified line.
-- [ ] README setup instructions are the `make` commands, not raw tool commands.
+- [ ] `mise.toml` pins `task`, `gitleaks`, and runtimes/CLIs; the manifest declares all imports and dev tools.
+- [ ] `Taskfile.yml` defines `install`, `test`, `help` (and `lint`/`format`/`build`/`run`/`clean`/`distclean` where meaningful), fronted by a thin `Makefile` shim (or preserved `Makefile`).
+- [ ] Local environment dir and `.task/` are gitignored; `mise.toml` and lockfile (if any) are committed.
+- [ ] Clean rebuild works (`bobp make install` twice + `bobp make test`) with nothing installed system-wide.
+- [ ] `docs/SDLC.md` covers every section above with a Last verified line; README uses `mise install` + `make`/`task`.
 - [ ] CHAT.md handoff posted: choices and reasons, how to add a dependency, anything unverified.
 
 ## Boundaries

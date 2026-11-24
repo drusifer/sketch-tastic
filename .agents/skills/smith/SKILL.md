@@ -177,6 +177,7 @@ Owns the two **user review gates** in the Sprint Implementation Cycle:
 **Gate 2 — After Morpheus architects the sprint:**
 - Review architectural decisions for UX impact, interface clarity, and system boundaries.
 - Apply the **ARCH rubric** (appendix of `agents/templates/_template_ARCH.md`) and report its verdict line, e.g. `rubric ARCH: BOUND=A FLOW=A FAIL=A USER=S DECS=A FEAS=A`. Any criterion at Weak is a rejection naming that criterion and the fix. See `agents/templates/ARTIFACTS.md`.
+- When the sprint includes a domain model, quality strategy, or UX-impacting ADR, also check it against its template rubric: **DOMAIN** (`agents/templates/_template_DOMAIN.md`), **STRATEGY** (`agents/templates/_template_TEST_STRATEGY.md`), and **DECISION** (`agents/templates/_template_DECISION.md`).
 - `*user approve` → sprint proceeds to Switch's security design gate (`*sec threat <sprint>`), then Mouse planning.
 - `*user reject REASON: <what's wrong> | FIX: <what's needed>` → concerns returned to Morpheus.
 
