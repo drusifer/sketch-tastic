@@ -63,18 +63,23 @@ capture (raw Jetstream frames) -> unwrap (original posts) -> sketch merge - (ske
 ```
 
 Every stage reads a line and writes a line; nothing waits for the end and memory does not grow
-with the stream. From the repository root:
+with the stream. `capture` and `unwrap` are example modules, not part of the installed
+package, so run them from a checkout of this repository, at its root:
 
 ```sh
-bobp make bluesky-install
+pip install sketch-tastic 'websockets>=15,<17'
+set -o pipefail   # so a failed capture or unwrap fails the whole pipeline
 
 # Live: capture straight into a sketch for 30 minutes.
-bobp make bluesky-live SKETCH=data/posts.sketch.yaml ARGS="--seconds 1800"
+python -m examples.bluesky.capture --output - --seconds 1800 \
+  | python -m examples.bluesky.unwrap \
+  | sketch merge -p examples/bluesky/profile.yaml -s data/posts.sketch.yaml -
 
 # Or keep the raw capture first (streamed to disk, readable while it runs) ...
-bobp make bluesky-capture ARGS="--seconds 1800 --output data/posts-capture.jsonl"
+python -m examples.bluesky.capture --seconds 1800 --output data/posts-capture.jsonl
 # ... then sketch it (or re-sketch it later with another profile).
-bobp make bluesky INPUT=data/posts-capture.jsonl SKETCH=data/posts.sketch.yaml
+python -m examples.bluesky.unwrap data/posts-capture.jsonl \
+  | sketch merge -p examples/bluesky/profile.yaml -s data/posts.sketch.yaml -
 ```
 
 `capture` saves raw public Jetstream frames, flushing each one, and writes the `.meta.json`
@@ -93,7 +98,7 @@ modifiers in [profile.yaml](profile.yaml) define all kind distinctions.
 ## Inspect kinds
 
 ```sh
-bobp make -vvv run ARGS="analyze data/posts.sketch.yaml -o data/analysis.html --force"
+sketch analyze data/posts.sketch.yaml -o data/analysis.html --force
 ```
 
 Open `data/analysis.html` in a browser. Its skit explorer ranks kinds by observed frequency, with
@@ -103,10 +108,10 @@ full IDs, shares, tokens and each kind's retained original post.
 
 ```sh
 # All observed kinds, one retained original post each:
-bobp make run ARGS="export data/posts.sketch.yaml --output data/regression-posts.jsonl"
+sketch export data/posts.sketch.yaml --output data/regression-posts.jsonl
 
 # Or copy full IDs from the dashboard and repeat --id to select specific kinds:
-bobp make run ARGS="export data/posts.sketch.yaml --output data/selected-posts.jsonl --id FULL_SKIT_ID"
+sketch export data/posts.sketch.yaml --output data/selected-posts.jsonl --id FULL_SKIT_ID
 ```
 
 Exports require a new path and preserve original post values.
@@ -114,7 +119,8 @@ Exports require a new path and preserve original post values.
 ## Measure coverage
 
 ```sh
-bobp make -vvv run ARGS="analyze data/posts.sketch.yaml -o data/analysis.html --force --regression data/regression-posts.jsonl -p examples/bluesky/profile.yaml"
+sketch analyze data/posts.sketch.yaml -o data/analysis.html --force \
+  --regression data/regression-posts.jsonl -p examples/bluesky/profile.yaml
 ```
 
 The dashboard's *Regression Coverage* card shows **kind coverage** (distinct baseline kinds the
@@ -133,10 +139,12 @@ the selected profile and captured observations; it is not global Bluesky or code
 Array JSONPath matches become sorted, deduplicated token sets within one post. They do not
 explode rows or retain cross-field pairing between different array elements. Choose fields
 according to the branches your application actually uses. Structural presence is not schema
-validation. Generated files live under ignored `data/`; `bobp make clean` removes them, so
-preserve captures elsewhere when needed.
+validation. The commands above write under `data/`, which git ignores; the repository's `clean` target
+removes it, so preserve captures elsewhere when needed.
 
 ## Verify
+
+For contributors, the project's test gates (see [docs/SDLC.md](../../docs/SDLC.md)):
 
 ```sh
 bobp make test-bluesky
