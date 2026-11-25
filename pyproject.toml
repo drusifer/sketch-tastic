@@ -40,6 +40,8 @@ packages = ["src/sketchtastic"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src", "tests", "examples", "README.md", "LICENSE"]
+# Shareable demo output with real Bluesky posts: in the repository, never in the package.
+exclude = ["examples/bluesky/report.html"]
 
 [dependency-groups]
 demo = ["websockets>=15,<17"]
