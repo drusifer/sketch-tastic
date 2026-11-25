@@ -4,6 +4,11 @@ One input row is one original post. The sketch profile defines what makes posts 
 its retained records provide compact regression data for an application handling those kinds.
 The dashboard, sample export and frequency-weighted coverage are generic **sketch-tastic commands**.
 
+**See it:** [report.html](report.html) is the dashboard for a real capture: 30 minutes of the
+public firehose (207,882 posts), then a second 2-minute run (4,980 posts) merged into the same
+sketch. 357 kinds in total, with history-aware regression coverage. Download it and open it
+in a browser; it works offline. It contains public Bluesky posts and account DIDs.
+
 ## Profile-defined post features
 
 The default profile includes embed type, quoted media type, reply presence, rich-text feature
