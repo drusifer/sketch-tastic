@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sketch-tastic"
-version = "0.2.0"
+version = "0.3.0"
 description = "Mergeable sketches of JSONL event streams for regression testing and flow analysis."
 readme = "README.md"
 license = "MIT"
