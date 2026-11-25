@@ -177,7 +177,7 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `build` (manifest, lockfile, M
 ## 7. Versioning and release
 
 - **What is versioned:** the package; its version is `[project] version` in `pyproject.toml`
-  (currently `0.2.0`, carried over).
+  (currently `0.3.0`).
 - **Scheme:** Semantic Versioning; while the version is `0.x`, a breaking change bumps the minor.
 - **No backwards compatibility before 1.0** (owner): no shims, aliases, deprecation paths or
   migrations. Old forms are deleted outright.
@@ -202,6 +202,8 @@ Both workflows call only `make` targets, so CI cannot drift from the local gates
 | `.github/workflows/publish.yml` | push of a tag `v*` | Reruns the CI gates; `make release-check`; `make build`; publishes `dist/` to PyPI by trusted publishing (no stored token). |
 
 Release `v0.2.0` was published with owner authorization on 2026-11-17 (America/New_York).
+Release `v0.3.0` (Sprint 9 plus the retirement of `sketch show`) was authorized by the owner on
+2026-11-24 and published by the same workflow.
 Trusted publishing is configured for `drusifer/sketch-tastic`, workflow `publish.yml`,
 environment `pypi`. The GitHub environment has no approval gate. Publish run `44212325102`
 passed all CI gates and published the wheel and sdist, verified on PyPI. There is no deploy target.
@@ -244,4 +246,4 @@ tests, bundled Chart.js and 11 `assets/dashboard/*` files), `security-install`, 
 restored. Phase 4 changed make targets (`bluesky` now pipes a saved capture through
 `examples.bluesky.unwrap` into `sketch merge -`; new `bluesky-live`; both use bash pipefail) and
 the CLI (`report` and `coverage` removed; `analyze --regression -p`). Package runtime
-dependencies and release workflows are unchanged. v0.2.0 remains the published release.*
+dependencies and release workflows are unchanged. v0.3.0 is the published release.*
