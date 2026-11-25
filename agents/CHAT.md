@@ -46,3 +46,11 @@ Agents **must** use this for every message posted to CHAT.md:
 > **Previous sprint archived:** `agents/chat_archive/CHAT_SPRINT_9.md` (2026-11-24 16:05:56) — Sprint 9 delivered structured version-1 tokens and validated sketch derivation with transformed history (SKT-19/20/21, phases 1-3). During closeout the owner redirected the Bluesky example and reporting: capture now streams through a stdin/stdout unwrap filter into sketch merge (prepare removed), the ASCII report and coverage commands were folded into the analyze dashboard with history-aware regression coverage, and BobProtocol was updated to 0.3.1. All gates passed; integrated locally, not pushed.
 
 ---
+
+---
+[<small>2026-11-24 19:36:59</small>] [**make**]->[**all**] *build*:
+ Build PASSED | make build | /home/drusifer/Projects/sketch-tastic/build/build.out
+=== make build @ 2026-11-24 19:36:57 ===
+sketch-tastic 0.3.0
+sketch_tastic-0.3.0-py3-none-any.whl
+sketch_tastic-0.3.0.tar.gz
